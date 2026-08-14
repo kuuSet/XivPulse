@@ -6,7 +6,7 @@ httpx==0.28.1
 openai==1.99.9
 beautifulsoup4==4.13.4
 fastembed==0.8.0
-onnxruntime==1.19.2
+onnxruntime==1.28.0
 argon2-cffi==25.1.0
 itsdangerous==2.2.0
 pypdf==5.9.0
