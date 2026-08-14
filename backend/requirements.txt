@@ -12,5 +12,5 @@ itsdangerous==2.2.0
 pypdf==5.9.0
 python-multipart==0.0.20
 tzdata==2025.2
-pytest==8.4.1
+pytest==9.1.1
 pytest-asyncio==1.1.0
