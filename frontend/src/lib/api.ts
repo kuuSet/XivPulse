@@ -1,0 +1,402 @@
+import type {
+  BackendProfile,
+  BackendSettings,
+  AnalysisPromptCatalog,
+  AppStatus,
+  AuthSession,
+  DailyReport,
+  DailyReportArchiveItem,
+  DailyResearchGap,
+  DirectionCatalog,
+  DashboardData,
+  FeedbackReason,
+  FeedbackWriteAction,
+  Profile,
+  ProjectDraft,
+  ProjectMembership,
+  ReadingData,
+  ResearchProject,
+  ResearchRoadmap,
+  Settings,
+  MethodCatalog,
+  MethodCandidates,
+  PaperPage,
+  TopicTrends,
+} from '../types'
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+  })
+
+  if (!response.ok) {
+    let detail = `请求失败（${response.status}）`
+    try {
+      const body = (await response.json()) as { detail?: string; message?: string }
+      detail = body.detail ?? body.message ?? detail
+    } catch {
+      // Keep the status-based message for non-JSON responses.
+    }
+    throw new ApiError(detail, response.status)
+  }
+
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
+}
+
+export interface FeedbackPayload {
+  action: FeedbackWriteAction
+  rating?: number | null
+  note?: string
+  reasons?: FeedbackReason[]
+}
+
+export type ReadingPayload = Partial<Pick<ReadingData, 'state' | 'priority' | 'notes' | 'tags'>>
+export type MembershipPayload = Partial<Pick<ProjectMembership, 'reading_state' | 'priority' | 'notes' | 'tags'>>
+
+export interface PaperQuery {
+  q?: string
+  category?: string
+  priority?: 'high' | 'medium' | 'low'
+  feedback?: string
+  reading_state?: ReadingData['state']
+  sort?: 'recommendation' | 'relevance' | 'time'
+  limit?: number
+  offset?: number
+}
+
+export const api = {
+  dashboard: (date?: string) =>
+    request<DashboardData>(`/dashboard${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  refresh: () => request<{ job_id: string; status: string; message: string }>('/refresh', { method: 'POST' }),
+  status: () => request<AppStatus>('/status'),
+  papers: (query: PaperQuery = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') params.set(key, String(value))
+    })
+    const suffix = params.size ? `?${params.toString()}` : ''
+    return request<PaperPage>(`/papers${suffix}`)
+  },
+  paper: (paperId: PaperId) => request<import('../types').Paper>(`/papers/${encodeId(paperId)}`),
+  authSession: () => request<AuthSession>('/auth/session'),
+  login: (username: string, password: string) => request<AuthSession>('/auth/login', {
+    method: 'POST', body: JSON.stringify({ username, password }),
+  }),
+  logout: () => request<AuthSession>('/auth/logout', { method: 'POST' }),
+  profile: async () => toProfile(await request<BackendProfile | Profile>('/profile')),
+  directionCatalog: () => request<DirectionCatalog>('/directions/catalog'),
+  saveProfile: async (profile: Profile) =>
+    toProfile(await request<BackendProfile | Profile>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(toBackendProfile(profile)),
+    })),
+  settings: async () => toSettings(await request<BackendSettings | Settings>('/settings')),
+  promptCatalog: () => request<AnalysisPromptCatalog>('/prompts/catalog'),
+  methodCatalog: () => request<MethodCatalog>('/methods/catalog'),
+  methodCandidates: () => request<MethodCandidates>('/methods/candidates'),
+  acceptMethodCandidate: (key: string, name?: string) => request<MethodCatalog>('/methods/candidates/accept', {
+    method: 'POST', body: JSON.stringify({ key, ...(name ? { name } : {}) }),
+  }),
+  dismissMethodCandidate: (key: string) => request<{ ok: boolean }>('/methods/candidates/dismiss', {
+    method: 'POST', body: JSON.stringify({ key }),
+  }),
+  saveCustomMethods: (items: Array<{ name: string; aliases: string[] }>) => request<MethodCatalog>('/methods/custom', {
+    method: 'PUT', body: JSON.stringify({ items }),
+  }),
+  saveSettings: (settings: Settings & { api_key?: string; smtp_password?: string }) =>
+    request<BackendSettings | Settings>('/settings', { method: 'PUT', body: JSON.stringify(toBackendSettings(settings)) }).then(toSettings),
+  testConnection: (settings: Pick<Settings, 'provider' | 'base_url' | 'model'> & { api_key?: string }) =>
+    request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
+  testEmbedding: () => request<Settings['embedding'] & { ok: boolean; message?: string }>('/settings/embedding/test', { method: 'POST' }),
+  testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
+  feedback: (paperId: PaperId, actionOrPayload: FeedbackWriteAction | FeedbackPayload, note?: string) => {
+    const payload: FeedbackPayload = typeof actionOrPayload === 'string'
+      ? { action: actionOrPayload, ...(note !== undefined ? { note } : {}) }
+      : actionOrPayload
+    return request<{ ok?: boolean; action?: string; rating?: number | null; note?: string; reasons?: FeedbackReason[] }>(
+      `/papers/${encodeURIComponent(String(paperId))}/feedback`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...payload, action: payload.action === 'dismiss' ? 'skip' : payload.action }),
+      },
+    )
+  },
+  saveReading: (paperId: PaperId, payload: ReadingPayload) =>
+    request<ReadingData & { ok?: boolean; paper_id?: PaperId }>(`/papers/${encodeURIComponent(String(paperId))}/reading`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  projects: async () => unwrapList<ResearchProject>(await request<unknown>('/projects')),
+  project: async (projectId: ProjectId) => unwrapEntity<ResearchProject>(await request<unknown>(`/projects/${encodeId(projectId)}`), 'project'),
+  createProject: async (payload: ProjectDraft) =>
+    unwrapEntity<ResearchProject>(await request<unknown>('/projects', { method: 'POST', body: JSON.stringify(payload) }), 'project'),
+  updateProject: async (projectId: ProjectId, payload: Partial<ProjectDraft>) =>
+    unwrapEntity<ResearchProject>(await request<unknown>(`/projects/${encodeId(projectId)}`, {
+      method: 'PATCH', body: JSON.stringify(payload),
+    }), 'project'),
+  deleteProject: (projectId: ProjectId) => request<void>(`/projects/${encodeId(projectId)}`, { method: 'DELETE' }),
+  addProjectPaper: async (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload = {}) => {
+    const body = withMembershipDefaults(payload)
+    const result = await requestWithLegacyFallback<unknown>(
+      `/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`,
+      { method: 'POST', body: JSON.stringify(body) },
+      `/projects/${encodeId(projectId)}/papers`,
+      { method: 'POST', body: JSON.stringify({ paper_id: paperId, ...body }) },
+    )
+    return unwrapEntity<ProjectMembership>(result, 'membership')
+  },
+  updateProjectPaper: async (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload) => {
+    const result = await requestWithLegacyFallback<unknown>(
+      `/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+      `/projects/${encodeId(projectId)}/papers`,
+      { method: 'POST', body: JSON.stringify({ paper_id: paperId, ...withMembershipDefaults(payload) }) },
+    )
+    return unwrapEntity<ProjectMembership>(result, 'membership')
+  },
+  removeProjectPaper: (projectId: ProjectId, paperId: PaperId) =>
+    request<void>(`/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`, { method: 'DELETE' }),
+  topicTrends: async (date?: string) =>
+    unwrapEntity<TopicTrends>(
+      await request<unknown>(`/trends/topics${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+      'trends',
+    ),
+  roadmap: async () => unwrapEntity<ResearchRoadmap>(await request<unknown>('/trends/roadmap'), 'roadmap'),
+  dailyReport: async (date: string) => normalizeDailyReport(
+    unwrapEntity<DailyReport>(await request<unknown>(`/reports/daily?date=${encodeURIComponent(date)}`), 'report'),
+  ),
+  dailyReportHistory: async (limit = 90) => unwrapList<DailyReportArchiveItem>(
+    await request<unknown>(`/reports/daily/history?limit=${encodeURIComponent(String(limit))}`),
+  ),
+  regenerateDailyReport: async (date: string) => normalizeDailyReport(
+    unwrapEntity<DailyReport>(await request<unknown>(`/reports/daily/regenerate?date=${encodeURIComponent(date)}`, { method: 'POST' }), 'report'),
+  ),
+  synthesizeDailyReport: async (date: string, force = true) => normalizeDailyReport(
+    unwrapEntity<DailyReport>(await request<unknown>(`/reports/daily/synthesize?date=${encodeURIComponent(date)}&force=${force ? 'true' : 'false'}`, { method: 'POST' }), 'report'),
+  ),
+  sendDailyReport: (date: string) => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>(`/reports/daily/send?date=${encodeURIComponent(date)}`, { method: 'POST' }),
+}
+
+type PaperId = number | string
+type ProjectId = number | string
+
+function encodeId(id: PaperId | ProjectId) {
+  return encodeURIComponent(String(id))
+}
+
+async function requestWithLegacyFallback<T>(path: string, init: RequestInit, fallbackPath: string, fallbackInit: RequestInit) {
+  try {
+    return await request<T>(path, init)
+  } catch (error) {
+    if (!(error instanceof ApiError) || ![404, 405].includes(error.status)) throw error
+    return request<T>(fallbackPath, fallbackInit)
+  }
+}
+
+function unwrapList<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[]
+  if (!value || typeof value !== 'object') return []
+  const record = value as Record<string, unknown>
+  for (const key of ['items', 'projects', 'data', 'results']) {
+    if (Array.isArray(record[key])) return record[key] as T[]
+  }
+  return []
+}
+
+function unwrapEntity<T>(value: unknown, key: string): T {
+  if (!value || typeof value !== 'object') return value as T
+  const record = value as Record<string, unknown>
+  const nested = record[key] ?? record.data ?? record.result
+  return (nested && typeof nested === 'object' && !Array.isArray(nested) ? nested : value) as T
+}
+
+function withMembershipDefaults(payload: MembershipPayload) {
+  return {
+    reading_state: payload.reading_state ?? 'queued',
+    priority: payload.priority ?? 3,
+    notes: payload.notes ?? '',
+    tags: payload.tags ?? [],
+  }
+}
+
+function normalizeDailyReport(report: DailyReport): DailyReport {
+  const highlightPapers = report.highlight_papers ?? report.notable_papers ?? []
+  const limitations = (report.limitations_and_research_gaps ?? report.limitations_research_gaps ?? []).map(normalizeGap)
+  const queue = report.suggested_reading_queue ?? report.recommended_reading_queue ?? []
+  return {
+    ...report,
+    highlight_papers: highlightPapers,
+    notable_papers: highlightPapers,
+    common_methods: report.common_methods ?? report.shared_methods_evidence ?? [],
+    common_evidence: report.common_evidence ?? [],
+    limitations_and_research_gaps: limitations,
+    limitations_research_gaps: limitations,
+    suggested_reading_queue: queue,
+    recommended_reading_queue: queue,
+  }
+}
+
+function normalizeGap(value: string | DailyResearchGap) {
+  if (typeof value === 'string') return value
+  return value.text ?? value.gap ?? value.limitation ?? value.name ?? value.item ?? '待核查的研究缺口'
+}
+
+function toProfile(profile: BackendProfile | Profile): Profile {
+  const topics = Array.isArray(profile.topics) ? profile.topics : []
+  const enabled = topics.filter((topic) => topic.enabled !== false)
+  return {
+    id: profile.id,
+    name: profile.name,
+    description: profile.description,
+    language: profile.language ?? 'zh-CN',
+    active: profile.active ?? true,
+    topics: topics.map((topic) => ({ ...topic, aliases: topic.aliases ?? [] })),
+    positive_keywords: profile.positive_keywords ?? unique(enabled.flatMap((topic) => topic.keywords ?? [])),
+    negative_keywords: profile.negative_keywords ?? unique(enabled.flatMap((topic) => topic.negative_keywords ?? [])),
+    categories: profile.categories ?? unique(enabled.flatMap((topic) => topic.arxiv_categories ?? [])),
+    author_watchlist: profile.author_watchlist ?? [],
+    min_relevance: profile.min_relevance ?? 80,
+  }
+}
+
+function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: number } {
+  return {
+    id: profile.id,
+    name: profile.name,
+    description: profile.description,
+    language: profile.language ?? 'zh-CN',
+    active: profile.active ?? true,
+    topics: profile.topics.map((topic) => ({
+      ...(topic.id !== undefined ? { id: topic.id } : {}),
+      name: topic.name.trim(),
+      aliases: unique(topic.aliases ?? []),
+      // The visual editor treats keywords as the source of truth for arXiv queries.
+      query: '',
+      arxiv_categories: unique(topic.arxiv_categories ?? []),
+      keywords: unique(topic.keywords ?? []),
+      context_keywords: unique(topic.context_keywords ?? []),
+      negative_keywords: unique(topic.negative_keywords ?? []),
+      weight: topic.weight ?? 1,
+      enabled: topic.enabled !== false,
+    })),
+    author_watchlist: unique(profile.author_watchlist),
+    min_relevance: profile.min_relevance,
+  }
+}
+
+function isBackendSettings(settings: BackendSettings | Settings): settings is BackendSettings {
+  return 'schedule_time' in settings
+}
+
+function toSettings(settings: BackendSettings | Settings): Settings {
+  if (!isBackendSettings(settings)) return settings
+  return {
+    provider: settings.provider_name,
+    base_url: settings.base_url,
+    model: settings.model,
+    api_key_configured: settings.api_key_configured,
+    source: 'arxiv',
+    refresh_time: settings.schedule_time,
+    timezone: settings.timezone,
+    max_candidates: settings.max_results,
+    screen_top_n: settings.screen_top_n,
+    screen_batch_size: settings.screen_batch_size ?? settings.screen_top_n,
+    semantic_recall_mode: settings.semantic_recall_mode ?? 'high',
+    semantic_recall_presets: settings.semantic_recall_presets ?? {},
+    embedding: settings.embedding ?? { model: 'intfloat/multilingual-e5-small', dimensions: 384, cache_dir: '', loaded: false, available: false },
+    deep_analysis_limit: settings.deep_analysis_top_n,
+    deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
+    retention_days: settings.retention_days ?? 365,
+    analysis_budget_mode: settings.analysis_budget_mode ?? 'balanced',
+    daily_ai_synthesis_enabled: settings.daily_ai_synthesis_enabled ?? true,
+    analysis_prompt_template_id: settings.analysis_prompt_template_id ?? 'balanced-review',
+    screening_prompt: settings.screening_prompt ?? '',
+    deep_prompt: settings.deep_prompt ?? '',
+    analysis_prompt_version: settings.analysis_prompt_version ?? '',
+    analysis_prompt_customized: settings.analysis_prompt_customized ?? false,
+    token_usage: settings.token_usage ?? emptyTokenUsage(),
+    automatic_cleanup_enabled: settings.automatic_cleanup_enabled ?? false,
+    database_path: settings.database_path,
+    database_size_bytes: settings.database_size_bytes,
+    stored_paper_count: settings.stored_paper_count ?? 0,
+    stored_analysis_count: settings.stored_analysis_count ?? 0,
+    stored_report_count: settings.stored_report_count ?? 0,
+    email_enabled: settings.email_enabled ?? false,
+    smtp_host: settings.smtp_host ?? '',
+    smtp_port: settings.smtp_port ?? 587,
+    smtp_security: settings.smtp_security ?? 'starttls',
+    smtp_username: settings.smtp_username ?? '',
+    smtp_password_configured: settings.smtp_password_configured ?? false,
+    smtp_from: settings.smtp_from ?? '',
+    email_recipients: settings.email_recipients ?? [],
+    public_base_url: settings.public_base_url ?? '',
+  }
+}
+
+function toBackendSettings(settings: Settings & { api_key?: string; smtp_password?: string }) {
+  return {
+    provider_name: settings.provider,
+    schedule_time: settings.refresh_time,
+    timezone: settings.timezone,
+    max_results: settings.max_candidates,
+    screen_top_n: Math.min(settings.max_candidates, settings.screen_top_n),
+    screen_batch_size: Math.min(settings.max_candidates, settings.screen_batch_size),
+    semantic_recall_mode: settings.semantic_recall_mode,
+    deep_analysis_top_n: settings.deep_analysis_limit,
+    deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
+    retention_days: settings.retention_days,
+    analysis_budget_mode: settings.analysis_budget_mode,
+    daily_ai_synthesis_enabled: settings.daily_ai_synthesis_enabled,
+    analysis_prompt_template_id: settings.analysis_prompt_template_id,
+    screening_prompt: settings.screening_prompt,
+    deep_prompt: settings.deep_prompt,
+    base_url: settings.base_url,
+    model: settings.model,
+    email_enabled: settings.email_enabled,
+    smtp_host: settings.smtp_host,
+    smtp_port: settings.smtp_port,
+    smtp_security: settings.smtp_security,
+    smtp_username: settings.smtp_username,
+    smtp_from: settings.smtp_from,
+    email_recipients: settings.email_recipients,
+    public_base_url: settings.public_base_url,
+    ...(settings.api_key ? { api_key: settings.api_key } : {}),
+    ...(settings.smtp_password ? { smtp_password: settings.smtp_password } : {}),
+  }
+}
+
+function emptyTokenUsage() {
+  return {
+    record_count: 0,
+    usage_available_count: 0,
+    usage_missing_count: 0,
+    input_tokens: 0,
+    cached_input_tokens: 0,
+    output_tokens: 0,
+    reasoning_tokens: 0,
+    total_tokens: 0,
+    by_kind: {},
+    latest: null,
+  }
+}
+
+function unique(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)))
+}

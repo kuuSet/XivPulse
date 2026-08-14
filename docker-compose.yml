@@ -1,0 +1,52 @@
+services:
+  xivpulse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xivpulse:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${XIVPULSE_PUBLISHED_PORT:-8765}:8765"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      XIVPULSE_DATABASE_URL: sqlite:////app/data/xivpulse.db
+      XIVPULSE_HOST: 0.0.0.0
+      XIVPULSE_PORT: 8765
+      XIVPULSE_MODEL_CACHE: /app/model-cache
+      XIVPULSE_EMBEDDING_BACKFILL: "true"
+    volumes:
+      - xivpulse-data:/app/data
+      - xivpulse-model-cache:/app/model-cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  scheduler:
+    image: xivpulse:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["python", "-m", "app.docker_scheduler"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      XIVPULSE_DATABASE_URL: sqlite:////app/data/xivpulse.db
+      XIVPULSE_MODEL_CACHE: /app/model-cache
+      XIVPULSE_EMBEDDING_BACKFILL: "false"
+    volumes:
+      - xivpulse-data:/app/data
+      - xivpulse-model-cache:/app/model-cache
+    depends_on:
+      xivpulse:
+        condition: service_healthy
+
+volumes:
+  xivpulse-data:
+  xivpulse-model-cache:

@@ -1,0 +1,72 @@
+services:
+  xivpulse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xivpulse:server
+    restart: unless-stopped
+    env_file:
+      - .env.server
+    environment:
+      XIVPULSE_DATABASE_URL: sqlite:////app/data/xivpulse.db
+      XIVPULSE_HOST: 0.0.0.0
+      XIVPULSE_PORT: 8765
+      XIVPULSE_MODEL_CACHE: /app/model-cache
+      XIVPULSE_AUTH_ENABLED: "true"
+      XIVPULSE_EMBEDDING_BACKFILL: "true"
+      XIVPULSE_SECURE_COOKIES: "true"
+      XIVPULSE_TRUST_PROXY: "true"
+    expose:
+      - "8765"
+    volumes:
+      - xivpulse-data:/app/data
+      - xivpulse-model-cache:/app/model-cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+  scheduler:
+    image: xivpulse:server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["python", "-m", "app.docker_scheduler"]
+    env_file:
+      - .env.server
+    environment:
+      XIVPULSE_DATABASE_URL: sqlite:////app/data/xivpulse.db
+      XIVPULSE_MODEL_CACHE: /app/model-cache
+      XIVPULSE_AUTH_ENABLED: "true"
+      XIVPULSE_EMBEDDING_BACKFILL: "false"
+    volumes:
+      - xivpulse-data:/app/data
+      - xivpulse-model-cache:/app/model-cache
+    depends_on:
+      xivpulse:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    env_file:
+      - .env.server
+    ports:
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile.server:/etc/caddy/Caddyfile:ro
+      - xivpulse-caddy-data:/data
+      - xivpulse-caddy-config:/config
+    depends_on:
+      xivpulse:
+        condition: service_healthy
+
+volumes:
+  xivpulse-data:
+  xivpulse-model-cache:
+  xivpulse-caddy-data:
+  xivpulse-caddy-config:

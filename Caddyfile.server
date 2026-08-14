@@ -1,0 +1,11 @@
+https://{$XIVPULSE_PUBLIC_HOST} {
+    tls internal
+    encode zstd gzip
+    reverse_proxy xivpulse:8765
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "same-origin"
+        -Server
+    }
+}
