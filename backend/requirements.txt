@@ -11,6 +11,6 @@ argon2-cffi==25.1.0
 itsdangerous==2.2.0
 pypdf==5.9.0
 python-multipart==0.0.20
-tzdata==2025.2
+tzdata==2026.3
 pytest==8.4.1
 pytest-asyncio==1.1.0
