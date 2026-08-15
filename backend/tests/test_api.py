@@ -200,20 +200,25 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
         session.commit()
 
     class FakePaperAnalyzer:
-        def __init__(self, _adapter: object) -> None:
+        def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen(self, _paper: Paper, _profile: Profile) -> ScreeningResult:
-            return ScreeningResult(
-                relevant=True,
-                relevance_score=82,
-                reason="Relevant fake result",
-                matched_topics=[direction],
-                key_contributions=[],
-                tags=[],
+        async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
+            return analyzer_module.GenerationResult(
+                data=ScreeningResult(
+                    relevant=True,
+                    relevance_score=82,
+                    reason="Relevant fake result",
+                    matched_topics=[direction],
+                    key_contributions=[],
+                    tags=[],
+                ),
+                transport="mock",
+                provider="test",
+                model="test",
             )
 
-    monkeypatch.setattr(analyzer_module, "PaperAnalyzer", FakePaperAnalyzer)
+    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakePaperAnalyzer)
     monkeypatch.setattr(paper_analysis, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
     result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 65
@@ -223,6 +228,23 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
     with database.SessionLocal() as session:
         assert session.query(ScreeningQueueItem).filter_by(status="completed").count() == 65
         assert session.query(Analysis).filter_by(kind="screening").count() == 65
+
+
+@pytest.mark.asyncio
+async def test_analysis_does_not_hide_constructor_errors(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import paper_analysis
+
+    class BrokenAnalyzer:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise TypeError("broken analyzer constructor")
+
+    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", BrokenAnalyzer)
+
+    with pytest.raises(TypeError, match="broken analyzer constructor"):
+        await paper_analysis.analyze_papers(limit=0)
 
 
 @pytest.mark.asyncio
@@ -259,23 +281,28 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
         session.commit()
 
     class RetryAnalyzer:
-        def __init__(self, _adapter: object) -> None:
+        def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen(self, paper: Paper, _profile: Profile) -> ScreeningResult:
+        async def screen_with_metadata(self, paper: Paper, _profile: Profile) -> object:
             attempts[paper.arxiv_id] = attempts.get(paper.arxiv_id, 0) + 1
             if paper.arxiv_id.endswith("91") or attempts[paper.arxiv_id] < 3:
-                raise TimeoutError("simulated timeout")
-            return ScreeningResult(
-                relevant=True,
-                relevance_score=82,
-                reason="Recovered on third attempt",
-                matched_topics=[direction],
-                key_contributions=[],
-                tags=[],
+                raise analyzer_module.ProviderError("simulated timeout")
+            return analyzer_module.GenerationResult(
+                data=ScreeningResult(
+                    relevant=True,
+                    relevance_score=82,
+                    reason="Recovered on third attempt",
+                    matched_topics=[direction],
+                    key_contributions=[],
+                    tags=[],
+                ),
+                transport="mock",
+                provider="test",
+                model="test",
             )
 
-    monkeypatch.setattr(analyzer_module, "PaperAnalyzer", RetryAnalyzer)
+    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", RetryAnalyzer)
     monkeypatch.setattr(paper_analysis, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
     result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 1
@@ -1275,20 +1302,25 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
         match_id = match.id
 
     class FakePaperAnalyzer:
-        def __init__(self, _adapter: object) -> None:
+        def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen(self, _paper: Paper, _profile: Profile) -> ScreeningResult:
-            return ScreeningResult(
-                relevant=True,
-                relevance_score=91,
-                reason="AI screening result",
-                matched_topics=[f"  {formal_direction}  ", "cs.RO", "自由生成方向"],
-                key_contributions=["Contribution"],
-                tags=["foundation model", "cs.RO", "free-form tag"],
+        async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
+            return analyzer_module.GenerationResult(
+                data=ScreeningResult(
+                    relevant=True,
+                    relevance_score=91,
+                    reason="AI screening result",
+                    matched_topics=[f"  {formal_direction}  ", "cs.RO", "自由生成方向"],
+                    key_contributions=["Contribution"],
+                    tags=["foundation model", "cs.RO", "free-form tag"],
+                ),
+                transport="mock",
+                provider="test",
+                model="test",
             )
 
-    monkeypatch.setattr(analyzer_module, "PaperAnalyzer", FakePaperAnalyzer)
+    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakePaperAnalyzer)
 
     result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 1
@@ -1343,6 +1375,16 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     class FakeArxivClient:
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[ArxivRecord]:
             return records
+
+        async def fetch_semantic_scholar_affiliations(
+            self, _arxiv_ids: list[str]
+        ) -> dict[str, list[str]]:
+            return {}
+
+        async def fetch_html_affiliations(
+            self, _arxiv_ids: list[str]
+        ) -> dict[str, list[str]]:
+            return {}
 
     def semantic_results(
         _session: object, papers: list[Paper], _topics: object
@@ -1408,6 +1450,16 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     class FakeArxivClient:
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[ArxivRecord]:
             return [record]
+
+        async def fetch_semantic_scholar_affiliations(
+            self, _arxiv_ids: list[str]
+        ) -> dict[str, list[str]]:
+            return {}
+
+        async def fetch_html_affiliations(
+            self, _arxiv_ids: list[str]
+        ) -> dict[str, list[str]]:
+            return {}
 
     def unavailable(*_args: object, **_kwargs: object) -> dict[int, object]:
         raise paper_sync.SemanticEmbeddingError("model download unavailable")

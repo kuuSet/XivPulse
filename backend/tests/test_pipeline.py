@@ -1,11 +1,32 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import app.pipeline as pipeline_module
 import pytest
 from app.pipeline import PipelineCoordinator
+
+
+def test_pipeline_lock_is_released_only_when_the_guarded_work_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lock_path = tmp_path / "pipeline.lock"
+    monkeypatch.setattr(pipeline_module, "PIPELINE_LOCK_PATH", lock_path)
+
+    assert pipeline_module._acquire_pipeline_lock("failed-job")
+    with pytest.raises(RuntimeError, match="boom"):
+        with pipeline_module._release_lock_on_failure("failed-job"):
+            raise RuntimeError("boom")
+    assert not lock_path.exists()
+
+    assert pipeline_module._acquire_pipeline_lock("successful-job")
+    with pipeline_module._release_lock_on_failure("successful-job"):
+        pass
+    assert lock_path.exists()
+    pipeline_module._release_pipeline_lock("successful-job")
 
 
 @pytest.mark.asyncio

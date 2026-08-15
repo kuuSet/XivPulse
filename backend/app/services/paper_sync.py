@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -160,21 +161,16 @@ async def sync_papers() -> dict[str, Any]:
     ]
     enriched_by_id: dict[str, list[str]] = {}
     missing_ids = selected_ids
-    fetch_semantic_affiliations = getattr(client, "fetch_semantic_scholar_affiliations", None)
-    if missing_ids and fetch_semantic_affiliations is not None:
+    if missing_ids:
         try:
-            semantic_affiliations = await fetch_semantic_affiliations(missing_ids)
+            semantic_affiliations = await client.fetch_semantic_scholar_affiliations(missing_ids)
             enriched_by_id.update(semantic_affiliations)
-        except Exception as exc:
+        except (TimeoutError, httpx.HTTPError, ValueError) as exc:
             LOG.warning("Semantic Scholar affiliation enrichment failed: %s", exc)
     missing_ids = [value for value in selected_ids if value not in enriched_by_id]
-    fetch_html_affiliations = getattr(client, "fetch_html_affiliations", None)
-    if missing_ids and fetch_html_affiliations is not None:
-        try:
-            html_affiliations = await fetch_html_affiliations(missing_ids[:6])
-            enriched_by_id.update(html_affiliations)
-        except Exception as exc:
-            LOG.warning("arXiv HTML affiliation enrichment failed: %s", exc)
+    if missing_ids:
+        html_affiliations = await client.fetch_html_affiliations(missing_ids[:6])
+        enriched_by_id.update(html_affiliations)
     if enriched_by_id:
         with session_scope() as db:
             papers = db.scalars(

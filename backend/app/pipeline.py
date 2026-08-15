@@ -7,7 +7,8 @@ import logging
 import os
 import socket
 import threading
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -70,6 +71,15 @@ def _release_pipeline_lock(token: str) -> None:
             PIPELINE_LOCK_PATH.unlink()
     except (FileNotFoundError, OSError, UnicodeError):
         return
+
+
+@contextmanager
+def _release_lock_on_failure(token: str) -> Iterator[None]:
+    try:
+        yield
+    except Exception:
+        _release_pipeline_lock(token)
+        raise
 
 
 class PipelineCoordinator:
@@ -139,7 +149,7 @@ class PipelineCoordinator:
                     "success": False,
                     "message": "已有任务正在运行",
                 }
-            try:
+            with _release_lock_on_failure(lock_token):
                 with session_scope() as db:
                     existing = db.scalar(
                         select(Job)
@@ -168,9 +178,6 @@ class PipelineCoordinator:
                     db.add(job)
                     db.flush()
                     job_id = job.id
-            except Exception:
-                _release_pipeline_lock(lock_token)
-                raise
             self._active_job_id = job_id
         try:
             result = await self.execute("daily", job_id=job_id)
@@ -238,8 +245,13 @@ class PipelineCoordinator:
         with self._job_lock:
             if self._active_job_id is not None:
                 raise HTTPException(status_code=409, detail="已有抓取或分析任务正在运行")
-            job_id: str | None = None
-            try:
+            job_id = str(uuid4())
+            if not _acquire_pipeline_lock(job_id):
+                raise HTTPException(
+                    status_code=409,
+                    detail="已有抓取或分析任务正在运行",
+                )
+            with _release_lock_on_failure(job_id):
                 with session_scope() as db:
                     existing = db.scalar(
                         select(Job)
@@ -259,12 +271,6 @@ class PipelineCoordinator:
                                 status_code=409,
                                 detail="已有抓取或分析任务正在运行",
                             )
-                    job_id = str(uuid4())
-                    if not _acquire_pipeline_lock(job_id):
-                        raise HTTPException(
-                            status_code=409,
-                            detail="已有抓取或分析任务正在运行",
-                        )
                     db.add(
                         Job(
                             id=job_id,
@@ -273,10 +279,6 @@ class PipelineCoordinator:
                             message="任务已排队",
                         )
                     )
-            except Exception:
-                if job_id is not None:
-                    _release_pipeline_lock(job_id)
-                raise
             self._active_job_id = job_id
         asyncio.create_task(self._run_job(job_id, kind))
         return {"job_id": job_id, "status": "queued", "message": "任务已在后台启动"}

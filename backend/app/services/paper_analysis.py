@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from ..database import SessionLocal, session_scope
 from ..models import Analysis, Paper, PaperMatch, Profile, ScreeningQueueItem, utcnow
 from .analytics import current_date_in_timezone
+from .analyzer import OpenAICompatibleAdapter, PaperAnalyzer, ProviderError
 from .direction_matching import canonical_requested_direction_names
 from .direction_taxonomy import stamp_direction_attribution
 from .jobs import update_job_progress
@@ -36,10 +37,6 @@ async def analyze_papers(
     job_id: str | None = None,
     report_date: date | None = None,
 ) -> dict[str, Any]:
-    try:
-        from .analyzer import OpenAICompatibleAdapter, PaperAnalyzer
-    except ImportError:
-        return {"analyzed": 0, "message": "分析服务尚不可用"}
     with SessionLocal() as db:
         profile = active_profile(db)
         settings = setting_map(db)
@@ -124,24 +121,16 @@ async def analyze_papers(
                 item.completed_at = None
         db.commit()
     config = configured_provider_config(settings)
-    try:
-        adapter = OpenAICompatibleAdapter(config=config)
-    except TypeError:
-        adapter = OpenAICompatibleAdapter(config)
+    adapter = OpenAICompatibleAdapter(config=config)
     budget_mode = str(settings.get("analysis_budget_mode") or "balanced")
     prompt_settings = resolve_prompt_settings(settings)
-    try:
-        analyzer = PaperAnalyzer(
-            adapter,
-            budget_mode=budget_mode,
-            prompt_template_id=prompt_settings["analysis_prompt_template_id"],
-            screening_prompt=prompt_settings["screening_prompt"],
-            deep_prompt=prompt_settings["deep_prompt"],
-        )
-    except TypeError:
-        # Keep lightweight third-party/test analyzers compatible with the
-        # original one-argument constructor.
-        analyzer = PaperAnalyzer(adapter)
+    analyzer = PaperAnalyzer(
+        adapter,
+        budget_mode=budget_mode,
+        prompt_template_id=prompt_settings["analysis_prompt_template_id"],
+        screening_prompt=prompt_settings["screening_prompt"],
+        deep_prompt=prompt_settings["deep_prompt"],
+    )
 
     screened = 0
     screening_errors: list[str] = []
@@ -172,12 +161,9 @@ async def analyze_papers(
         last_error: Exception | None = None
         for attempt in range(1, 4):
             try:
-                if hasattr(analyzer, "screen_with_metadata"):
-                    generated = await analyzer.screen_with_metadata(match.paper, match.profile)
-                else:
-                    generated = await analyzer.screen(match.paper, match.profile)
+                generated = await analyzer.screen_with_metadata(match.paper, match.profile)
                 return queue_id, match, generated, None, attempt
-            except Exception as exc:
+            except ProviderError as exc:
                 last_error = exc
                 if attempt < 3:
                     await asyncio.sleep(SCREENING_RETRY_DELAYS[attempt - 1])
@@ -255,21 +241,7 @@ async def analyze_papers(
                         item.last_error = str(error or "Unknown screening error")
                         item.completed_at = None
                 continue
-            result = getattr(generated, "data", generated)
-            usage = getattr(generated, "usage", None)
-            usage_fields = (
-                usage.analysis_fields(budget_mode)
-                if usage is not None
-                else {
-                    "budget_mode": budget_mode,
-                    "usage_available": False,
-                    "input_tokens": None,
-                    "cached_input_tokens": None,
-                    "output_tokens": None,
-                    "reasoning_tokens": None,
-                    "total_tokens": None,
-                }
-            )
+            result = generated.data
             with session_scope() as db:
                 stored_match = db.get(PaperMatch, match.id)
                 if stored_match is None:
@@ -297,7 +269,7 @@ async def analyze_papers(
                         status="completed",
                         provider=config.provider_name,
                         model=config.model,
-                        transport=getattr(generated, "transport", adapter.last_transport),
+                        transport=generated.transport,
                         content_source="abstract",
                         summary=result.reason,
                         verdict="relevant" if result.relevant else "not_relevant",
@@ -307,9 +279,9 @@ async def analyze_papers(
                             **stamp_direction_attribution(
                                 result.model_dump(), list(match.profile.topics)
                             ),
-                            "_analysis_prompt": getattr(generated, "prompt_metadata", {}),
+                            "_analysis_prompt": generated.prompt_metadata,
                         },
-                        **usage_fields,
+                        **generated.usage.analysis_fields(budget_mode),
                     )
                 )
             screened += 1
@@ -382,40 +354,41 @@ async def analyze_papers(
             generated, fulltext = await analyzer.deep_analyze_with_metadata(
                 match.paper, match.profile
             )
-            result = generated.data
-            payload = result.model_dump()
-            payload["_analysis_prompt"] = getattr(generated, "prompt_metadata", {})
-            with session_scope() as db:
-                db.add(
-                    Analysis(
-                        paper_id=match.paper_id,
-                        profile_id=match.profile_id,
-                        kind="deep",
-                        status="completed",
-                        provider=config.provider_name,
-                        model=config.model,
-                        transport=generated.transport,
-                        content_source=fulltext.source if fulltext.content else "abstract",
-                        summary=payload.get("summary", ""),
-                        verdict=payload.get("verdict", ""),
-                        relevance_score=payload.get("relevance_score"),
-                        novelty_score=payload.get("novelty_score"),
-                        rigor_score=payload.get("rigor_score"),
-                        impact_score=payload.get("impact_score"),
-                        strengths_json=payload.get("strengths", []),
-                        weaknesses_json=payload.get("weaknesses", []),
-                        tags_json=payload.get("tags", []),
-                        payload_json=payload,
-                        **generated.usage.analysis_fields(budget_mode),
-                    )
-                )
-                stored_match = db.scalar(select(PaperMatch).where(PaperMatch.id == match.id))
-                if stored_match is not None:
-                    stored_match.relevance_score = result.relevance_score
-            count += 1
-        except Exception as exc:  # individual papers must not abort the whole digest
-            LOG.exception("Analysis failed for paper %s", match.paper_id)
+        except ProviderError as exc:
+            LOG.warning("Deep analysis failed for paper %s: %s", match.paper_id, exc)
             errors.append(f"{match.paper_id}: {exc}")
+            continue
+        result = generated.data
+        payload = result.model_dump()
+        payload["_analysis_prompt"] = generated.prompt_metadata
+        with session_scope() as db:
+            db.add(
+                Analysis(
+                    paper_id=match.paper_id,
+                    profile_id=match.profile_id,
+                    kind="deep",
+                    status="completed",
+                    provider=config.provider_name,
+                    model=config.model,
+                    transport=generated.transport,
+                    content_source=fulltext.source if fulltext.content else "abstract",
+                    summary=payload.get("summary", ""),
+                    verdict=payload.get("verdict", ""),
+                    relevance_score=payload.get("relevance_score"),
+                    novelty_score=payload.get("novelty_score"),
+                    rigor_score=payload.get("rigor_score"),
+                    impact_score=payload.get("impact_score"),
+                    strengths_json=payload.get("strengths", []),
+                    weaknesses_json=payload.get("weaknesses", []),
+                    tags_json=payload.get("tags", []),
+                    payload_json=payload,
+                    **generated.usage.analysis_fields(budget_mode),
+                )
+            )
+            stored_match = db.scalar(select(PaperMatch).where(PaperMatch.id == match.id))
+            if stored_match is not None:
+                stored_match.relevance_score = result.relevance_score
+        count += 1
     return {
         "analyzed": count,
         "screened": screened,
