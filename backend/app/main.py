@@ -20,7 +20,6 @@ from .api.reports import router as reports_router
 from .api.settings import router as settings_router
 from .env import xivpulse_env
 from .runtime import initialize_application
-from .workflow import daily_pipeline
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
@@ -86,4 +85,4 @@ else:
         <p><a href="/docs">打开 API 文档</a></p>"""
 
 
-__all__ = ["app", "daily_pipeline", "initialize_application"]
+__all__ = ["app"]

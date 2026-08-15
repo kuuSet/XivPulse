@@ -42,10 +42,10 @@ def client(monkeypatch: pytest.MonkeyPatch):
     with database.SessionLocal() as session:
         database.seed_defaults(session)
 
-    import app.main as main
     import app.pipeline as pipeline_module
     import app.runtime as runtime
     from app.services import paper_sync
+    from app.workflow import daily_pipeline
 
     monkeypatch.setattr(
         paper_sync,
@@ -53,7 +53,7 @@ def client(monkeypatch: pytest.MonkeyPatch):
         lambda _db, _papers, _topics: {},
     )
     monkeypatch.setattr(runtime, "_initialized", True)
-    monkeypatch.setattr(main.daily_pipeline, "_active_job_id", None)
+    monkeypatch.setattr(daily_pipeline, "_active_job_id", None)
     monkeypatch.setattr(
         pipeline_module,
         "PIPELINE_LOCK_PATH",
@@ -1187,11 +1187,7 @@ def test_daily_report_snapshot_is_stable_refreshable_and_listed(
     assert datetime.fromisoformat(item["updated_at"]).utcoffset() == timedelta(0)
 
 
-def test_daily_report_without_date_uses_latest_complete_digest(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import app.main as main
-
+def test_daily_report_without_date_uses_latest_complete_digest(client: TestClient) -> None:
     complete_day = date(2026, 7, 3)
     today = date(2026, 7, 4)
     with database.SessionLocal() as session:
@@ -1500,11 +1496,11 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
 async def test_direct_daily_job_is_persisted_and_rejects_overlap(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.workflow import daily_pipeline
 
     pipeline = AsyncMock(return_value={"fetched": 3, "analyzed": 1})
-    monkeypatch.setattr(main.daily_pipeline, "execute", pipeline)
-    result = await main.daily_pipeline.run_daily(trigger="test")
+    monkeypatch.setattr(daily_pipeline, "execute", pipeline)
+    result = await daily_pipeline.run_daily(trigger="test")
     assert result["success"] is True
     assert result["fetched"] == 3
     pipeline.assert_awaited_once()
@@ -1517,5 +1513,5 @@ async def test_direct_daily_job_is_persisted_and_rejects_overlap(
 
         session.add(Job(kind="sync", status="running", message="active"))
         session.commit()
-    blocked = await main.daily_pipeline.run_daily(trigger="test-overlap")
+    blocked = await daily_pipeline.run_daily(trigger="test-overlap")
     assert blocked["accepted"] is False
