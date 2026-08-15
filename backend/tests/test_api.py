@@ -1338,20 +1338,35 @@ async def test_sync_does_not_apply_another_directions_isolated_exclusion(
         primary_category="cs.RO",
         published_at=datetime.now(UTC),
     )
+    fetch_date = date(2026, 8, 14)
+    fetch_options: dict[str, object] = {}
 
     class FakeArxivClient:
-        async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[ArxivRecord]:
+        async def fetch_daily(self, *_args: object, **kwargs: object) -> list[ArxivRecord]:
+            fetch_options.update(kwargs)
             return [record]
 
     monkeypatch.setattr(main, "ArxivClient", FakeArxivClient)
+    monkeypatch.setattr(main, "_latest_complete_submission_date", lambda: fetch_date)
 
     result = await main._sync_stage()
     assert result["fetched"] == 1
+    assert result["fetch_date"] == "2026-08-14"
+    assert fetch_options["target_date"] == fetch_date
     with database.SessionLocal() as session:
         match = session.query(PaperMatch).one()
         assert match.matched_topics == ["VLA"]
         assert match.excluded_keywords_json == []
         assert match.lexical_score > 50
+        assert session.query(ScreeningQueueItem).one().report_date == fetch_date
+
+
+def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
+    import app.main as main
+
+    assert main._latest_complete_submission_date(
+        datetime(2026, 8, 15, 5, 30, tzinfo=UTC)
+    ) == date(2026, 8, 14)
 
 
 @pytest.mark.asyncio

@@ -36,8 +36,8 @@ DEFAULT_TREND_LIMIT = 12
 DAILY_QUALITY_SCORE_THRESHOLD = 80.0
 DAILY_QUALITY_OVERVIEW_LIMIT = 6
 ARXIV_BATCH_DATE_BASIS = (
-    "arXiv 当日发布批次时间（RSS feed 的 published_at；缺失时回退 first_seen_at），"
-    "不是论文的精确投稿时间"
+    "arXiv submittedDate 的投稿时间（published_at；缺失时回退 first_seen_at），"
+    "按设置时区归入报告日期"
 )
 
 _EVIDENCE_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -1366,7 +1366,7 @@ def build_daily_research_report(
         "suggested_reading_queue": _reading_queue(ordered, reading_queue_limit),
         "daily_trend": daily_trend,
         "methodology_note": (
-            "报告日期按 arXiv RSS 的当日发布批次时间统计，不代表论文的精确投稿时间。"
+            "论文按 arXiv submittedDate 获取，并按设置时区归入报告日期。"
             "研究态势、趋势、共同方法与证据、代表论文及阅读队列仅使用能归入"
             "当前正式研究方向的论文；候选总量仅用于说明抓取覆盖。报告优先使用已保存的"
             "深度分析，缺失时仅依据题目、摘要、正式研究方向、归因关键词和受控术语生成"

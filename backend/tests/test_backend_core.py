@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import app.config as config_module
@@ -297,7 +297,7 @@ def test_parse_normalize_dedupe_and_version_upsert() -> None:
 
 
 @pytest.mark.asyncio
-async def test_daily_fetch_invokes_rust_rss_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_daily_fetch_invokes_rust_date_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     import app.services.arxiv as arxiv_module
 
     captured: dict[str, object] = {}
@@ -309,8 +309,8 @@ async def test_daily_fetch_invokes_rust_rss_binary(monkeypatch: pytest.MonkeyPat
             return (
                 b'{"arxiv_id":"2608.01234","version":2,"title":"Robot paper",'
                 b'"published_at":"2026-08-14T00:00:00-04:00",'
-                b'"updated_at":"2026-08-14T00:00:00-04:00","source":"rss"}\n',
-                b"categories=cs.RO,cs.AI fetched=1 emitted=1\n",
+                b'"updated_at":"2026-08-14T00:00:00-04:00","source":"atom"}\n',
+                b"date=2026-08-14 categories=cs.RO,cs.AI total=1 emitted=1\n",
             )
 
     async def create_subprocess(*args: object, **kwargs: object) -> Process:
@@ -324,10 +324,11 @@ async def test_daily_fetch_invokes_rust_rss_binary(monkeypatch: pytest.MonkeyPat
             {"enabled": True, "arxiv_categories": ["cs.RO", "cs.AI"]},
             {"enabled": True, "arxiv_categories": ["cs.RO"]},
         ],
+        target_date=date(2026, 8, 14),
         max_results=17,
     )
 
-    assert captured["args"] == ("xivpulse-rs", "fetch")
+    assert captured["args"] == ("xivpulse-rs", "fetch", "2026-08-14")
     environment = captured["env"]
     assert isinstance(environment, dict)
     assert environment["XIVPULSE_ARXIV_CATEGORIES"] == "cs.RO,cs.AI"
@@ -336,7 +337,7 @@ async def test_daily_fetch_invokes_rust_rss_binary(monkeypatch: pytest.MonkeyPat
     assert records[0].arxiv_id == "2608.01234"
     assert records[0].version == 2
     assert records[0].published_at == datetime(2026, 8, 14, 4, tzinfo=UTC)
-    assert records[0].source == "rss"
+    assert records[0].source == "atom"
 
 
 def test_html_affiliations_only_reads_explicit_author_roles() -> None:
@@ -435,7 +436,7 @@ def test_profile_query_and_deterministic_recommendation_explanation() -> None:
     assert ranking[1].matched_keywords == []
     assert ranking[1].components["topic"] == 0
 
-    # Missing dates are legal for partially populated RSS records and must sort
+    # Missing dates are legal for partially populated arXiv records and must sort
     # deterministically on Windows, where datetime.min.timestamp() is invalid.
     undated = {**good, "id": 3, "arxiv_id": "2608.00003", "published_at": None}
     assert rank_papers([undated], topics=topics, now=now)[0].paper_id == 3

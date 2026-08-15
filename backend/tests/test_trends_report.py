@@ -649,9 +649,9 @@ def test_daily_report_contains_all_research_sections(analytics_session: Session)
     assert overview["paper_findings"][0]["analysis_kind"] == "deep"
     assert "Action-conditioned latent dynamics" in overview["paper_findings"][0]["contribution"]
     assert "模仿学习" in overview["comparison"]
-    assert "RSS" in report["date_basis"]
-    assert "不是论文的精确投稿时间" in report["date_basis"]
-    assert "当日发布批次" in report["methodology_note"]
+    assert "submittedDate" in report["date_basis"]
+    assert "按设置时区" in report["date_basis"]
+    assert "submittedDate" in report["methodology_note"]
 
 
 def test_report_aggregates_controlled_labels_but_keeps_paper_level_details(

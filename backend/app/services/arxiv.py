@@ -12,7 +12,7 @@ import time
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -409,7 +409,7 @@ class ArxivClient:
         url: str,
         *,
         params: dict[str, Any] | None = None,
-        accept: str = "application/atom+xml, application/rss+xml",
+        accept: str = "application/atom+xml",
         request_timeout: float | None = None,
     ) -> bytes:
         await polite_wait(self.rate_limit_seconds)
@@ -563,6 +563,7 @@ class ArxivClient:
         self,
         topics: Sequence[Topic | dict[str, Any]],
         *,
+        target_date: date,
         max_results: int = 100,
     ) -> list[ArxivRecord]:
         categories = [
@@ -586,6 +587,7 @@ class ArxivClient:
         process = await asyncio.create_subprocess_exec(
             RUST_FETCH_BINARY,
             "fetch",
+            target_date.isoformat(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=environment,

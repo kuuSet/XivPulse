@@ -1365,6 +1365,10 @@ def _query_papers(db: Session):
     )
 
 
+def _latest_complete_submission_date(now: datetime | None = None) -> date:
+    return (now or datetime.now(UTC)).astimezone(UTC).date() - timedelta(days=1)
+
+
 async def _sync_stage() -> dict[str, Any]:
     with SessionLocal() as db:
         profile = _active_profile(db)
@@ -1375,10 +1379,11 @@ async def _sync_stage() -> dict[str, Any]:
             settings.get("screen_batch_size", settings.get("screen_top_n", 30)) or 0
         )
         selected_recall_mode = recall_mode(settings.get("semantic_recall_mode"))
-        timezone_name = str(settings.get("timezone", "Asia/Shanghai"))
+    target_date = _latest_complete_submission_date()
     client = ArxivClient()
     records = await client.fetch_daily(
         topics,
+        target_date=target_date,
         max_results=max_results,
     )
     records = records[:max_results]
@@ -1466,7 +1471,6 @@ async def _sync_stage() -> dict[str, Any]:
             # surface the degraded recall explicitly in the job result.
             semantic_results = {}
             semantic_error = str(exc)
-        report_date = current_date_in_timezone(timezone_name)
         for paper in result.papers:
             match = db.scalar(
                 select(PaperMatch).where(
@@ -1496,7 +1500,7 @@ async def _sync_stage() -> dict[str, Any]:
                     queue_item = ScreeningQueueItem(
                         paper_id=paper.id,
                         profile_id=profile.id,
-                        report_date=report_date,
+                        report_date=target_date,
                     )
                     db.add(queue_item)
                 elif queue_item.status == "failed":
@@ -1517,10 +1521,10 @@ async def _sync_stage() -> dict[str, Any]:
             "semantic_degraded": semantic_error is not None,
             "semantic_error": semantic_error,
             **result.as_dict(),
+            "fetch_date": target_date.isoformat(),
             "query": build_profile_query(topics),
         }
 
-    # RSS is fast for the daily category feed but normally omits affiliations.
     # Enrich only the papers about to enter screening, in one bounded Atom call.
     selected_ids = [
         arxiv_id for _, arxiv_id in sorted(enrichment_candidates, reverse=True)[:screen_batch_size]
@@ -1579,6 +1583,7 @@ async def _analyze_stage(
     limit: int | None = None,
     *,
     job_id: str | None = None,
+    report_date: date | None = None,
 ) -> dict[str, Any]:
     try:
         from .services.analyzer import OpenAICompatibleAdapter, PaperAnalyzer
@@ -1594,7 +1599,9 @@ async def _analyze_stage(
             int(settings.get("screen_batch_size", settings.get("screen_top_n", 30)) or 30),
         )
         selected_recall_mode = recall_mode(settings.get("semantic_recall_mode"))
-        today = current_date_in_timezone(str(settings.get("timezone", "Asia/Shanghai")))
+        today = report_date or current_date_in_timezone(
+            str(settings.get("timezone", "Asia/Shanghai"))
+        )
         recent_matches = (
             db.scalars(
                 select(PaperMatch)
@@ -1985,7 +1992,7 @@ async def _analyze_stage(
     }
 
 
-def _create_digest() -> dict[str, Any]:
+def _create_digest(digest_date: date | None = None) -> dict[str, Any]:
     with session_scope() as db:
         profile = _active_profile(db)
         matches = db.scalars(
@@ -1995,7 +2002,7 @@ def _create_digest() -> dict[str, Any]:
             .limit(20)
         ).all()
         timezone_name = str(_setting_map(db).get("timezone", "Asia/Shanghai"))
-        today = current_date_in_timezone(timezone_name)
+        today = digest_date or current_date_in_timezone(timezone_name)
         digest = db.scalar(
             select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == today)
         )
@@ -2425,16 +2432,22 @@ async def _execute_pipeline(
     job_id: str | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {}
+    pipeline_date: date | None = None
     if kind in ("daily", "sync"):
         _update_job_progress(job_id, progress=10, message="正在抓取并匹配 arXiv 候选")
         result.update(await _sync_stage())
+        pipeline_date = date.fromisoformat(str(result["fetch_date"]))
     if kind in ("daily", "analyze"):
         _update_job_progress(job_id, progress=35, message="正在进行 AI 摘要初筛与全文深读")
-        result.update(await _analyze_stage(job_id=job_id))
+        result.update(await _analyze_stage(job_id=job_id, report_date=pipeline_date))
     if kind == "daily":
+        if pipeline_date is None:
+            raise RuntimeError("Daily pipeline is missing its fetch date")
         _update_job_progress(job_id, progress=88, message="正在重排推荐并保存当日研究日报")
-        result.update(_create_digest())
-        result.update(_create_daily_research_report(screening_status=result))
+        result.update(_create_digest(pipeline_date))
+        result.update(
+            _create_daily_research_report(report_date=pipeline_date, screening_status=result)
+        )
         current_report_date = date.fromisoformat(str(result["report_date"]))
         refreshed_report_dates: list[str] = []
         for value in result.get("screening_report_dates", []):
