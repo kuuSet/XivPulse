@@ -112,6 +112,21 @@ from .services.semantic import (
 from .services.semantic import (
     match_papers as semantic_match_papers,
 )
+from .services.state import (
+    active_profile as _active_profile,
+)
+from .services.state import (
+    clean_string_list as _clean_string_list,
+)
+from .services.state import (
+    configured_provider_config as _configured_provider_config,
+)
+from .services.state import (
+    set_setting as _set_setting,
+)
+from .services.state import (
+    setting_map as _setting_map,
+)
 
 LOG = logging.getLogger("xivpulse")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -481,53 +496,6 @@ def auth_logout(response: Response) -> dict[str, Any]:
     return {"enabled": config.enabled, "authenticated": False}
 
 
-def _setting_map(db: Session) -> dict[str, Any]:
-    return {item.key: item.value for item in db.scalars(select(AppSetting)).all()}
-
-
-def _set_setting(db: Session, key: str, value: Any) -> None:
-    setting = db.get(AppSetting, key)
-    if setting is None:
-        db.add(AppSetting(key=key, value_json=value))
-    else:
-        setting.value = value
-
-
-def _configured_provider_config(settings: dict[str, Any]):
-    """Overlay database provider settings without exposing stored credentials."""
-
-    config = get_config()
-    return replace(
-        config,
-        provider_name=str(settings.get("provider_name") or config.provider_name),
-        base_url=str(settings.get("base_url") or config.base_url),
-        model=str(settings.get("model") or config.model),
-        api_key=settings.get("api_key") or config.api_key,
-        config_source=(
-            "database"
-            if any(key in settings for key in ("base_url", "model", "api_key"))
-            else config.config_source
-        ),
-        key_source="database" if settings.get("api_key") else config.key_source,
-    )
-
-
-def _active_profile(db: Session) -> Profile:
-    profile = db.scalar(
-        select(Profile)
-        .options(selectinload(Profile.topics))
-        .where(Profile.active.is_(True))
-        .order_by(Profile.id)
-    )
-    if profile is None:
-        profile = db.scalar(
-            select(Profile).options(selectinload(Profile.topics)).order_by(Profile.id)
-        )
-    if profile is None:
-        raise HTTPException(status_code=500, detail="研究画像尚未初始化")
-    return profile
-
-
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -551,22 +519,6 @@ def _latest_analysis(
         key=lambda item: _as_utc(item.created_at) or datetime.min.replace(tzinfo=UTC),
         default=None,
     )
-
-
-def _clean_string_list(value: Any, *, limit: int = 200) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    result: list[str] = []
-    seen: set[str] = set()
-    for item in value[:limit]:
-        if not isinstance(item, str):
-            continue
-        cleaned = item.strip()
-        key = cleaned.casefold()
-        if cleaned and key not in seen:
-            seen.add(key)
-            result.append(cleaned)
-    return result
 
 
 def _clean_custom_methods(value: Any) -> list[dict[str, Any]]:
