@@ -93,7 +93,6 @@ from .services.prompt_catalog import (
     prompt_catalog_payload,
     resolve_prompt_settings,
 )
-from .services.recommender import RecommendationEngine
 from .services.report_synthesis import (
     generate_daily_report_synthesis,
     report_source_hash,
@@ -978,11 +977,7 @@ def _paper_wire(
     analysis = _latest_analysis(paper, "deep", profile_id=profile_id) or _latest_analysis(
         paper, profile_id=profile_id
     )
-    score = (
-        match.recommendation_score
-        if match and match.recommendation_score is not None
-        else (match.relevance_score if match else 0)
-    )
+    score = match.relevance_score if match and match.relevance_score is not None else 0
     relevance = (
         analysis.relevance_score
         if analysis and analysis.relevance_score is not None
@@ -1442,7 +1437,6 @@ async def _sync_stage() -> dict[str, Any]:
                     if semantic is not None
                     else 0
                 )
-                match.recommendation_score = match.relevance_score
                 if (
                     semantic is not None
                     and semantic.score >= RECALL_THRESHOLDS[selected_recall_mode]
@@ -1874,7 +1868,7 @@ async def _analyze_stage(
                         )
                     ),
                 )
-                .order_by(desc(PaperMatch.recommendation_score), desc(PaperMatch.semantic_score))
+                .order_by(desc(PaperMatch.relevance_score), desc(PaperMatch.semantic_score))
                 .limit(max(0, limit))
             )
             .unique()
@@ -1921,15 +1915,6 @@ async def _analyze_stage(
         except Exception as exc:  # individual papers must not abort the whole digest
             LOG.exception("Analysis failed for paper %s", match.paper_id)
             errors.append(f"{match.paper_id}: {exc}")
-    with session_scope() as db:
-        profile = _active_profile(db)
-        RecommendationEngine().rank_session(
-            db,
-            profile.id,
-            author_watchlist=_clean_string_list(settings.get("author_watchlist", [])),
-            limit=int(settings.get("max_results", 1000)),
-            since=datetime.now(UTC) - timedelta(days=7),
-        )
     return {
         "analyzed": count,
         "screened": screened,
@@ -1953,7 +1938,7 @@ def _create_digest(digest_date: date | None = None) -> dict[str, Any]:
         matches = db.scalars(
             select(PaperMatch)
             .where(PaperMatch.profile_id == profile.id)
-            .order_by(desc(PaperMatch.recommendation_score))
+            .order_by(desc(PaperMatch.relevance_score))
             .limit(20)
         ).all()
         timezone_name = str(_setting_map(db).get("timezone", "Asia/Shanghai"))
@@ -2675,7 +2660,7 @@ def dashboard(
             .join(Paper, Paper.id == PaperMatch.paper_id)
             .where(
                 PaperMatch.profile_id == profile.id,
-                PaperMatch.recommendation_score >= 80,
+                PaperMatch.relevance_score >= 80,
                 day_condition,
             )
         )
@@ -2686,7 +2671,7 @@ def dashboard(
             _query_papers(db)
             .join(PaperMatch, PaperMatch.paper_id == Paper.id)
             .where(PaperMatch.profile_id == profile.id)
-            .order_by(desc(PaperMatch.recommendation_score), desc(Paper.published_at))
+            .order_by(desc(PaperMatch.relevance_score), desc(Paper.published_at))
             .limit(100)
         )
         .unique()
@@ -2831,11 +2816,7 @@ def papers(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = _active_profile(db)
-    score = func.coalesce(
-        PaperMatch.recommendation_score,
-        PaperMatch.relevance_score,
-        0,
-    )
+    score = func.coalesce(PaperMatch.relevance_score, 0)
     conditions = [
         PaperMatch.profile_id == profile.id,
         PaperMatch.screened_at.is_not(None),
@@ -3673,7 +3654,7 @@ def digest_preview(
                 _query_papers(db)
                 .join(PaperMatch, PaperMatch.paper_id == Paper.id)
                 .where(PaperMatch.profile_id == profile.id)
-                .order_by(desc(PaperMatch.recommendation_score))
+                .order_by(desc(PaperMatch.relevance_score))
                 .limit(10)
             )
             .unique()

@@ -10,16 +10,7 @@ import pytest
 from app.config import AppConfig, provider_status
 from app.database import DEFAULT_TOPICS, init_db, make_engine
 from app.env import xivpulse_env
-from app.models import (
-    AppSetting,
-    Feedback,
-    FeedbackReason,
-    Paper,
-    PaperMatch,
-    PaperVersion,
-    Profile,
-    Topic,
-)
+from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, OpenAICompatibleAdapter, PaperAnalyzer
 from app.services.arxiv import (
@@ -53,7 +44,6 @@ from app.services.prompt_catalog import (
     SCREENING_SYSTEM_PROMPT,
     prompt_catalog_payload,
 )
-from app.services.recommender import RecommendationEngine, rank_papers, score_paper
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -375,7 +365,7 @@ def test_direction_catalog_is_versioned_searchable_and_collision_free() -> None:
     assert "AI for Science 与科学发现" in {item["name"] for item in payload["items"]}
 
 
-def test_profile_query_and_deterministic_recommendation_explanation() -> None:
+def test_profile_query_uses_topic_categories_and_terms() -> None:
     topics = [
         {
             "name": "VLA",
@@ -391,86 +381,9 @@ def test_profile_query_and_deterministic_recommendation_explanation() -> None:
     assert "cat:cs.RO" in query
     assert "all:" in query
     assert "vision language action" in query
-    now = datetime(2026, 8, 12, tzinfo=UTC)
-    good = {
-        "id": 1,
-        "arxiv_id": "2608.00001",
-        "title": "Vision Language Action for Robot Learning",
-        "abstract": "Real robot experiments.",
-        "categories": ["cs.RO"],
-        "published_at": now,
-    }
-    excluded = {
-        "id": 2,
-        "arxiv_id": "2608.00002",
-        "title": "Vision Language Action vehicle-to-load systems",
-        "abstract": "Power systems study.",
-        "categories": ["cs.RO"],
-        "published_at": now,
-    }
-    score = score_paper(good, topics=topics, now=now)
-    assert score.score == score_paper(good, topics=topics, now=now).score
-    assert score.components["topic"] > 0
-    assert "匹配研究方向：VLA" in score.explanation
-    watched = {**good, "authors": ["Alice Researcher", "Bob Builder"]}
-    watched_score = score_paper(
-        watched,
-        topics=topics,
-        author_watchlist=["Alice Researcher"],
-        now=now,
-    )
-    assert watched_score.score > score.score
-    assert watched_score.components["author_watch"] == 8
-    assert "命中关注作者：Alice Researcher" in watched_score.explanation
-    ranking = rank_papers([excluded, good], topics=topics, now=now)
-    assert [item.paper_id for item in ranking] == [1, 2]
-    assert ranking[0].rank == 1
-    assert ranking[1].components["exclusion_penalty"] > 0
-    assert ranking[1].matched_topics == []
-    assert ranking[1].matched_keywords == []
-    assert ranking[1].components["topic"] == 0
-
-    # Missing dates are legal for partially populated arXiv records and must sort
-    # deterministically on Windows, where datetime.min.timestamp() is invalid.
-    undated = {**good, "id": 3, "arxiv_id": "2608.00003", "published_at": None}
-    assert rank_papers([undated], topics=topics, now=now)[0].paper_id == 3
 
 
-def test_watched_institution_only_boosts_direction_matched_papers() -> None:
-    topics = [
-        {
-            "name": "Robot Learning",
-            "enabled": True,
-            "weight": 1.0,
-            "keywords": ["robot learning"],
-            "context_keywords": [],
-            "negative_keywords": [],
-        }
-    ]
-    now = datetime(2026, 8, 12, tzinfo=UTC)
-    relevant = {
-        "id": 1,
-        "title": "Robot Learning with Predictive Models",
-        "abstract": "A robot learning system.",
-        "affiliations": ["NVIDIA Research"],
-        "published_at": now,
-    }
-    unrelated = {
-        "id": 2,
-        "title": "A Database System",
-        "abstract": "Query optimization for relational data.",
-        "affiliations": ["NVIDIA Research"],
-        "published_at": now,
-    }
-
-    relevant_score = score_paper(relevant, topics=topics, now=now)
-    unrelated_score = score_paper(unrelated, topics=topics, now=now)
-
-    assert relevant_score.components["institution_watch"] == 5
-    assert "重点机构：NVIDIA" in relevant_score.explanation
-    assert unrelated_score.matched_topics == []
-    assert unrelated_score.components["institution_watch"] == 0
-    assert "重点机构" not in unrelated_score.explanation
+def test_watched_organization_normalization_avoids_name_collisions() -> None:
     assert watched_organizations(["Nvidia Corporation", "Stanford University"]) == ["NVIDIA"]
     assert watched_organizations(["Meta-analysis Research Institute"]) == []
     assert watched_organizations(["OpenAIR Science Center"]) == []
@@ -549,52 +462,6 @@ def test_direction_alias_is_canonicalized_without_creating_a_new_label() -> None
     assert names == ["视觉-语言-动作模型"]
 
 
-def test_category_and_watched_author_do_not_create_direction_attribution() -> None:
-    topics = [
-        {
-            "name": "Robot Learning",
-            "enabled": True,
-            "weight": 1.0,
-            "keywords": ["robot learning"],
-            "negative_keywords": [],
-            "arxiv_categories": ["cs.RO"],
-        },
-        {
-            "name": "Robot Navigation",
-            "enabled": True,
-            "weight": 1.0,
-            "keywords": ["robot navigation"],
-            "negative_keywords": [],
-            "arxiv_categories": ["cs.RO"],
-        },
-    ]
-    paper = {
-        "id": 1,
-        "title": "A General Robotics Benchmark",
-        "abstract": "We compare several systems on a new benchmark.",
-        "authors": ["Alice Researcher"],
-        "categories": ["cs.RO"],
-        "published_at": datetime(2026, 8, 12, tzinfo=UTC),
-    }
-
-    category_only = score_paper(paper, topics=topics, now=datetime(2026, 8, 12, tzinfo=UTC))
-    assert category_only.matched_topics == []
-    assert category_only.matched_keywords == []
-    assert category_only.components["topic"] == 0
-    assert category_only.components["keyword"] == 0
-
-    author_only = score_paper(
-        paper,
-        topics=topics,
-        author_watchlist=["Alice Researcher"],
-        now=datetime(2026, 8, 12, tzinfo=UTC),
-    )
-    assert author_only.matched_topics == []
-    assert author_only.matched_keywords == []
-    assert author_only.components["author_watch"] == 8
-    assert "命中关注作者：Alice Researcher" in author_only.explanation
-
-
 def test_direction_context_anchor_blocks_cross_domain_keyword_collision() -> None:
     topics = [
         {
@@ -620,14 +487,6 @@ def test_direction_context_anchor_blocks_cross_domain_keyword_collision() -> Non
         "title": "Reinforcement Learning for Humanoid Locomotion",
         "abstract": "A robot policy for whole-body control.",
     }
-
-    unrelated_score = score_paper(unrelated, topics=topics, now=datetime(2026, 8, 12, tzinfo=UTC))
-    robotics_score = score_paper(robotics, topics=topics, now=datetime(2026, 8, 12, tzinfo=UTC))
-
-    assert unrelated_score.matched_topics == []
-    assert unrelated_score.components["topic"] == 0
-    assert robotics_score.matched_topics == ["Robot Learning"]
-    assert robotics_score.components["topic"] > 0
 
     unrelated_screen = PaperAnalyzer._mock_screen(unrelated, topics)
     robotics_screen = PaperAnalyzer._mock_screen(robotics, topics)
@@ -665,10 +524,7 @@ def test_multiword_terms_use_boundaries_and_unrelated_exclusions_do_not_penalize
         "categories": ["cs.RO"],
         "published_at": datetime(2026, 8, 12, tzinfo=UTC),
     }
-    result = score_paper(paper, topics=topics, now=datetime(2026, 8, 12, tzinfo=UTC))
     screen = PaperAnalyzer._mock_screen(paper, topics)
-    assert result.matched_topics == ["VLA"]
-    assert result.components["exclusion_penalty"] == 0
     assert screen.matched_topics == ["VLA"]
     assert "排除词" not in screen.reason
 
@@ -692,82 +548,6 @@ def test_mock_screening_does_not_turn_category_into_a_direction() -> None:
     result = PaperAnalyzer._mock_screen(paper, topics)
     assert result.matched_topics == []
     assert result.tags == []
-
-
-def test_structured_feedback_reason_changes_learned_topic_preference() -> None:
-    engine = make_engine("sqlite:///:memory:")
-    init_db(engine)
-    with Session(engine) as session:
-        profile = session.scalar(select(Profile).where(Profile.active.is_(True)))
-        assert profile is not None
-        paper = Paper(
-            arxiv_id="2608.09999",
-            title="Robot Learning Feedback Example",
-            abstract="A robot learning method for embodied intelligence.",
-            authors_json=["Researcher"],
-            categories_json=["cs.RO"],
-        )
-        session.add(paper)
-        session.flush()
-        feedback = Feedback(
-            paper_id=paper.id,
-            profile_id=profile.id,
-            action="neutral",
-            reasons=[FeedbackReason(code="no_code")],
-        )
-        session.add(feedback)
-        session.commit()
-
-        mild = RecommendationEngine._topic_preferences(session, profile)
-        feedback.reasons = [FeedbackReason(code="not_relevant")]
-        session.commit()
-        strong = RecommendationEngine._topic_preferences(session, profile)
-
-        shared_topics = set(mild) & set(strong)
-        assert shared_topics
-        assert all(strong[name] < mild[name] for name in shared_topics)
-
-
-def test_feedback_preference_requires_current_auditable_direction_evidence() -> None:
-    engine = make_engine("sqlite:///:memory:")
-    init_db(engine)
-    with Session(engine) as session:
-        profile = session.scalar(select(Profile).where(Profile.active.is_(True)))
-        assert profile is not None
-        paper = Paper(
-            arxiv_id="2608.08888",
-            title="A General Robotics Benchmark",
-            abstract="We compare several systems on a new benchmark.",
-            authors_json=["Researcher"],
-            categories_json=["cs.RO"],
-        )
-        session.add(paper)
-        session.flush()
-        session.add(
-            Feedback(
-                paper_id=paper.id,
-                profile_id=profile.id,
-                action="like",
-            )
-        )
-        session.commit()
-
-        assert RecommendationEngine._topic_preferences(session, profile) == {}
-
-        navigation = next(topic for topic in profile.topics if topic.name == "导航与空间智能")
-        session.add(
-            PaperMatch(
-                paper_id=paper.id,
-                profile_id=profile.id,
-                topic_id=navigation.id,
-                matched_topics_json=["导航与空间智能", "cs.RO", "关注作者"],
-            )
-        )
-        session.commit()
-
-        # A foreign key only proves that the row points to a valid configured
-        # direction. It does not prove that this paper belongs to that direction.
-        assert RecommendationEngine._topic_preferences(session, profile) == {}
 
 
 def test_compatible_provider_unit_interval_scores_are_normalized() -> None:

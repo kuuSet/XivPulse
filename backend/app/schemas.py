@@ -255,18 +255,6 @@ class DeepAnalysisResult(BaseModel):
         return value
 
 
-class ScoreComponents(BaseModel):
-    topic: float = 0.0
-    keyword: float = 0.0
-    ai_relevance: float = 0.0
-    quality: float = 0.0
-    freshness: float = 0.0
-    author_watch: float = 0.0
-    institution_watch: float = 0.0
-    feedback: float = 0.0
-    exclusion_penalty: float = 0.0
-
-
 class RecommendationRead(BaseModel):
     paper_id: int
     score: float = Field(ge=0, le=100)
@@ -274,7 +262,6 @@ class RecommendationRead(BaseModel):
     explanation: str
     matched_topics: list[str] = Field(default_factory=list)
     matched_keywords: list[str] = Field(default_factory=list)
-    components: ScoreComponents = Field(default_factory=ScoreComponents)
 
 
 class RankedPaperRead(BaseModel):
@@ -397,7 +384,6 @@ __all__ = [
     "RankedPaperRead",
     "RecommendationRead",
     "RecommendationResult",
-    "ScoreComponents",
     "ScreeningResult",
     "SettingsRead",
     "SettingsUpdate",

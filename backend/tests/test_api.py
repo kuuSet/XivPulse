@@ -85,9 +85,7 @@ def _insert_paper(
                 profile_id=profile.id,
                 matched_topics_json=["具身智能"],
                 matched_keywords_json=["robot learning"],
-                lexical_score=88,
-                relevance_score=90,
-                recommendation_score=92,
+                relevance_score=92,
                 reason="与具身智能画像高度相关",
                 screened_at=datetime.now(UTC) if screened else None,
             )
@@ -177,7 +175,6 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
                 PaperMatch(
                     paper_id=paper.id,
                     profile_id=profile.id,
-                    lexical_score=80,
                     semantic_score=0.81,
                 )
             )
@@ -197,12 +194,7 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
                 tags=[],
             )
 
-    class NoopRecommendationEngine:
-        def rank_session(self, *_args: object, **_kwargs: object) -> list[object]:
-            return []
-
     monkeypatch.setattr(analyzer_module, "PaperAnalyzer", FakePaperAnalyzer)
-    monkeypatch.setattr(main, "RecommendationEngine", NoopRecommendationEngine)
     monkeypatch.setattr(main, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
     result = await main._analyze_stage(limit=0)
     assert result["screened"] == 65
@@ -242,7 +234,6 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
                 PaperMatch(
                     paper_id=paper.id,
                     profile_id=profile.id,
-                    lexical_score=80,
                     semantic_score=0.81,
                 )
             )
@@ -265,12 +256,7 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
                 tags=[],
             )
 
-    class NoopRecommendationEngine:
-        def rank_session(self, *_args: object, **_kwargs: object) -> list[object]:
-            return []
-
     monkeypatch.setattr(analyzer_module, "PaperAnalyzer", RetryAnalyzer)
-    monkeypatch.setattr(main, "RecommendationEngine", NoopRecommendationEngine)
     monkeypatch.setattr(main, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
     result = await main._analyze_stage(limit=0)
     assert result["screened"] == 1
@@ -787,6 +773,8 @@ def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
         paper = session.get(Paper, paper_id)
         assert paper is not None
         paper.affiliations = ["NVIDIA Research", "Carnegie Mellon University"]
+        match = session.query(PaperMatch).filter_by(paper_id=paper_id).one()
+        match.recommendation_score = 5  # ignored legacy composite score
         session.commit()
     listing = client.get("/api/papers", params={"q": "Embodied", "min_score": 80})
     assert listing.status_code == 200
@@ -797,6 +785,8 @@ def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
     detail = client.get(f"/api/papers/{paper_id}")
     assert detail.status_code == 200
     assert detail.json()["title"] == "An Embodied AI Paper"
+    assert detail.json()["relevance_score"] == 92
+    assert detail.json()["recommendation_score"] == 92
     assert detail.json()["affiliations"] == [
         "NVIDIA Research",
         "Carnegie Mellon University",
@@ -1284,18 +1274,13 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 
     monkeypatch.setattr(analyzer_module, "PaperAnalyzer", FakePaperAnalyzer)
 
-    class NoopRecommendationEngine:
-        def rank_session(self, *_args: object, **_kwargs: object) -> list[object]:
-            return []
-
-    monkeypatch.setattr(main, "RecommendationEngine", NoopRecommendationEngine)
-
     result = await main._analyze_stage(limit=0)
     assert result["screened"] == 1
 
     with database.SessionLocal() as session:
         stored_match = session.get(PaperMatch, match_id)
         assert stored_match is not None
+        assert stored_match.relevance_score == 91
         assert stored_match.matched_topics_json == [formal_direction]
         assert stale_legal_direction not in stored_match.matched_topics_json
         assert stored_match.matched_keywords_json == [configured_keyword]
@@ -1369,7 +1354,9 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         }
         assert matches["2608.08888"].lexical_score == 0
         assert matches["2608.08888"].semantic_score == pytest.approx(0.2)
+        assert matches["2608.08888"].relevance_score == pytest.approx(20)
         assert matches["2608.08889"].semantic_score == pytest.approx(0.8)
+        assert matches["2608.08889"].relevance_score == pytest.approx(80)
         queue_item = session.query(ScreeningQueueItem).one()
         assert queue_item.paper.arxiv_id == "2608.08889"
         assert queue_item.report_date == fetch_date

@@ -70,9 +70,7 @@ def analytics_session() -> Session:
                 profile_id=profile.id,
                 matched_topics_json=topics,
                 matched_keywords_json=keywords,
-                lexical_score=score - 5,
-                relevance_score=score - 2,
-                recommendation_score=score,
+                relevance_score=score,
                 reason=f"Relevant to {', '.join(topics)}",
             )
         )
@@ -335,8 +333,7 @@ def test_historical_formal_name_without_direction_evidence_is_not_counted(
             profile_id=profile.id,
             matched_topics_json=["Navigation"],
             matched_keywords_json=[],
-            lexical_score=25,
-            recommendation_score=25,
+            relevance_score=25,
         )
     )
     analytics_session.commit()
@@ -372,8 +369,7 @@ def test_valid_but_unsupported_topic_id_is_not_counted(
             topic_id=navigation.id,
             matched_topics_json=["Navigation"],
             matched_keywords_json=[],
-            lexical_score=99,
-            recommendation_score=99,
+            relevance_score=99,
         )
     )
     analytics_session.add(
@@ -460,8 +456,7 @@ def test_direction_context_anchor_blocks_cross_domain_trend_attribution(
             profile_id=profile.id,
             matched_topics_json=["Robot Learning"],
             matched_keywords_json=["behavior cloning"],
-            lexical_score=80,
-            recommendation_score=80,
+            relevance_score=80,
         )
     )
     analytics_session.commit()
@@ -500,8 +495,7 @@ def test_exclusion_term_vetoes_keyword_only_direction_attribution(
             profile_id=profile.id,
             matched_topics_json=["VLA"],
             matched_keywords_json=["VLA"],
-            lexical_score=20,
-            recommendation_score=20,
+            relevance_score=20,
         )
     )
     analytics_session.commit()
@@ -535,8 +529,7 @@ def test_only_current_taxonomy_screening_can_establish_a_formal_direction(
             profile_id=profile.id,
             matched_topics_json=["VLA"],
             matched_keywords_json=[],
-            lexical_score=70,
-            recommendation_score=80,
+            relevance_score=80,
         )
     )
     analytics_session.add(
@@ -757,8 +750,7 @@ def test_daily_report_separates_candidates_from_formal_direction_papers(
             paper_id=paper.id,
             profile_id=profile.id,
             matched_topics_json=["cs.RO", "Navigation"],
-            lexical_score=95,
-            recommendation_score=99,
+            relevance_score=99,
         )
     )
     analytics_session.add(
@@ -836,8 +828,7 @@ def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
                 profile_id=profile.id,
                 matched_topics_json=["VLA"],
                 matched_keywords_json=["vision language action"],
-                lexical_score=80,
-                recommendation_score=85,
+                relevance_score=85,
             )
         )
         analytics_session.add(

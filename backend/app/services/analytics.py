@@ -137,14 +137,8 @@ def _mean(values: Iterable[float | None]) -> float | None:
 
 
 def _score(match: PaperMatch) -> float:
-    for value in (
-        match.recommendation_score,
-        match.relevance_score,
-    ):
-        number = _number(value)
-        if number is not None:
-            return round(max(0.0, min(100.0, number)), 1)
-    return 0.0
+    number = _number(match.relevance_score)
+    return round(max(0.0, min(100.0, number)), 1) if number is not None else 0.0
 
 
 def _quality(analysis: Analysis | None) -> float | None:
