@@ -1,4 +1,4 @@
-"""Local multilingual semantic retrieval with a persistent SQLite vector cache."""
+"""Local English semantic retrieval with a persistent SQLite vector cache."""
 
 from __future__ import annotations
 
@@ -16,9 +16,12 @@ from sqlalchemy.orm import Session
 from ..env import xivpulse_env
 from ..models import Paper, PaperEmbedding, Topic
 
-MODEL_ID = "intfloat/multilingual-e5-small"
+MODEL_ID = "BAAI/bge-small-en-v1.5"
 MODEL_DIMENSIONS = 384
-RECALL_THRESHOLDS = {"high": 0.76, "balanced": 0.80, "precise": 0.84}
+RECALL_THRESHOLDS = {"high": 0.66, "balanced": 0.68, "precise": 0.70}
+EMBEDDING_THREADS = 2
+EMBEDDING_BATCH_SIZE = 8
+QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
 
 _model: Any | None = None
 _model_lock = threading.Lock()
@@ -54,22 +57,14 @@ def _load_model() -> Any:
             return _model
         try:
             from fastembed import TextEmbedding
-            from fastembed.common.model_description import ModelSource, PoolingType
 
-            supported = {item["model"].casefold() for item in TextEmbedding.list_supported_models()}
-            if MODEL_ID.casefold() not in supported:
-                TextEmbedding.add_custom_model(
-                    model=MODEL_ID,
-                    pooling=PoolingType.MEAN,
-                    normalization=True,
-                    sources=ModelSource(hf=MODEL_ID),
-                    dim=MODEL_DIMENSIONS,
-                    model_file="onnx/model.onnx",
-                    description="Multilingual E5 small ONNX model",
-                )
             cache_dir = model_cache_dir()
             cache_dir.mkdir(parents=True, exist_ok=True)
-            _model = TextEmbedding(model_name=MODEL_ID, cache_dir=str(cache_dir))
+            _model = TextEmbedding(
+                model_name=MODEL_ID,
+                cache_dir=str(cache_dir),
+                threads=EMBEDDING_THREADS,
+            )
         except Exception as exc:  # model download and ONNX failures need a clear pipeline error
             raise SemanticEmbeddingError(f"本地语义模型不可用：{exc}") from exc
     return _model
@@ -79,7 +74,11 @@ def embedding_status(*, warm: bool = False) -> dict[str, Any]:
     error: str | None = None
     if warm:
         try:
-            list(_load_model().embed(["query: arXiv semantic retrieval"], batch_size=1))
+            list(
+                _load_model().embed(
+                    [QUERY_INSTRUCTION + "arXiv semantic retrieval"], batch_size=1
+                )
+            )
         except SemanticEmbeddingError as exc:
             error = str(exc)
     cache = model_cache_dir()
@@ -135,14 +134,16 @@ def topic_text(topic: Topic | Mapping[str, Any]) -> str:
     aliases = _values(topic, "aliases")
     keywords = _values(topic, "keywords")
     anchors = _values(topic, "context_keywords")
-    parts = [f"研究方向：{name}"]
+    parts: list[str] = []
     if aliases:
-        parts.append(f"别名：{'；'.join(aliases)}")
+        parts.append(f"Research area: {', '.join(aliases)}")
     if keywords:
-        parts.append(f"核心概念：{'；'.join(keywords)}")
+        parts.append(f"Core concepts: {', '.join(keywords)}")
     if anchors:
-        parts.append(f"应用语境：{'；'.join(anchors)}")
-    return "query: " + "。".join(parts)
+        parts.append(f"Application context: {', '.join(anchors)}")
+    if not parts:
+        parts.append(f"Research area: {name}")
+    return QUERY_INSTRUCTION + ". ".join(parts)
 
 
 def paper_text(paper: Paper | Mapping[str, Any]) -> str:
@@ -151,7 +152,7 @@ def paper_text(paper: Paper | Mapping[str, Any]) -> str:
         abstract = str(paper.get("abstract", ""))
     else:
         title, abstract = paper.title, paper.abstract
-    return f"passage: {title.strip()}\n{abstract.strip()}"
+    return f"{title.strip()}\n{abstract.strip()}"
 
 
 def content_hash(paper: Paper | Mapping[str, Any]) -> str:
@@ -190,7 +191,10 @@ def match_papers(
 
     model = _load_model()
     topic_vectors = list(
-        model.embed([topic_text(topic) for topic in enabled_topics], batch_size=32)
+        model.embed(
+            [topic_text(topic) for topic in enabled_topics],
+            batch_size=EMBEDDING_BATCH_SIZE,
+        )
     )
     if len(topic_vectors) != len(enabled_topics):
         raise SemanticEmbeddingError("语义模型没有返回完整的研究方向向量")
@@ -218,7 +222,12 @@ def match_papers(
             missing.append(paper)
 
     if missing:
-        generated = list(model.embed([paper_text(paper) for paper in missing], batch_size=32))
+        generated = list(
+            model.embed(
+                [paper_text(paper) for paper in missing],
+                batch_size=EMBEDDING_BATCH_SIZE,
+            )
+        )
         if len(generated) != len(missing):
             raise SemanticEmbeddingError("语义模型没有返回完整的论文向量")
         for paper, vector in zip(missing, generated, strict=True):

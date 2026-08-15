@@ -1869,7 +1869,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
             <footer className="catalog-footer"><CircleAlert size={14} /><span>建议最终启用 3–12 个边界明确的方向。选择过多会扩大抓取范围、削弱日报重点，并增加摘要初筛成本。</span></footer>
           </FormSection>}
           <FormSection title="我关注的研究方向" description="一个方向对应趋势和日报中的一个名称。相近概念放在同一方向的匹配词里，不必拆成多个标签。">
-            <p className="direction-language-note">方向名称可以使用中文；参与语义召回的别名、匹配词、领域限定词和排除词请使用英文。</p>
+            <p className="direction-language-note">方向名称可以使用中文；别名、匹配词和领域限定词用于英文语义查询，排除词用于后续方向判断，这些内容都请使用英文。</p>
             <div className="direction-editor-list">
               {profile.topics.map((topic, index) => <article className={`direction-editor ${topic.enabled === false ? 'disabled' : ''}`} key={topic.id ?? `new-${index}`}>
                 <header>
@@ -1883,7 +1883,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
                 <details className="direction-advanced">
                   <summary><SlidersHorizontal size={14} /><span>高级规则</span><small>别名、误匹配控制与抓取范围</small><ChevronDown size={14} /></summary>
                   <div>
-                    <TagEditor label="方向别名（只用于名称归并）" tags={topic.aliases ?? []} placeholder="例如 VLA、Vision-Language-Action" onChange={(aliases) => updateTopic(index, { aliases })} />
+                    <TagEditor label="方向别名（名称归并与语义查询）" tags={topic.aliases ?? []} placeholder="例如 VLA、Vision-Language-Action" onChange={(aliases) => updateTopic(index, { aliases })} />
                     <TagEditor label="领域限定词（至少命中一个）" tags={topic.context_keywords ?? []} placeholder="例如 robot、humanoid；留空则不限制" onChange={(context_keywords) => updateTopic(index, { context_keywords })} />
                     <TagEditor label="排除词" tone="negative" tags={topic.negative_keywords ?? []} placeholder="输入容易造成误匹配的词" onChange={(negative_keywords) => updateTopic(index, { negative_keywords })} />
                     <div className="direction-editor-meta">
@@ -2043,9 +2043,9 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
     { id: 'deep' as const, name: '深度', detail: '正文 4.5 万字符 / PDF 40 页；初筛 1,600、深读 5,000 输出 Token' },
   ]
   const recallOptions = [
-    { id: 'high' as const, name: '高召回', detail: '语义相似度 0.76；优先减少漏检' },
-    { id: 'balanced' as const, name: '平衡', detail: '语义相似度 0.80；兼顾覆盖与成本' },
-    { id: 'precise' as const, name: '精准', detail: '语义相似度 0.84；减少边缘候选' },
+    { id: 'high' as const, name: '高召回', detail: '语义相似度 0.66；优先减少漏检' },
+    { id: 'balanced' as const, name: '平衡', detail: '语义相似度 0.68；兼顾覆盖与成本' },
+    { id: 'precise' as const, name: '精准', detail: '语义相似度 0.70；减少边缘候选' },
   ]
   const selectedPromptTemplate = promptCatalog?.templates.find((item) => item.id === settings.analysis_prompt_template_id)
   const promptModified = Boolean(selectedPromptTemplate && (
@@ -2149,7 +2149,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
             <div className="analysis-thresholds">
               <article>
                 <header><span>第 1 级</span><h3>摘要初筛</h3></header>
-                <p>语义相似度为主，关键词和关注作者作为补充；方向词不再是硬门槛。</p>
+                <p>语义相似度决定普通候选，关注作者可直接进入候选；方向词用于构造英文语义查询，不是硬命中门槛。</p>
                 <label className="field"><span>单批初筛大小</span><div><input type="number" min="1" max={settings.max_candidates} value={settings.screen_batch_size} onChange={(event) => setSettings({ ...settings, screen_batch_size: Number(event.target.value), screen_top_n: Number(event.target.value) })} /><em>篇</em></div><small>一次日更自动连续处理全部批次，每批内部最多 4 篇并发。</small></label>
               </article>
               <article>

@@ -320,7 +320,7 @@ function toSettings(settings: BackendSettings | Settings): Settings {
     screen_batch_size: settings.screen_batch_size ?? settings.screen_top_n,
     semantic_recall_mode: settings.semantic_recall_mode ?? 'high',
     semantic_recall_presets: settings.semantic_recall_presets ?? {},
-    embedding: settings.embedding ?? { model: 'intfloat/multilingual-e5-small', dimensions: 384, cache_dir: '', loaded: false, available: false },
+    embedding: settings.embedding ?? { model: 'BAAI/bge-small-en-v1.5', dimensions: 384, cache_dir: '', loaded: false, available: false },
     deep_analysis_limit: settings.deep_analysis_top_n,
     deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
     retention_days: settings.retention_days ?? 365,

@@ -99,10 +99,13 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
 ) -> None:
     from app.services import semantic
 
+    embedding_calls: list[list[str]] = []
+
     class FakeEmbedding:
         def embed(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
-            del batch_size
-            if texts and texts[0].startswith("query:"):
+            assert batch_size == semantic.EMBEDDING_BATCH_SIZE
+            embedding_calls.append(texts)
+            if texts and texts[0].startswith(semantic.QUERY_INSTRUCTION):
                 return [
                     [1.0, 0.0, *([0.0] * 382)]
                     if index == 0
@@ -125,16 +128,21 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
         session.add(paper)
         session.flush()
         results = semantic.match_papers(session, [paper], profile.topics)
+        cached_results = semantic.match_papers(session, [paper], profile.topics)
         session.commit()
         assert results[paper.id].score == pytest.approx(0.78)
+        assert cached_results[paper.id].score == pytest.approx(0.78)
         assert session.query(PaperEmbedding).filter_by(paper_id=paper.id).count() == 1
+        assert len(embedding_calls) == 3
+        assert all(text.isascii() for text in embedding_calls[0])
+        assert not embedding_calls[1][0].startswith("passage:")
         assert semantic.is_candidate(
-            semantic_score=results[paper.id].score,
+            semantic_score=semantic.RECALL_THRESHOLDS["high"],
             mode="high",
         )
         assert not semantic.is_candidate(
-            semantic_score=results[paper.id].score,
-            mode="balanced",
+            semantic_score=semantic.RECALL_THRESHOLDS["high"] - 0.01,
+            mode="high",
         )
         assert not semantic.is_candidate(
             semantic_score=0.1,
