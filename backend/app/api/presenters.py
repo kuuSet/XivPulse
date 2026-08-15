@@ -77,7 +77,7 @@ def _enabled_direction_names(profile: Profile) -> dict[str, str]:
 
 
 def _canonical_directions(values: Any, names_by_key: dict[str, str]) -> list[str]:
-    if not isinstance(values, (list, tuple, set)):
+    if not isinstance(values, list | tuple | set):
         return []
     result: list[str] = []
     seen: set[str] = set()

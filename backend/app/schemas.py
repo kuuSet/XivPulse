@@ -222,7 +222,7 @@ class ScreeningResult(BaseModel):
     @field_validator("relevance_score", mode="before")
     @classmethod
     def normalize_relevance_score(cls, value: Any) -> Any:
-        if isinstance(value, (int, float)) and 0 < float(value) <= 1:
+        if isinstance(value, int | float) and 0 < float(value) <= 1:
             return float(value) * 100
         return value
 
@@ -250,7 +250,7 @@ class DeepAnalysisResult(BaseModel):
     )
     @classmethod
     def normalize_scores(cls, value: Any) -> Any:
-        if isinstance(value, (int, float)) and 0 < float(value) <= 1:
+        if isinstance(value, int | float) and 0 < float(value) <= 1:
             return float(value) * 100
         return value
 

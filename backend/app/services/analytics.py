@@ -125,7 +125,7 @@ def _paper_time(paper: Paper) -> datetime:
 
 
 def _number(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     result = float(value)
     return result if math.isfinite(result) else None
@@ -177,7 +177,7 @@ def _payload(analysis: Analysis | None) -> dict[str, Any]:
 
 def _payload_list(payload: Mapping[str, Any], name: str) -> list[str]:
     raw = payload.get(name, [])
-    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+    if not isinstance(raw, Sequence) or isinstance(raw, str | bytes):
         return []
     result: list[str] = []
     seen: set[str] = set()

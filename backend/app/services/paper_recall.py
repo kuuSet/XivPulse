@@ -10,8 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import Paper, PaperMatch, ScreeningQueueItem, Topic
-from .semantic import MODEL_ID, RECALL_THRESHOLDS, SemanticEmbeddingError, SemanticMatch
-from .semantic import is_candidate
+from .semantic import (
+    MODEL_ID,
+    RECALL_THRESHOLDS,
+    SemanticEmbeddingError,
+    SemanticMatch,
+    is_candidate,
+)
 
 SemanticMatcher = Callable[
     [Session, Sequence[Paper], Sequence[Topic]],

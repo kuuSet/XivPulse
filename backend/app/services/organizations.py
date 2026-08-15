@@ -78,7 +78,7 @@ def paper_organizations(paper: object | Mapping[str, object]) -> list[str]:
         values = paper.get("affiliations", paper.get("affiliations_json", []))
     else:
         values = getattr(paper, "affiliations", getattr(paper, "affiliations_json", []))
-    return watched_organizations(values if isinstance(values, (list, tuple, set)) else [])
+    return watched_organizations(values if isinstance(values, list | tuple | set) else [])
 
 
 __all__ = ["paper_organizations", "watched_organizations"]

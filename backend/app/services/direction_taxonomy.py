@@ -25,7 +25,7 @@ def _normalized(value: object) -> str:
 
 
 def _normalized_terms(values: object) -> list[str]:
-    if not isinstance(values, (list, tuple, set)):
+    if not isinstance(values, list | tuple | set):
         return []
     return sorted({normalized.casefold() for value in values if (normalized := _normalized(value))})
 

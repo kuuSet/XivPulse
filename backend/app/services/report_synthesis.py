@@ -77,7 +77,7 @@ def _bounded_value(value: Any, *, depth: int = 0) -> Any:
         return [_bounded_value(item, depth=depth + 1) for item in value[:15]]
     if isinstance(value, str):
         return _bounded_text(value)
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, bool | int | float):
         return value
     return _bounded_text(value)
 

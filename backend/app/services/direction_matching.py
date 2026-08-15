@@ -19,7 +19,7 @@ def _value(topic: object | Mapping[str, Any], name: str, default: Any) -> Any:
 
 def terms(topic: object | Mapping[str, Any], name: str) -> list[str]:
     values = _value(topic, name, [])
-    if not isinstance(values, (list, tuple, set)):
+    if not isinstance(values, list | tuple | set):
         return []
     return [str(value).strip() for value in values if str(value).strip()]
 
@@ -110,7 +110,7 @@ def verified_requested_direction_names(
     relevance verdict.
     """
 
-    if not relevant or not isinstance(requested, (list, tuple, set)):
+    if not relevant or not isinstance(requested, list | tuple | set):
         return []
     requested_keys = {
         key for value in requested if isinstance(value, str) and (key := direction_key(value))
@@ -142,7 +142,7 @@ def canonical_requested_direction_names(
 ) -> list[str]:
     """Canonicalize model-selected controlled directions without a lexical veto."""
 
-    if not relevant or not isinstance(requested, (list, tuple, set)):
+    if not relevant or not isinstance(requested, list | tuple | set):
         return []
     requested_keys = {
         key for value in requested if isinstance(value, str) and (key := direction_key(value))

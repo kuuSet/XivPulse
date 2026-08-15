@@ -292,7 +292,7 @@ class PaperMatch(Base):
         return {
             str(name): float(score)
             for name, score in dict(self.semantic_topics_json or {}).items()
-            if isinstance(score, (int, float))
+            if isinstance(score, int | float)
         }
 
 
