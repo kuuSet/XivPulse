@@ -1,4 +1,4 @@
-"""Normalized records shared by arXiv fetching, parsing, and persistence."""
+"""Paper metadata independent of transport and database concerns."""
 
 from __future__ import annotations
 
@@ -9,22 +9,8 @@ from typing import Any
 from urllib.parse import quote
 
 
-@dataclass(frozen=True, slots=True)
-class NormalizedArxivId:
-    base_id: str
-    version: int = 1
-
-    @property
-    def versioned_id(self) -> str:
-        return f"{self.base_id}v{self.version}"
-
-    def __iter__(self):
-        yield self.base_id
-        yield self.version
-
-
 @dataclass(slots=True)
-class ArxivRecord:
+class Paper:
     arxiv_id: str
     version: int
     title: str
@@ -56,7 +42,7 @@ class ArxivRecord:
         if not self.pdf_url:
             self.pdf_url = f"https://arxiv.org/pdf/{versioned}"
 
-    def json_dict(self) -> dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         value = asdict(self)
         for key in ("published_at", "updated_at"):
             if value[key] is not None:
@@ -65,8 +51,6 @@ class ArxivRecord:
 
 
 def as_utc(value: datetime | None) -> datetime | None:
-    """Normalize SQLite's timezone-naive round trips before comparisons."""
-
     if value is None:
         return None
     if value.tzinfo is None:
@@ -74,19 +58,18 @@ def as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC)
 
 
-def deduplicate_records(records: Iterable[ArxivRecord]) -> list[ArxivRecord]:
-    selected: dict[str, ArxivRecord] = {}
+def deduplicate_papers(papers: Iterable[Paper]) -> list[Paper]:
+    selected: dict[str, Paper] = {}
     positions: dict[str, int] = {}
-    for position, record in enumerate(records):
-        current = selected.get(record.arxiv_id)
+    for position, paper in enumerate(papers):
+        current = selected.get(paper.arxiv_id)
         current_time = current.updated_at if current else None
-        record_time = record.updated_at
-        newer = current is None or record.version > current.version
-        if current is not None and record.version == current.version:
-            newer = (as_utc(record_time) or datetime.min.replace(tzinfo=UTC)) > (
+        newer = current is None or paper.version > current.version
+        if current is not None and paper.version == current.version:
+            newer = (as_utc(paper.updated_at) or datetime.min.replace(tzinfo=UTC)) > (
                 as_utc(current_time) or datetime.min.replace(tzinfo=UTC)
             )
         if newer:
-            selected[record.arxiv_id] = record
-            positions.setdefault(record.arxiv_id, position)
+            selected[paper.arxiv_id] = paper
+            positions.setdefault(paper.arxiv_id, position)
     return sorted(selected.values(), key=lambda item: positions[item.arxiv_id])

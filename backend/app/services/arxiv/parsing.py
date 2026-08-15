@@ -5,17 +5,32 @@ from __future__ import annotations
 import html
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from bs4 import BeautifulSoup
 
-from .records import ArxivRecord, NormalizedArxivId, as_utc, deduplicate_records
+from ...domain.paper import Paper, as_utc, deduplicate_papers
 
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"
     r"(?:v(?P<version>\d+))?",
     re.IGNORECASE,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedArxivId:
+    base_id: str
+    version: int = 1
+
+    @property
+    def versioned_id(self) -> str:
+        return f"{self.base_id}v{self.version}"
+
+    def __iter__(self):
+        yield self.base_id
+        yield self.version
 
 
 def parse_arxiv_id(value: str) -> NormalizedArxivId:
@@ -97,7 +112,7 @@ def _child_text(element: ET.Element, name: str) -> str | None:
     return None
 
 
-def _parse_atom_entry(entry: ET.Element) -> ArxivRecord:
+def _parse_atom_entry(entry: ET.Element) -> Paper:
     raw_id = _child_text(entry, "id")
     title = _child_text(entry, "title")
     published = _child_text(entry, "published")
@@ -133,7 +148,7 @@ def _parse_atom_entry(entry: ET.Element) -> ArxivRecord:
                 or child.attrib.get("title") == "pdf"
             ):
                 pdf_url = href
-    record = ArxivRecord(
+    paper = Paper(
         arxiv_id=normalized.base_id,
         version=normalized.version,
         title=title,
@@ -151,11 +166,11 @@ def _parse_atom_entry(entry: ET.Element) -> ArxivRecord:
         updated_at=_parse_datetime(_child_text(entry, "updated") or published),
         source="atom",
     )
-    record.canonicalize_urls()
-    return record
+    paper.canonicalize_urls()
+    return paper
 
 
-def parse_arxiv_feed(payload: str | bytes) -> tuple[int, list[ArxivRecord]]:
+def parse_arxiv_feed(payload: str | bytes) -> tuple[int, list[Paper]]:
     try:
         root = ET.fromstring(payload)
     except ET.ParseError as exc:
@@ -172,16 +187,16 @@ def parse_arxiv_feed(payload: str | bytes) -> tuple[int, list[ArxivRecord]]:
         total = int(total_text)
     except ValueError as exc:
         raise ValueError("arXiv response is missing a valid totalResults") from exc
-    records = deduplicate_records(
+    papers = deduplicate_papers(
         _parse_atom_entry(element)
         for element in root
         if _local_name(element.tag) == "entry"
     )
-    records.sort(
+    papers.sort(
         key=lambda item: (
             as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
             item.arxiv_id,
             item.version,
         )
     )
-    return total, records
+    return total, papers

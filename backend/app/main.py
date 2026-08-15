@@ -66,6 +66,8 @@ from .services.auth import (
     session_username,
     verify_password,
 )
+from .services.arxiv.client import ArxivClient
+from .services.arxiv.semantic_scholar import SemanticScholarClient
 from .services.direction_catalog import direction_catalog_payload
 from .services.direction_matching import (
     canonical_requested_direction_names,
@@ -86,7 +88,7 @@ from .services.method_catalog import (
 )
 from .services.organizations import paper_organizations
 from .services.paper_analysis import analyze_papers
-from .services.paper_sync import sync_papers
+from .services.paper_sync import PaperSyncService
 from .services.prompt_catalog import (
     MAX_EDITABLE_PROMPT_CHARS,
     PROMPT_TEMPLATE_IDS,
@@ -1738,9 +1740,16 @@ async def _finalize_daily_stage(
     return result
 
 
+paper_sync_service = PaperSyncService(
+    session_factory=SessionLocal,
+    arxiv_client=ArxivClient(),
+    semantic_scholar=SemanticScholarClient(),
+    semantic_matcher=semantic_match_papers,
+)
+
 daily_pipeline = PipelineCoordinator(
     initialize=initialize_application,
-    sync_stage=sync_papers,
+    sync_stage=paper_sync_service.run,
     analyze_stage=analyze_papers,
     finalize_daily_stage=_finalize_daily_stage,
 )

@@ -13,9 +13,9 @@ from urllib.parse import quote
 
 import httpx
 
+from ...domain.paper import Paper
 from ...models import Topic
 from .parsing import parse_arxiv_feed, parse_arxiv_id, parse_html_affiliations
-from .records import ArxivRecord
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
@@ -204,7 +204,7 @@ class ArxivClient:
         *,
         target_date: date,
         max_results: int = 100,
-    ) -> list[ArxivRecord]:
+    ) -> list[Paper]:
         categories = [
             category
             for topic in topics
@@ -232,20 +232,20 @@ class ArxivClient:
                 "sortOrder": "ascending",
             },
         )
-        total, records = parse_arxiv_feed(payload)
+        total, papers = parse_arxiv_feed(payload)
         if total > limit:
             raise ValueError(
                 f"arXiv reports {total} papers for {target_date}, exceeding the configured "
                 f"limit {limit}"
             )
         outside_date = [
-            record.arxiv_id
-            for record in records
-            if record.published_at is None or record.published_at.date() != target_date
+            paper.arxiv_id
+            for paper in papers
+            if paper.published_at is None or paper.published_at.date() != target_date
         ]
         if outside_date:
             raise ValueError(
                 f"arXiv returned papers outside requested date {target_date}: "
                 + ", ".join(outside_date[:3])
             )
-        return records
+        return papers

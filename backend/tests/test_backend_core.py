@@ -9,6 +9,7 @@ import httpx
 import pytest
 from app.config import AppConfig, provider_status
 from app.database import DEFAULT_TOPICS, init_db, make_engine
+from app.domain.paper import Paper as PaperDocument
 from app.env import xivpulse_env
 from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
 from app.schemas import ScreeningResult
@@ -20,11 +21,8 @@ from app.services.arxiv.parsing import (
     parse_arxiv_id,
     parse_html_affiliations,
 )
-from app.services.arxiv.records import ArxivRecord
-from app.services.arxiv.semantic_scholar import (
-    fetch_affiliations as fetch_semantic_scholar_affiliations,
-)
-from app.services.arxiv.storage import upsert_papers
+from app.services.arxiv.repository import PaperRepository
+from app.services.arxiv.semantic_scholar import SemanticScholarClient
 from app.services.direction_catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -222,7 +220,7 @@ def test_normalize_dedupe_and_version_upsert() -> None:
     assert normalize_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf") == "2608.01234"
     assert tuple(parse_arxiv_id("hep-th/9901001v7")) == ("hep-th/9901001", 7)
     records = [
-        ArxivRecord(
+        PaperDocument(
             arxiv_id="2608.01234",
             version=2,
             title="Revised title",
@@ -239,7 +237,7 @@ def test_normalize_dedupe_and_version_upsert() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine, seed=False)
     with Session(engine) as session:
-        first = ArxivRecord(
+        first = PaperDocument(
             arxiv_id="2608.01234",
             version=1,
             title="First title",
@@ -247,12 +245,12 @@ def test_normalize_dedupe_and_version_upsert() -> None:
             authors=["Alice"],
             categories=["cs.RO"],
         )
-        result = upsert_papers(session, [first])
+        result = PaperRepository(session).upsert([first])
         session.commit()
         assert result.inserted == 1
         assert result.versions_added == 1
 
-        result = upsert_papers(session, records)
+        result = PaperRepository(session).upsert(records)
         session.commit()
         paper = session.scalar(select(Paper).where(Paper.arxiv_id == "2608.01234"))
         assert paper is not None
@@ -262,7 +260,7 @@ def test_normalize_dedupe_and_version_upsert() -> None:
         assert session.scalar(select(func.count()).select_from(Paper)) == 1
         assert session.scalar(select(func.count()).select_from(PaperVersion)) == 2
 
-        result = upsert_papers(session, records)
+        result = PaperRepository(session).upsert(records)
         assert result.unchanged == 1
         assert result.versions_added == 0
         latest_version = session.scalar(
@@ -304,6 +302,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
     assert requests[0].url.params["max_results"] == "17"
     assert requests[0].url.params["sortBy"] == "submittedDate"
     assert len(records) == 2
+    assert isinstance(records[0], PaperDocument)
     assert records[0].arxiv_id == "2608.00001"
     assert records[0].version == 2
     assert records[0].affiliations == ["OpenAI"]
@@ -538,8 +537,8 @@ async def test_semantic_scholar_affiliations_require_exact_arxiv_ids() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await fetch_semantic_scholar_affiliations(
-            ["2608.01234v2"], http_client=client
+        values = await SemanticScholarClient(http_client=client).fetch_affiliations(
+            ["2608.01234v2"]
         )
 
     assert values == {"2608.01234": ["Google DeepMind", "University College London"]}
