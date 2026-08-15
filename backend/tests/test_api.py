@@ -47,7 +47,6 @@ def client(monkeypatch: pytest.MonkeyPatch):
     import app.runtime as runtime
     from app.services import paper_sync
 
-    monkeypatch.setattr(main, "SessionLocal", database.SessionLocal)
     monkeypatch.setattr(
         paper_sync,
         "semantic_match_papers",
@@ -1195,7 +1194,6 @@ def test_daily_report_without_date_uses_latest_complete_digest(
 
     complete_day = date(2026, 7, 3)
     today = date(2026, 7, 4)
-    monkeypatch.setattr(main, "current_date_in_timezone", lambda _timezone: today)
     with database.SessionLocal() as session:
         session.add(
             Digest(
