@@ -43,9 +43,14 @@ def client(monkeypatch: pytest.MonkeyPatch):
 
     import app.main as main
     import app.pipeline as pipeline_module
+    from app.services import paper_sync
 
     monkeypatch.setattr(main, "SessionLocal", database.SessionLocal)
-    monkeypatch.setattr(main, "semantic_match_papers", lambda _db, _papers, _topics: {})
+    monkeypatch.setattr(
+        paper_sync,
+        "semantic_match_papers",
+        lambda _db, _papers, _topics: {},
+    )
     monkeypatch.setattr(main, "_initialized", True)
     monkeypatch.setattr(main.daily_pipeline, "_active_job_id", None)
     monkeypatch.setattr(
@@ -1307,7 +1312,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.services import paper_sync
     from app.services.arxiv import ArxivRecord
     from app.services.semantic import SemanticMatch
 
@@ -1350,11 +1355,11 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
             for paper in papers
         }
 
-    monkeypatch.setattr(main, "ArxivClient", FakeArxivClient)
-    monkeypatch.setattr(main, "_latest_complete_submission_date", lambda: fetch_date)
-    monkeypatch.setattr(main, "semantic_match_papers", semantic_results)
+    monkeypatch.setattr(paper_sync, "ArxivClient", FakeArxivClient)
+    monkeypatch.setattr(paper_sync, "latest_complete_submission_date", lambda: fetch_date)
+    monkeypatch.setattr(paper_sync, "semantic_match_papers", semantic_results)
 
-    result = await main._sync_stage()
+    result = await paper_sync.sync_papers()
     assert result["fetched"] == 2
     assert result["queued"] == 1
     assert result["fetch_date"] == "2026-08-14"
@@ -1374,9 +1379,9 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
 
 
 def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
-    import app.main as main
+    from app.services.paper_sync import latest_complete_submission_date
 
-    assert main._latest_complete_submission_date(
+    assert latest_complete_submission_date(
         datetime(2026, 8, 15, 5, 30, tzinfo=UTC)
     ) == date(2026, 8, 14)
 
@@ -1385,8 +1390,9 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.services import paper_sync
     from app.services.arxiv import ArxivRecord
+    from app.services.state import set_setting
 
     record = ArxivRecord(
         arxiv_id="2608.09991",
@@ -1404,15 +1410,15 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
             return [record]
 
     def unavailable(*_args: object, **_kwargs: object) -> dict[int, object]:
-        raise main.SemanticEmbeddingError("model download unavailable")
+        raise paper_sync.SemanticEmbeddingError("model download unavailable")
 
-    monkeypatch.setattr(main, "ArxivClient", FakeArxivClient)
-    monkeypatch.setattr(main, "semantic_match_papers", unavailable)
+    monkeypatch.setattr(paper_sync, "ArxivClient", FakeArxivClient)
+    monkeypatch.setattr(paper_sync, "semantic_match_papers", unavailable)
     with database.SessionLocal() as session:
-        main._set_setting(session, "author_watchlist", ["Researcher"])
+        set_setting(session, "author_watchlist", ["Researcher"])
         session.commit()
 
-    result = await main._sync_stage()
+    result = await paper_sync.sync_papers()
 
     assert result["fetched"] == 1
     assert result["semantic_degraded"] is True
