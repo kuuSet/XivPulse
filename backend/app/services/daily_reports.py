@@ -22,10 +22,10 @@ from ..models import (
     utcnow,
 )
 from .analytics import build_daily_research_report, current_date_in_timezone
-from .analyzer import OpenAICompatibleAdapter, ProviderError
 from .jobs import update_job_progress
 from .mailer import build_daily_message, deliver_message, email_enabled, smtp_config
 from .method_catalog import clean_custom_methods
+from .provider import OpenAICompatibleAdapter, ProviderError
 from .report_synthesis import (
     generate_daily_report_synthesis,
     report_source_hash,
@@ -117,9 +117,9 @@ def persist_daily_report(
     previous_synthesis = snapshot.payload.get("ai_synthesis") if snapshot is not None else None
     if isinstance(previous_synthesis, dict):
         preserved_synthesis = dict(previous_synthesis)
-        preserved_synthesis["stale"] = (
-            str(preserved_synthesis.get("source_hash") or "") != report_source_hash(encoded)
-        )
+        preserved_synthesis["stale"] = str(
+            preserved_synthesis.get("source_hash") or ""
+        ) != report_source_hash(encoded)
         encoded["ai_synthesis"] = preserved_synthesis
     if snapshot is None:
         snapshot = DailyResearchReport(
@@ -161,12 +161,8 @@ def create_daily_report(
                     "screening_queue_total": int(
                         screening_status.get("screening_queue_total", 0) or 0
                     ),
-                    "screening_completed": int(
-                        screening_status.get("screening_completed", 0) or 0
-                    ),
-                    "screening_failed": int(
-                        screening_status.get("screening_failed", 0) or 0
-                    ),
+                    "screening_completed": int(screening_status.get("screening_completed", 0) or 0),
+                    "screening_failed": int(screening_status.get("screening_failed", 0) or 0),
                 }
             )
             payload["coverage"] = coverage

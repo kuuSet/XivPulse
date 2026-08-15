@@ -13,7 +13,7 @@ from app.domain.paper import Paper as PaperDocument
 from app.env import xivpulse_env
 from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
 from app.schemas import ScreeningResult
-from app.services.analyzer import ANALYSIS_BUDGETS, OpenAICompatibleAdapter, PaperAnalyzer
+from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.services.arxiv.client import ArxivClient, build_date_query
 from app.services.arxiv.parsing import (
     parse_arxiv_feed,
@@ -44,6 +44,7 @@ from app.services.prompt_catalog import (
     SCREENING_SYSTEM_PROMPT,
     prompt_catalog_payload,
 )
+from app.services.provider import OpenAICompatibleAdapter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -283,9 +284,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
         return httpx.Response(200, content=payload)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        records = await ArxivClient(
-            http_client=http_client, rate_limit_seconds=0
-        ).fetch_daily(
+        records = await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
             ["cs.RO", "cs.AI", "cs.RO"],
             target_date=date(2026, 8, 13),
             max_results=17,
@@ -1094,7 +1093,7 @@ async def test_responses_protocol_fallback_adds_usage_from_both_requests() -> No
 
 @pytest.mark.asyncio
 async def test_fulltext_prefers_html_and_skips_pdf() -> None:
-    from app.services.analyzer import FullTextFetcher
+    from app.services.fulltext import FullTextFetcher
 
     paths: list[str] = []
 

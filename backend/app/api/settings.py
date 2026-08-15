@@ -406,7 +406,7 @@ async def test_provider(
             "transport": "mock",
         }
     try:
-        from ..services.analyzer import OpenAICompatibleAdapter
+        from ..services.provider import OpenAICompatibleAdapter
 
         config = replace(
             get_config(),

@@ -9,11 +9,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .analyzer import (
+from .analyzer import analysis_budget
+from .provider import (
     GenerationResult,
     OpenAICompatibleAdapter,
     ProviderProtocolError,
-    analysis_budget,
 )
 
 
@@ -145,7 +145,7 @@ async def generate_daily_report_synthesis(
 6. 总体判断要回答“今天真正推进了什么、没有推进什么、哪些证据更可信、
 接下来该读和该验证什么”。各栏目之间避免重复。
 7. 使用专业但清楚的中文，完整段落优先，不写宣传文案，不以模型口吻免责声明充数。"""
-    user_prompt = f"""请生成 {report.get('report_date', '')} 的 AI 综合研判。
+    user_prompt = f"""请生成 {report.get("report_date", "")} 的 AI 综合研判。
 
 允许引用的论文 ID：{paper_ids}
 预算档位：{budget.mode}（{budget.label}）

@@ -119,9 +119,7 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
             embedding_calls.append(texts)
             if texts and texts[0].startswith(semantic.QUERY_INSTRUCTION):
                 return [
-                    [1.0, 0.0, *([0.0] * 382)]
-                    if index == 0
-                    else [0.0, 1.0, *([0.0] * 382)]
+                    [1.0, 0.0, *([0.0] * 382)] if index == 0 else [0.0, 1.0, *([0.0] * 382)]
                     for index, _ in enumerate(texts)
                 ]
             return [[0.78, 0.0, 0.6258, *([0.0] * 381)] for _ in texts]
@@ -172,8 +170,8 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.schemas import ScreeningResult
-    from app.services import analyzer as analyzer_module
     from app.services import paper_analysis
+    from app.services import provider as provider_module
 
     assert client.put("/api/settings", json={"screen_batch_size": 30}).status_code == 200
     with database.SessionLocal() as session:
@@ -205,7 +203,7 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
             pass
 
         async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
-            return analyzer_module.GenerationResult(
+            return provider_module.GenerationResult(
                 data=ScreeningResult(
                     relevant=True,
                     relevance_score=82,
@@ -253,8 +251,8 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.schemas import ScreeningResult
-    from app.services import analyzer as analyzer_module
     from app.services import paper_analysis
+    from app.services import provider as provider_module
 
     attempts: dict[str, int] = {}
     with database.SessionLocal() as session:
@@ -288,8 +286,8 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
         async def screen_with_metadata(self, paper: Paper, _profile: Profile) -> object:
             attempts[paper.arxiv_id] = attempts.get(paper.arxiv_id, 0) + 1
             if paper.arxiv_id.endswith("91") or attempts[paper.arxiv_id] < 3:
-                raise analyzer_module.ProviderError("simulated timeout")
-            return analyzer_module.GenerationResult(
+                raise provider_module.ProviderError("simulated timeout")
+            return provider_module.GenerationResult(
                 data=ScreeningResult(
                     relevant=True,
                     relevance_score=82,
@@ -340,14 +338,20 @@ def test_server_auth_login_cookie_and_logout(
     assert client.post("/api/auth/logout").status_code == 200
     assert client.get("/api/settings").status_code == 401
     for _ in range(5):
-        assert client.post(
+        assert (
+            client.post(
+                "/api/auth/login",
+                json={"username": "researcher", "password": "wrong"},
+            ).status_code
+            == 401
+        )
+    assert (
+        client.post(
             "/api/auth/login",
             json={"username": "researcher", "password": "wrong"},
-        ).status_code == 401
-    assert client.post(
-        "/api/auth/login",
-        json={"username": "researcher", "password": "wrong"},
-    ).status_code == 429
+        ).status_code
+        == 429
+    )
 
 
 @pytest.mark.asyncio
@@ -530,7 +534,7 @@ async def test_daily_ai_synthesis_is_persisted_and_counted(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.services import daily_reports
-    from app.services.analyzer import GenerationResult, TokenUsage
+    from app.services.provider import GenerationResult, TokenUsage
     from app.services.report_synthesis import DailyReportSynthesis, SynthesisThread
 
     report_date = date(2026, 8, 14)
@@ -552,7 +556,8 @@ async def test_daily_ai_synthesis_is_persisted_and_counted(
             overall_assessment=(
                 "两篇论文从预测和恢复两个环节处理机器人策略失效，形成了可以横向比较的"
                 "闭环路线。当前证据支持优先核查方法和实验，但尚不足以外推到更多平台。"
-            ) * 2,
+            )
+            * 2,
             core_threads=[
                 SynthesisThread(
                     title="预测与恢复闭环",
@@ -1145,9 +1150,11 @@ def test_daily_report_snapshot_is_stable_refreshable_and_listed(
     assert len(builds) == 1
 
     with database.SessionLocal() as session:
-        snapshot = session.query(DailyResearchReport).filter_by(
-            report_date=date.fromisoformat(report_date)
-        ).one()
+        snapshot = (
+            session.query(DailyResearchReport)
+            .filter_by(report_date=date.fromisoformat(report_date))
+            .one()
+        )
         payload = snapshot.payload
         payload["ai_synthesis"] = {
             "status": "ready",
@@ -1264,8 +1271,8 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 ) -> None:
     from app.models import Analysis
     from app.schemas import ScreeningResult
-    from app.services import analyzer as analyzer_module
     from app.services import paper_analysis
+    from app.services import provider as provider_module
 
     with database.SessionLocal() as session:
         profile = session.query(Profile).filter(Profile.active.is_(True)).one()
@@ -1287,12 +1294,12 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
         match = PaperMatch(
             paper_id=paper.id,
             profile_id=profile.id,
-                matched_topics_json=[stale_legal_direction, "cs.RO", "自由生成方向"],
-                matched_keywords_json=[configured_keyword],
-                lexical_score=90,
-                semantic_score=0.9,
-                relevance_score=90,
-            )
+            matched_topics_json=[stale_legal_direction, "cs.RO", "自由生成方向"],
+            matched_keywords_json=[configured_keyword],
+            lexical_score=90,
+            semantic_score=0.9,
+            relevance_score=90,
+        )
         session.add(match)
         session.commit()
         match_id = match.id
@@ -1302,7 +1309,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
             pass
 
         async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
-            return analyzer_module.GenerationResult(
+            return provider_module.GenerationResult(
                 data=ScreeningResult(
                     relevant=True,
                     relevance_score=91,
@@ -1373,15 +1380,11 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
             stages.append("fetch")
             return records
 
-        async def fetch_html_affiliations(
-            self, _arxiv_ids: list[str]
-        ) -> dict[str, list[str]]:
+        async def fetch_html_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
             return {}
 
     class FakeSemanticScholarClient:
-        async def fetch_affiliations(
-            self, _arxiv_ids: list[str]
-        ) -> dict[str, list[str]]:
+        async def fetch_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
             stages.append("enrich")
             return {}
 
@@ -1427,9 +1430,9 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
 def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
     from app.services.paper_sync import latest_complete_submission_date
 
-    assert latest_complete_submission_date(
-        datetime(2026, 8, 15, 5, 30, tzinfo=UTC)
-    ) == date(2026, 8, 14)
+    assert latest_complete_submission_date(datetime(2026, 8, 15, 5, 30, tzinfo=UTC)) == date(
+        2026, 8, 14
+    )
 
 
 @pytest.mark.asyncio
@@ -1455,15 +1458,11 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[PaperDocument]:
             return [record]
 
-        async def fetch_html_affiliations(
-            self, _arxiv_ids: list[str]
-        ) -> dict[str, list[str]]:
+        async def fetch_html_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
             return {}
 
     class FakeSemanticScholarClient:
-        async def fetch_affiliations(
-            self, _arxiv_ids: list[str]
-        ) -> dict[str, list[str]]:
+        async def fetch_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
             return {}
 
     def unavailable(*_args: object, **_kwargs: object) -> dict[int, object]:
