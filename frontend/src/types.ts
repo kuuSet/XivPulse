@@ -552,7 +552,7 @@ export interface DashboardData {
     pending_screening_count: number
     pending_deep_count: number
     screening_limit: number
-    screening_lexical_threshold: number
+    screening_semantic_threshold: number
     screening_queue_total?: number
     screening_completed?: number
     screening_failed?: number
@@ -619,7 +619,7 @@ export interface Settings {
   screen_top_n: number
   screen_batch_size: number
   semantic_recall_mode: 'high' | 'balanced' | 'precise'
-  semantic_recall_presets: Record<string, { semantic_threshold: number; lexical_fallback: number }>
+  semantic_recall_presets: Record<string, { semantic_threshold: number }>
   embedding: {
     model: string
     dimensions: number
@@ -664,7 +664,7 @@ export interface BackendSettings {
   screen_top_n: number
   screen_batch_size?: number
   semantic_recall_mode?: 'high' | 'balanced' | 'precise'
-  semantic_recall_presets?: Record<string, { semantic_threshold: number; lexical_fallback: number }>
+  semantic_recall_presets?: Record<string, { semantic_threshold: number }>
   embedding?: Settings['embedding']
   deep_analysis_top_n: number
   deep_relevance_threshold?: number

@@ -19,7 +19,6 @@ from ..models import Paper, PaperEmbedding, Topic
 MODEL_ID = "intfloat/multilingual-e5-small"
 MODEL_DIMENSIONS = 384
 RECALL_THRESHOLDS = {"high": 0.76, "balanced": 0.80, "precise": 0.84}
-LEXICAL_FLOORS = {"high": 50.0, "balanced": 60.0, "precise": 70.0}
 
 _model: Any | None = None
 _model_lock = threading.Lock()
@@ -112,14 +111,12 @@ def recall_mode(value: object) -> str:
 def is_candidate(
     *,
     semantic_score: float | None,
-    lexical_score: float,
     mode: str,
     watched_author: bool = False,
 ) -> bool:
     selected = recall_mode(mode)
     return bool(
         watched_author
-        or lexical_score >= LEXICAL_FLOORS[selected]
         or (semantic_score is not None and semantic_score >= RECALL_THRESHOLDS[selected])
     )
 
@@ -252,7 +249,6 @@ def match_papers(
 
 
 __all__ = [
-    "LEXICAL_FLOORS",
     "MODEL_DIMENSIONS",
     "MODEL_ID",
     "RECALL_THRESHOLDS",

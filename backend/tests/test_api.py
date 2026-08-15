@@ -132,18 +132,20 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
         assert session.query(PaperEmbedding).filter_by(paper_id=paper.id).count() == 1
         assert semantic.is_candidate(
             semantic_score=results[paper.id].score,
-            lexical_score=0,
             mode="high",
         )
         assert not semantic.is_candidate(
             semantic_score=results[paper.id].score,
-            lexical_score=0,
             mode="balanced",
+        )
+        assert not semantic.is_candidate(
+            semantic_score=0.1,
+            mode="precise",
         )
         assert semantic.is_candidate(
             semantic_score=0.1,
-            lexical_score=70,
             mode="precise",
+            watched_author=True,
         )
 
 
@@ -1256,11 +1258,12 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
         match = PaperMatch(
             paper_id=paper.id,
             profile_id=profile.id,
-            matched_topics_json=[stale_legal_direction, "cs.RO", "自由生成方向"],
-            matched_keywords_json=[configured_keyword],
-            lexical_score=90,
-            relevance_score=90,
-        )
+                matched_topics_json=[stale_legal_direction, "cs.RO", "自由生成方向"],
+                matched_keywords_json=[configured_keyword],
+                lexical_score=90,
+                semantic_score=0.9,
+                relevance_score=90,
+            )
         session.add(match)
         session.commit()
         match_id = match.id
@@ -1305,60 +1308,71 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 
 
 @pytest.mark.asyncio
-async def test_sync_does_not_apply_another_directions_isolated_exclusion(
+async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import app.main as main
     from app.services.arxiv import ArxivRecord
+    from app.services.semantic import SemanticMatch
 
-    with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
-        vla, navigation, *other_topics = profile.topics
-        vla.name = "VLA"
-        vla.keywords = ["vision-language-action"]
-        vla.context_keywords = []
-        vla.negative_keywords = []
-        vla.arxiv_categories = ["cs.RO"]
-        navigation.name = "Navigation"
-        navigation.keywords = ["robot navigation"]
-        navigation.context_keywords = []
-        navigation.negative_keywords = ["video generation"]
-        navigation.arxiv_categories = ["cs.RO"]
-        for topic in other_topics:
-            topic.enabled = False
-        session.commit()
-
-    record = ArxivRecord(
-        arxiv_id="2608.08888",
-        version=1,
-        title="Vision-Language-Action Models for Robot Policies",
-        abstract="The policy is initialized from video generation models.",
-        authors=["Researcher"],
-        categories=["cs.RO"],
-        primary_category="cs.RO",
-        published_at=datetime.now(UTC),
-    )
+    records = [
+        ArxivRecord(
+            arxiv_id="2608.08888",
+            version=1,
+            title="Vision-Language-Action Robot Learning",
+            abstract="This paper contains several configured keywords.",
+            authors=["Researcher"],
+            categories=["cs.RO"],
+            primary_category="cs.RO",
+            published_at=datetime.now(UTC),
+        ),
+        ArxivRecord(
+            arxiv_id="2608.08889",
+            version=1,
+            title="A New Cross-Modal Policy Architecture",
+            abstract="This abstract deliberately uses new terminology.",
+            authors=["Researcher"],
+            categories=["cs.RO"],
+            primary_category="cs.RO",
+            published_at=datetime.now(UTC),
+        ),
+    ]
     fetch_date = date(2026, 8, 14)
-    fetch_options: dict[str, object] = {}
 
     class FakeArxivClient:
-        async def fetch_daily(self, *_args: object, **kwargs: object) -> list[ArxivRecord]:
-            fetch_options.update(kwargs)
-            return [record]
+        async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[ArxivRecord]:
+            return records
+
+    def semantic_results(
+        _session: object, papers: list[Paper], _topics: object
+    ) -> dict[int, SemanticMatch]:
+        return {
+            paper.id: SemanticMatch(
+                score=0.2 if paper.arxiv_id == "2608.08888" else 0.8,
+                topic_scores={"VLA": 0.2 if paper.arxiv_id == "2608.08888" else 0.8},
+            )
+            for paper in papers
+        }
 
     monkeypatch.setattr(main, "ArxivClient", FakeArxivClient)
     monkeypatch.setattr(main, "_latest_complete_submission_date", lambda: fetch_date)
+    monkeypatch.setattr(main, "semantic_match_papers", semantic_results)
 
     result = await main._sync_stage()
-    assert result["fetched"] == 1
+    assert result["fetched"] == 2
+    assert result["queued"] == 1
     assert result["fetch_date"] == "2026-08-14"
-    assert fetch_options["target_date"] == fetch_date
     with database.SessionLocal() as session:
-        match = session.query(PaperMatch).one()
-        assert match.matched_topics == ["VLA"]
-        assert match.excluded_keywords_json == []
-        assert match.lexical_score > 50
-        assert session.query(ScreeningQueueItem).one().report_date == fetch_date
+        matches = {
+            match.paper.arxiv_id: match
+            for match in session.query(PaperMatch).join(PaperMatch.paper).all()
+        }
+        assert matches["2608.08888"].lexical_score == 0
+        assert matches["2608.08888"].semantic_score == pytest.approx(0.2)
+        assert matches["2608.08889"].semantic_score == pytest.approx(0.8)
+        queue_item = session.query(ScreeningQueueItem).one()
+        assert queue_item.paper.arxiv_id == "2608.08889"
+        assert queue_item.report_date == fetch_date
 
 
 def test_daily_sync_uses_the_latest_complete_utc_date() -> None:

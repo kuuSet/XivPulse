@@ -140,7 +140,6 @@ def _score(match: PaperMatch) -> float:
     for value in (
         match.recommendation_score,
         match.relevance_score,
-        match.lexical_score,
     ):
         number = _number(value)
         if number is not None:

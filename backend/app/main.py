@@ -71,8 +71,6 @@ from .services.auth import (
 from .services.direction_catalog import direction_catalog_payload
 from .services.direction_matching import (
     canonical_requested_direction_names,
-    contains_term,
-    direction_evidence,
     matched_direction_names,
 )
 from .services.direction_taxonomy import (
@@ -102,14 +100,13 @@ from .services.report_synthesis import (
     synthesis_has_enough_data,
 )
 from .services.semantic import (
-    LEXICAL_FLOORS,
+    MODEL_ID as SEMANTIC_MODEL_ID,
+)
+from .services.semantic import (
     RECALL_THRESHOLDS,
     SemanticEmbeddingError,
     embedding_status,
     recall_mode,
-)
-from .services.semantic import (
-    MODEL_ID as SEMANTIC_MODEL_ID,
 )
 from .services.semantic import (
     is_candidate as is_semantic_candidate,
@@ -123,7 +120,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 PIPELINE_LOCK_PATH = PROJECT_ROOT / "data" / "pipeline.lock"
 RUNNING_STATUSES = ("queued", "running")
-SCREENING_LEXICAL_THRESHOLD = 50
 SCREENING_RETRY_DELAYS = (5.0, 30.0)
 FAVORITES_LIBRARY_KIND = "favorites"
 FAVORITES_LIBRARY_NAME = "收藏库"
@@ -990,7 +986,7 @@ def _paper_wire(
     relevance = (
         analysis.relevance_score
         if analysis and analysis.relevance_score is not None
-        else (match.relevance_score if match else match.lexical_score if match else 0)
+        else (match.relevance_score if match else 0)
     )
     novelty = analysis.novelty_score if analysis else None
     rigor = analysis.rigor_score if analysis else None
@@ -1177,10 +1173,7 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         "screen_batch_size": screen_batch_size,
         "semantic_recall_mode": recall_mode(values.get("semantic_recall_mode")),
         "semantic_recall_presets": {
-            mode: {
-                "semantic_threshold": RECALL_THRESHOLDS[mode],
-                "lexical_fallback": LEXICAL_FLOORS[mode],
-            }
+            mode: {"semantic_threshold": RECALL_THRESHOLDS[mode]}
             for mode in ("high", "balanced", "precise")
         },
         "embedding": {
@@ -1403,62 +1396,17 @@ async def _sync_stage() -> dict[str, Any]:
             if match is None:
                 match = PaperMatch(paper_id=paper.id, profile_id=profile.id)
                 db.add(match)
-            paper_text = f"{paper.title}\n{paper.abstract}"
-            topic_hits: list[str] = []
-            keyword_hits: list[str] = []
-            excluded: list[str] = []
-            watched_categories = {
-                category
-                for topic in profile.topics
-                if topic.enabled
-                for category in topic.arxiv_categories
-            }
-            category_hits = set(paper.categories) & watched_categories
-            weighted = 25.0 if "cs.RO" in paper.categories else (8.0 if category_hits else 0.0)
-            watched_authors = [
-                watched
+            if any(
+                watched.casefold() in author.casefold()
                 for watched in author_watchlist
-                if any(watched.casefold() in author.casefold() for author in paper.authors)
-            ]
-            if watched_authors:
-                weighted += 35.0
+                for author in paper.authors
+            ):
                 watched_paper_ids.add(paper.id)
-            for topic in profile.topics:
-                if not topic.enabled:
-                    continue
-                evidence = direction_evidence(paper_text, topic)
-                title_hits = [
-                    keyword for keyword in topic.keywords if contains_term(paper.title, keyword)
-                ]
-                abstract_hits = [
-                    keyword
-                    for keyword in topic.keywords
-                    if keyword not in title_hits and contains_term(paper.abstract, keyword)
-                ]
-                hits = [*title_hits, *abstract_hits]
-                negatives = list(evidence.exclusions)
-                if evidence.matched:
-                    topic_hits.append(topic.name)
-                    keyword_hits.extend(hits)
-                    weighted += 12 * topic.weight
-                    weighted += min(
-                        58,
-                        (30 * len(title_hits) + 18 * len(abstract_hits)) * topic.weight,
-                    )
-                if hits:
-                    excluded.extend(negatives)
-            match.matched_topics_json = list(dict.fromkeys(topic_hits))
-            match.matched_keywords_json = list(dict.fromkeys(keyword_hits))
-            match.excluded_keywords_json = list(dict.fromkeys(excluded))
-            match.lexical_score = max(0, min(100, weighted - len(excluded) * 30))
             if match.screened_at is None:
-                match.relevance_score = match.lexical_score
-            match.recommendation_score = match.relevance_score
-            match.reason = (
-                "、".join(match.matched_topics_json[:3])
-                or (f"命中关注作者：{'、'.join(watched_authors[:3])}" if watched_authors else "")
-                or f"关注分类：{paper.primary_category or '未标注'}，等待摘要相关度分析"
-            )
+                match.matched_topics_json = []
+                match.matched_keywords_json = []
+                match.excluded_keywords_json = []
+                match.lexical_score = 0.0
         db.flush()
         semantic_error: str | None = None
         try:
@@ -1467,7 +1415,7 @@ async def _sync_stage() -> dict[str, Any]:
             )
         except SemanticEmbeddingError as exc:
             # A first-run model download can be unavailable on an offline machine.
-            # Keep the daily pipeline usable through the lexical/author fallback and
+            # Keep watched-author recall usable and
             # surface the degraded recall explicitly in the job result.
             semantic_results = {}
             semantic_error = str(exc)
@@ -1485,10 +1433,30 @@ async def _sync_stage() -> dict[str, Any]:
             match.semantic_model = SEMANTIC_MODEL_ID if semantic is not None else None
             candidate = is_semantic_candidate(
                 semantic_score=match.semantic_score,
-                lexical_score=match.lexical_score,
                 mode=selected_recall_mode,
                 watched_author=paper.id in watched_paper_ids,
             )
+            if match.screened_at is None:
+                match.relevance_score = (
+                    round(100 * max(0.0, min(1.0, semantic.score)), 2)
+                    if semantic is not None
+                    else 0
+                )
+                match.recommendation_score = match.relevance_score
+                if (
+                    semantic is not None
+                    and semantic.score >= RECALL_THRESHOLDS[selected_recall_mode]
+                    and semantic.candidate_topics
+                ):
+                    match.reason = (
+                        f"语义召回：{semantic.candidate_topics[0]} ({semantic.score:.3f})"
+                    )
+                elif paper.id in watched_paper_ids:
+                    match.reason = "命中关注作者"
+                elif semantic is None:
+                    match.reason = "语义模型不可用"
+                else:
+                    match.reason = "未达到语义召回阈值"
             if match.screened_at is None and candidate:
                 queue_item = db.scalar(
                     select(ScreeningQueueItem).where(
@@ -1512,7 +1480,7 @@ async def _sync_stage() -> dict[str, Any]:
                 queue_item.semantic_topics_json = dict(match.semantic_topics_json or {})
                 queued_count += 1
                 if not paper.affiliations:
-                    priority = max(match.lexical_score / 100.0, match.semantic_score or 0.0)
+                    priority = match.semantic_score or 0.0
                     enrichment_candidates.append((priority, paper.arxiv_id))
         response = {
             "fetched": len(records),
@@ -1626,7 +1594,6 @@ async def _analyze_stage(
             )
             if match.paper_id in existing_queue_keys or not is_semantic_candidate(
                 semantic_score=match.semantic_score,
-                lexical_score=match.lexical_score,
                 mode=selected_recall_mode,
                 watched_author=watched,
             ):
@@ -1907,7 +1874,7 @@ async def _analyze_stage(
                         )
                     ),
                 )
-                .order_by(desc(PaperMatch.recommendation_score), desc(PaperMatch.lexical_score))
+                .order_by(desc(PaperMatch.recommendation_score), desc(PaperMatch.semantic_score))
                 .limit(max(0, limit))
             )
             .unique()
@@ -2802,7 +2769,7 @@ def dashboard(
             "screening_limit": int(
                 current_settings.get("screen_batch_size", current_settings.get("screen_top_n", 30))
             ),
-            "screening_lexical_threshold": LEXICAL_FLOORS[
+            "screening_semantic_threshold": RECALL_THRESHOLDS[
                 recall_mode(current_settings.get("semantic_recall_mode"))
             ],
             "screening_queue_total": int(latest_result.get("screening_queue_total", 0) or 0),
@@ -2867,7 +2834,6 @@ def papers(
     score = func.coalesce(
         PaperMatch.recommendation_score,
         PaperMatch.relevance_score,
-        PaperMatch.lexical_score,
         0,
     )
     conditions = [
