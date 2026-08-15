@@ -8,7 +8,8 @@ import app.config as config_module
 import httpx
 import pytest
 from app.config import AppConfig, provider_status
-from app.database import DEFAULT_TOPICS, init_db, make_engine
+from app.database import init_db, make_engine
+from app.database_defaults import DEFAULT_TOPICS
 from app.domain.paper import Paper as PaperDocument
 from app.env import xivpulse_env
 from app.models import AppSetting, Paper, PaperVersion, Profile, Topic

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from app import database
 from app.database import Base
+from app.database_defaults import seed_defaults
 from app.domain.paper import Paper as PaperDocument
 from app.main import app
 from app.models import (
@@ -40,7 +41,7 @@ def client(monkeypatch: pytest.MonkeyPatch):
     database.SessionLocal.configure(bind=engine)
     Base.metadata.create_all(engine)
     with database.SessionLocal() as session:
-        database.seed_defaults(session)
+        seed_defaults(session)
 
     import app.pipeline as pipeline_module
     import app.runtime as runtime
