@@ -14,6 +14,27 @@ from ...models import Paper as StoredPaper
 from ...models import PaperVersion, utcnow
 
 
+def _paper_values(paper: Paper) -> dict[str, object]:
+    return {
+        "latest_version": paper.version,
+        "title": paper.title,
+        "abstract": paper.abstract,
+        "authors_json": list(paper.authors),
+        "affiliations_json": list(paper.affiliations),
+        "categories_json": list(paper.categories),
+        "primary_category": paper.primary_category,
+        "comment": paper.comment,
+        "journal_ref": paper.journal_ref,
+        "doi": paper.doi,
+        "abs_url": paper.abs_url,
+        "html_url": paper.html_url,
+        "pdf_url": paper.pdf_url,
+        "published_at": paper.published_at,
+        "arxiv_updated_at": paper.updated_at,
+        "ingestion_source": paper.source,
+    }
+
+
 @dataclass(slots=True)
 class UpsertResult:
     inserted: int = 0
@@ -50,32 +71,17 @@ class PaperRepository:
         timestamp = seen_at or utcnow()
         for paper_data in deduplicate_papers(papers):
             paper_data.canonicalize_urls()
+            values = _paper_values(paper_data)
             paper = self.session.scalar(
                 select(StoredPaper).where(StoredPaper.arxiv_id == paper_data.arxiv_id)
             )
             created = paper is None
             if paper is None:
-                # Fill all non-null columns before flushing for the generated ID.
                 paper = StoredPaper(
                     arxiv_id=paper_data.arxiv_id,
-                    latest_version=paper_data.version,
-                    title=paper_data.title,
-                    abstract=paper_data.abstract,
-                    authors_json=list(paper_data.authors),
-                    affiliations_json=list(paper_data.affiliations),
-                    categories_json=list(paper_data.categories),
-                    primary_category=paper_data.primary_category,
-                    comment=paper_data.comment,
-                    journal_ref=paper_data.journal_ref,
-                    doi=paper_data.doi,
-                    abs_url=paper_data.abs_url,
-                    html_url=paper_data.html_url,
-                    pdf_url=paper_data.pdf_url,
-                    published_at=paper_data.published_at,
-                    arxiv_updated_at=paper_data.updated_at,
                     first_seen_at=timestamp,
                     last_seen_at=timestamp,
-                    ingestion_source=paper_data.source,
+                    **values,
                 )
                 self.session.add(paper)
                 self.session.flush()
@@ -113,34 +119,23 @@ class PaperRepository:
             ):
                 existing_version.affiliations = paper_data.affiliations
 
-            should_update = created or paper_data.version > paper.latest_version
+            should_update = not created and paper_data.version > paper.latest_version
             if paper_data.affiliations and paper.affiliations != paper_data.affiliations:
                 paper.affiliations = paper_data.affiliations
             record_updated = as_utc(paper_data.updated_at)
             stored_updated = as_utc(paper.arxiv_updated_at)
-            if paper_data.version == paper.latest_version and record_updated is not None:
+            if (
+                not created
+                and paper_data.version == paper.latest_version
+                and record_updated is not None
+            ):
                 should_update = (
                     should_update or stored_updated is None or record_updated > stored_updated
                 )
             if should_update:
-                paper.latest_version = paper_data.version
-                paper.title = paper_data.title
-                paper.abstract = paper_data.abstract
-                paper.authors_json = list(paper_data.authors)
-                paper.affiliations_json = list(paper_data.affiliations)
-                paper.categories_json = list(paper_data.categories)
-                paper.primary_category = paper_data.primary_category
-                paper.comment = paper_data.comment
-                paper.journal_ref = paper_data.journal_ref
-                paper.doi = paper_data.doi
-                paper.abs_url = paper_data.abs_url
-                paper.html_url = paper_data.html_url
-                paper.pdf_url = paper_data.pdf_url
-                paper.published_at = paper_data.published_at
-                paper.arxiv_updated_at = paper_data.updated_at
-                paper.ingestion_source = paper_data.source
-                if not created:
-                    result.updated += 1
+                for name, value in values.items():
+                    setattr(paper, name, value)
+                result.updated += 1
             elif not created:
                 result.unchanged += 1
             paper.last_seen_at = timestamp

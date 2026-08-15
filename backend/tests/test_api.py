@@ -44,11 +44,12 @@ def client(monkeypatch: pytest.MonkeyPatch):
 
     import app.main as main
     import app.pipeline as pipeline_module
+    from app.services import paper_sync
 
     monkeypatch.setattr(main, "SessionLocal", database.SessionLocal)
     monkeypatch.setattr(
-        main.paper_sync_service,
-        "semantic_matcher",
+        paper_sync,
+        "semantic_match_papers",
         lambda _db, _papers, _topics: {},
     )
     monkeypatch.setattr(main, "_initialized", True)
@@ -1344,7 +1345,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient,
 ) -> None:
-    from app.services.paper_sync import PaperSyncService
+    from app.services.paper_sync import sync_papers
     from app.services.semantic import SemanticMatch
 
     records = [
@@ -1397,14 +1398,13 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
             for paper in papers
         }
 
-    service = PaperSyncService(
+    result = await sync_papers(
         session_factory=database.SessionLocal,
         arxiv_client=FakeArxivClient(),
         semantic_scholar=FakeSemanticScholarClient(),
         semantic_matcher=semantic_results,
         date_provider=lambda: fetch_date,
     )
-    result = await service.run()
     assert result["fetched"] == 2
     assert result["queued"] == 1
     assert result["fetch_date"] == "2026-08-14"
@@ -1435,7 +1435,7 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient,
 ) -> None:
-    from app.services.paper_sync import PaperSyncService, SemanticEmbeddingError
+    from app.services.paper_sync import SemanticEmbeddingError, sync_papers
     from app.services.state import set_setting
 
     record = PaperDocument(
@@ -1471,14 +1471,13 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         set_setting(session, "author_watchlist", ["Researcher"])
         session.commit()
 
-    service = PaperSyncService(
+    result = await sync_papers(
         session_factory=database.SessionLocal,
         arxiv_client=FakeArxivClient(),
         semantic_scholar=FakeSemanticScholarClient(),
         semantic_matcher=unavailable,
         date_provider=lambda: date(2026, 8, 14),
     )
-    result = await service.run()
 
     assert result["fetched"] == 1
     assert result["semantic_degraded"] is True

@@ -45,11 +45,6 @@ class _GlobalStartRateLimiter:
         if delay > 0:
             await asyncio.sleep(delay)
 
-    def reset(self) -> None:
-        with self._lock:
-            self._next_start = 0.0
-
-
 _GLOBAL_LIMITER = _GlobalStartRateLimiter(3.0)
 
 
@@ -76,38 +71,6 @@ def _topic_attr(topic: Topic | dict[str, Any], name: str, default: Any = None) -
             return topic[name]
         return topic.get(f"{name}_json", default)
     return getattr(topic, name, getattr(topic, f"{name}_json", default))
-
-
-def build_profile_query(topics: Sequence[Topic | dict[str, Any]]) -> str:
-    clauses: list[str] = []
-    seen: set[str] = set()
-    for topic in topics:
-        if not _topic_attr(topic, "enabled", True):
-            continue
-        categories = _topic_attr(topic, "arxiv_categories", []) or []
-        categories = [
-            value for value in categories if isinstance(value, str) and _CATEGORY_RE.match(value)
-        ]
-        query = str(_topic_attr(topic, "query", "") or "").strip()
-        keywords = _topic_attr(topic, "keywords", []) or []
-        if query:
-            interest = f"({query})"
-        else:
-            terms = [str(value).strip() for value in keywords if str(value).strip()]
-            interest = " OR ".join(f'all:"{term.replace(chr(34), "")}"' for term in terms)
-            interest = f"({interest})" if interest else ""
-        category_clause = " OR ".join(f"cat:{value}" for value in categories)
-        if category_clause and interest:
-            clause = f"(({category_clause}) AND {interest})"
-        elif category_clause:
-            clause = f"({category_clause})"
-        else:
-            clause = interest
-        key = clause.casefold()
-        if clause and key not in seen:
-            seen.add(key)
-            clauses.append(clause)
-    return " OR ".join(clauses) or "cat:cs.RO"
 
 
 class ArxivClient:

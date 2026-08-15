@@ -14,9 +14,8 @@ from app.env import xivpulse_env
 from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, OpenAICompatibleAdapter, PaperAnalyzer
-from app.services.arxiv.client import ArxivClient, build_date_query, build_profile_query
+from app.services.arxiv.client import ArxivClient, build_date_query
 from app.services.arxiv.parsing import (
-    normalize_arxiv_id,
     parse_arxiv_feed,
     parse_arxiv_id,
     parse_html_affiliations,
@@ -216,9 +215,9 @@ def test_precise_direction_rule_migration_preserves_a_customized_topic(
     engine.dispose()
 
 
-def test_normalize_dedupe_and_version_upsert() -> None:
-    assert normalize_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf") == "2608.01234"
-    assert tuple(parse_arxiv_id("hep-th/9901001v7")) == ("hep-th/9901001", 7)
+def test_parse_dedupe_and_version_upsert() -> None:
+    normalized = parse_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf")
+    assert (normalized.base_id, normalized.version) == ("2608.01234", 3)
     records = [
         PaperDocument(
             arxiv_id="2608.01234",
@@ -465,24 +464,6 @@ def test_direction_catalog_is_versioned_searchable_and_collision_free() -> None:
     assert "大语言模型与基础模型" in {item["name"] for item in payload["items"]}
     assert "视觉-语言-动作模型" in {item["name"] for item in payload["items"]}
     assert "AI for Science 与科学发现" in {item["name"] for item in payload["items"]}
-
-
-def test_profile_query_uses_topic_categories_and_terms() -> None:
-    topics = [
-        {
-            "name": "VLA",
-            "enabled": True,
-            "weight": 1.5,
-            "query": 'all:"vision language action"',
-            "keywords": ["vision language action", "robot learning"],
-            "negative_keywords": ["vehicle-to-load"],
-            "arxiv_categories": ["cs.RO"],
-        }
-    ]
-    query = build_profile_query(topics)
-    assert "cat:cs.RO" in query
-    assert "all:" in query
-    assert "vision language action" in query
 
 
 def test_watched_organization_normalization_avoids_name_collisions() -> None:

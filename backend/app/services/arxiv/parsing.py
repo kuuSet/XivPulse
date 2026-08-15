@@ -24,15 +24,6 @@ class NormalizedArxivId:
     base_id: str
     version: int = 1
 
-    @property
-    def versioned_id(self) -> str:
-        return f"{self.base_id}v{self.version}"
-
-    def __iter__(self):
-        yield self.base_id
-        yield self.version
-
-
 def parse_arxiv_id(value: str) -> NormalizedArxivId:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("arXiv identifier cannot be empty")
@@ -51,16 +42,6 @@ def parse_arxiv_id(value: str) -> NormalizedArxivId:
     if version < 1:
         raise ValueError("arXiv version must be positive")
     return NormalizedArxivId(base_id=base_id, version=version)
-
-
-def normalize_arxiv_id(value: str) -> str:
-    """Return a canonical identifier without a version suffix."""
-
-    return parse_arxiv_id(value).base_id
-
-
-def extract_arxiv_version(value: str) -> int:
-    return parse_arxiv_id(value).version
 
 
 def clean_text(value: str | None) -> str:
