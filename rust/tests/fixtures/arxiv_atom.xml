@@ -29,10 +29,21 @@
     <published>2026-08-13T01:00:00Z</published>
     <title>A newer robot paper</title>
     <summary>Newer abstract.</summary>
-    <author><name>Ada Researcher</name></author>
+    <author>
+      <name>Ada Researcher</name>
+      <arxiv:affiliation>OpenAI</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Bob Scientist</name>
+      <arxiv:affiliation>OpenAI</arxiv:affiliation>
+    </author>
     <link href="https://arxiv.org/abs/2608.00001v2" rel="alternate" type="text/html" />
     <link href="https://arxiv.org/pdf/2608.00001v2" rel="related" type="application/pdf" title="pdf" />
     <category term="cs.RO" />
+    <category term="cs.AI" />
     <arxiv:primary_category term="cs.RO" />
+    <arxiv:comment>12 pages, 3 figures</arxiv:comment>
+    <arxiv:journal_ref>Journal of Robots 1 (2026)</arxiv:journal_ref>
+    <arxiv:doi>10.1000/robot.1</arxiv:doi>
   </entry>
 </feed>

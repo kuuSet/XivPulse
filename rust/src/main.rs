@@ -22,11 +22,16 @@ struct Paper {
     #[serde(rename = "abstract")]
     abstract_text: String,
     authors: Vec<String>,
+    affiliations: Vec<String>,
     categories: Vec<String>,
     primary_category: Option<String>,
+    comment: Option<String>,
+    journal_ref: Option<String>,
+    doi: Option<String>,
     published_at: String,
     updated_at: String,
     abs_url: String,
+    html_url: String,
     pdf_url: String,
     source: &'static str,
 }
@@ -200,11 +205,23 @@ fn parse_entry(entry: Node<'_, '_>) -> Result<Paper> {
         .filter(|node| node.is_element() && node.tag_name().name() == "author")
         .filter_map(|node| child_text(node, "name"))
         .collect();
-    let categories: Vec<String> = entry
-        .children()
-        .filter(|node| node.is_element() && node.tag_name().name() == "category")
-        .filter_map(|node| node.attribute("term").map(str::to_owned))
-        .collect();
+    let affiliations = unique(
+        entry
+            .children()
+            .filter(|node| node.is_element() && node.tag_name().name() == "author")
+            .flat_map(|author| author.children())
+            .filter(|node| node.is_element() && node.tag_name().name() == "affiliation")
+            .filter_map(|node| node.text().map(clean_text))
+            .filter(|value| !value.is_empty())
+            .collect(),
+    );
+    let categories = unique(
+        entry
+            .children()
+            .filter(|node| node.is_element() && node.tag_name().name() == "category")
+            .filter_map(|node| node.attribute("term").map(str::to_owned))
+            .collect(),
+    );
     let primary_category = entry
         .children()
         .find(|node| node.is_element() && node.tag_name().name() == "primary_category")
@@ -236,6 +253,7 @@ fn parse_entry(entry: Node<'_, '_>) -> Result<Paper> {
     if pdf_url.is_empty() {
         pdf_url = format!("https://arxiv.org/pdf/{arxiv_id}v{version}");
     }
+    let html_url = format!("https://arxiv.org/html/{arxiv_id}v{version}");
 
     Ok(Paper {
         arxiv_id,
@@ -243,11 +261,16 @@ fn parse_entry(entry: Node<'_, '_>) -> Result<Paper> {
         title,
         abstract_text,
         authors,
+        affiliations,
         categories,
         primary_category,
+        comment: optional_child_text(entry, "comment"),
+        journal_ref: optional_child_text(entry, "journal_ref"),
+        doi: optional_child_text(entry, "doi"),
         published_at,
         updated_at,
         abs_url,
+        html_url,
         pdf_url,
         source: "atom",
     })
@@ -260,8 +283,22 @@ fn child_text(node: Node<'_, '_>, name: &str) -> Option<String> {
         .map(clean_text)
 }
 
+fn optional_child_text(node: Node<'_, '_>, name: &str) -> Option<String> {
+    child_text(node, name).filter(|value| !value.is_empty())
+}
+
 fn clean_text(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn unique(values: Vec<String>) -> Vec<String> {
+    let mut unique = Vec::new();
+    for value in values {
+        if !unique.contains(&value) {
+            unique.push(value);
+        }
+    }
+    unique
 }
 
 fn parse_arxiv_id(value: &str) -> Result<(String, u32)> {
@@ -310,8 +347,16 @@ mod tests {
         assert_eq!(papers[0].arxiv_id, "2608.00001");
         assert_eq!(papers[0].version, 2);
         assert_eq!(papers[0].title, "A newer robot paper");
-        assert_eq!(papers[0].authors, ["Ada Researcher"]);
+        assert_eq!(papers[0].authors, ["Ada Researcher", "Bob Scientist"]);
+        assert_eq!(papers[0].affiliations, ["OpenAI"]);
         assert_eq!(papers[0].primary_category.as_deref(), Some("cs.RO"));
+        assert_eq!(papers[0].comment.as_deref(), Some("12 pages, 3 figures"));
+        assert_eq!(
+            papers[0].journal_ref.as_deref(),
+            Some("Journal of Robots 1 (2026)")
+        );
+        assert_eq!(papers[0].doi.as_deref(), Some("10.1000/robot.1"));
+        assert_eq!(papers[0].html_url, "https://arxiv.org/html/2608.00001v2");
         assert_eq!(papers[0].source, "atom");
         let output = serde_json::to_value(&papers[0]).unwrap();
         assert!(output.get("abstract").is_some());

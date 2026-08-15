@@ -27,7 +27,6 @@ from app.services.arxiv import (
     ArxivRecord,
     build_profile_query,
     normalize_arxiv_id,
-    parse_arxiv_feed,
     parse_arxiv_id,
     parse_html_affiliations,
     upsert_papers,
@@ -57,27 +56,6 @@ from app.services.prompt_catalog import (
 from app.services.recommender import RecommendationEngine, rank_papers, score_paper
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
-ATOM = b"""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
-  <entry>
-    <id>https://arxiv.org/abs/2608.01234v1</id>
-    <updated>2026-08-11T10:00:00Z</updated><published>2026-08-11T09:00:00Z</published>
-    <title> First   title </title><summary>First abstract.</summary>
-    <author><name>Alice</name></author><category term="cs.RO"/>
-    <arxiv:primary_category term="cs.RO"/>
-    <link href="https://arxiv.org/abs/2608.01234v1" rel="alternate"/>
-    <link href="https://arxiv.org/pdf/2608.01234v1" title="pdf" type="application/pdf"/>
-  </entry>
-  <entry>
-    <id>https://arxiv.org/abs/2608.01234v2</id>
-    <updated>2026-08-12T10:00:00Z</updated><published>2026-08-11T09:00:00Z</published>
-    <title>Revised title</title><summary>Revised robot learning abstract.</summary>
-    <author><name>Alice</name><arxiv:affiliation>OpenAI</arxiv:affiliation></author><author><name>Bob</name></author>
-    <category term="cs.RO"/><category term="cs.AI"/>
-    <arxiv:primary_category term="cs.RO"/>
-  </entry>
-</feed>"""
 
 
 def _config(**overrides: object) -> AppConfig:
@@ -247,14 +225,23 @@ def test_precise_direction_rule_migration_preserves_a_customized_topic(
     engine.dispose()
 
 
-def test_parse_normalize_dedupe_and_version_upsert() -> None:
+def test_normalize_dedupe_and_version_upsert() -> None:
     assert normalize_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf") == "2608.01234"
     assert tuple(parse_arxiv_id("hep-th/9901001v7")) == ("hep-th/9901001", 7)
-    records = parse_arxiv_feed(ATOM)
-    assert len(records) == 1
-    assert records[0].version == 2
-    assert records[0].authors == ["Alice", "Bob"]
-    assert records[0].affiliations == ["OpenAI"]
+    records = [
+        ArxivRecord(
+            arxiv_id="2608.01234",
+            version=2,
+            title="Revised title",
+            abstract="Revised robot learning abstract.",
+            authors=["Alice", "Bob"],
+            affiliations=["OpenAI"],
+            categories=["cs.RO", "cs.AI"],
+            primary_category="cs.RO",
+            published_at=datetime(2026, 8, 11, 9, tzinfo=UTC),
+            updated_at=datetime(2026, 8, 12, 10, tzinfo=UTC),
+        )
+    ]
 
     engine = make_engine("sqlite:///:memory:")
     init_db(engine, seed=False)
@@ -308,6 +295,9 @@ async def test_daily_fetch_invokes_rust_date_binary(monkeypatch: pytest.MonkeyPa
         async def communicate(self) -> tuple[bytes, bytes]:
             return (
                 b'{"arxiv_id":"2608.01234","version":2,"title":"Robot paper",'
+                b'"affiliations":["OpenAI"],"categories":["cs.RO","cs.AI"],'
+                b'"primary_category":"cs.RO","comment":"12 pages",'
+                b'"journal_ref":"Journal of Robots 1 (2026)","doi":"10.1000/robot.1",'
                 b'"published_at":"2026-08-14T00:00:00-04:00",'
                 b'"updated_at":"2026-08-14T00:00:00-04:00","source":"atom"}\n',
                 b"date=2026-08-14 categories=cs.RO,cs.AI total=1 emitted=1\n",
@@ -336,6 +326,10 @@ async def test_daily_fetch_invokes_rust_date_binary(monkeypatch: pytest.MonkeyPa
     assert len(records) == 1
     assert records[0].arxiv_id == "2608.01234"
     assert records[0].version == 2
+    assert records[0].affiliations == ["OpenAI"]
+    assert records[0].comment == "12 pages"
+    assert records[0].journal_ref == "Journal of Robots 1 (2026)"
+    assert records[0].doi == "10.1000/robot.1"
     assert records[0].published_at == datetime(2026, 8, 14, 4, tzinfo=UTC)
     assert records[0].source == "atom"
 
@@ -482,25 +476,6 @@ def test_watched_institution_only_boosts_direction_matched_papers() -> None:
     assert watched_organizations(["OpenAIR Science Center"]) == []
     assert watched_organizations(["Google LLC, Mountain View"]) == ["Google Research"]
     assert watched_organizations(["Allen Institute for AI"]) == ["Allen Institute for AI (AI2)"]
-
-
-@pytest.mark.asyncio
-async def test_fetch_by_ids_uses_one_bounded_atom_request() -> None:
-    requests: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(200, content=ATOM)
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        records = await ArxivClient(http_client=client, rate_limit_seconds=0).fetch_by_ids(
-            ["2608.01234v1", "2608.01234"]
-        )
-
-    assert len(requests) == 1
-    assert requests[0].url.params["id_list"] == "2608.01234"
-    assert len(records) == 1
-    assert records[0].affiliations == ["OpenAI"]
 
 
 @pytest.mark.asyncio

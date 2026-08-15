@@ -1525,24 +1525,12 @@ async def _sync_stage() -> dict[str, Any]:
             "query": build_profile_query(topics),
         }
 
-    # Enrich only the papers about to enter screening, in one bounded Atom call.
+    # Use external sources only when Atom metadata did not include affiliations.
     selected_ids = [
         arxiv_id for _, arxiv_id in sorted(enrichment_candidates, reverse=True)[:screen_batch_size]
     ]
-    fetch_by_ids = getattr(client, "fetch_by_ids", None)
     enriched_by_id: dict[str, list[str]] = {}
-    if selected_ids and fetch_by_ids is not None:
-        try:
-            enriched = await fetch_by_ids(selected_ids)
-            if enriched:
-                with session_scope() as db:
-                    upsert_papers(db, enriched)
-            enriched_by_id.update(
-                {record.arxiv_id: record.affiliations for record in enriched if record.affiliations}
-            )
-        except Exception as exc:  # metadata enrichment must not abort the daily run
-            LOG.warning("arXiv affiliation enrichment failed: %s", exc)
-    missing_ids = [value for value in selected_ids if value not in enriched_by_id]
+    missing_ids = selected_ids
     fetch_semantic_affiliations = getattr(client, "fetch_semantic_scholar_affiliations", None)
     if missing_ids and fetch_semantic_affiliations is not None:
         try:

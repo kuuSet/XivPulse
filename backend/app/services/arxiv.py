@@ -1,4 +1,4 @@
-"""Polite arXiv fetching, feed parsing, identifier normalization, and upserts."""
+"""Rust fetch integration, metadata fallbacks, identifier normalization, and upserts."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import os
 import re
 import threading
 import time
-import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
@@ -23,7 +22,6 @@ from sqlalchemy.orm import Session
 
 from ..models import Paper, PaperVersion, Topic, utcnow
 
-ATOM_API_URL = "https://export.arxiv.org/api/query"
 SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
 RUST_FETCH_BINARY = "xivpulse-rs"
@@ -208,17 +206,6 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(UTC)
 
 
-def _local_name(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1].lower()
-
-
-def _child_text(element: ET.Element, names: set[str]) -> str | None:
-    for child in element:
-        if _local_name(child.tag) in names and child.text:
-            return child.text
-    return None
-
-
 def parse_html_affiliations(payload: str | bytes) -> list[str]:
     """Extract only explicitly marked affiliations from an arXiv HTML author block."""
 
@@ -231,75 +218,6 @@ def parse_html_affiliations(payload: str | bytes) -> list[str]:
         if value and value.casefold() != "affiliation":
             values.append(value)
     return list(dict.fromkeys(values))
-
-
-def _parse_atom_entry(entry: ET.Element) -> ArxivRecord | None:
-    raw_id = _child_text(entry, {"id"})
-    if not raw_id:
-        return None
-    try:
-        normalized = parse_arxiv_id(raw_id)
-    except ValueError:
-        return None
-    authors = [
-        _clean_text(_child_text(author, {"name"}))
-        for author in entry
-        if _local_name(author.tag) == "author"
-    ]
-    authors = [author for author in authors if author]
-    affiliations = list(
-        dict.fromkeys(
-            affiliation
-            for author in entry
-            if _local_name(author.tag) == "author"
-            for child in author
-            if _local_name(child.tag) == "affiliation" and (affiliation := _clean_text(child.text))
-        )
-    )
-    categories = [
-        child.attrib.get("term", "").strip()
-        for child in entry
-        if _local_name(child.tag) == "category" and child.attrib.get("term")
-    ]
-    primary = None
-    links: dict[str, str] = {}
-    for child in entry:
-        name = _local_name(child.tag)
-        if name == "primary_category":
-            primary = child.attrib.get("term") or primary
-        if name != "link":
-            continue
-        href = child.attrib.get("href")
-        if not href:
-            continue
-        rel = child.attrib.get("rel", "alternate")
-        content_type = child.attrib.get("type", "")
-        title = child.attrib.get("title", "")
-        if content_type == "application/pdf" or title == "pdf":
-            links["pdf"] = href
-        elif rel == "alternate":
-            links["abs"] = href
-
-    record = ArxivRecord(
-        arxiv_id=normalized.base_id,
-        version=normalized.version,
-        title=_clean_text(_child_text(entry, {"title"})),
-        abstract=_clean_text(_child_text(entry, {"summary", "description"})),
-        authors=authors,
-        affiliations=affiliations,
-        categories=list(dict.fromkeys(categories)),
-        primary_category=primary or (categories[0] if categories else None),
-        comment=_clean_text(_child_text(entry, {"comment"})) or None,
-        journal_ref=_clean_text(_child_text(entry, {"journal_ref"})) or None,
-        doi=_clean_text(_child_text(entry, {"doi"})) or None,
-        abs_url=links.get("abs", ""),
-        pdf_url=links.get("pdf", ""),
-        published_at=_parse_datetime(_child_text(entry, {"published"})),
-        updated_at=_parse_datetime(_child_text(entry, {"updated"})),
-        source="atom",
-    )
-    record.canonicalize_urls()
-    return record
 
 
 def deduplicate_records(records: Iterable[ArxivRecord]) -> list[ArxivRecord]:
@@ -318,24 +236,6 @@ def deduplicate_records(records: Iterable[ArxivRecord]) -> list[ArxivRecord]:
             selected[record.arxiv_id] = record
             positions.setdefault(record.arxiv_id, position)
     return sorted(selected.values(), key=lambda item: positions[item.arxiv_id])
-
-
-def parse_arxiv_feed(payload: str | bytes) -> list[ArxivRecord]:
-    """Parse arXiv Atom metadata used by bounded ID enrichment."""
-
-    try:
-        root = ET.fromstring(payload)
-    except (ET.ParseError, TypeError) as exc:
-        raise ValueError("Invalid arXiv XML feed") from exc
-    root_name = _local_name(root.tag)
-    if root_name != "feed":
-        raise ValueError(f"Unsupported feed root: {root_name}")
-    parsed = [
-        record
-        for child in root
-        if _local_name(child.tag) == "entry" and (record := _parse_atom_entry(child))
-    ]
-    return deduplicate_records(parsed)
 
 
 def _parse_rust_records(payload: bytes) -> list[ArxivRecord]:
@@ -408,8 +308,7 @@ class ArxivClient:
         self,
         url: str,
         *,
-        params: dict[str, Any] | None = None,
-        accept: str = "application/atom+xml",
+        accept: str,
         request_timeout: float | None = None,
     ) -> bytes:
         await polite_wait(self.rate_limit_seconds)
@@ -420,11 +319,9 @@ class ArxivClient:
 
         async def request() -> httpx.Response:
             if self._client is not None:
-                return await self._client.get(
-                    url, params=params, headers=headers, timeout=self.timeout
-                )
+                return await self._client.get(url, headers=headers, timeout=self.timeout)
             async with httpx.AsyncClient(follow_redirects=True) as client:
-                return await client.get(url, params=params, headers=headers, timeout=self.timeout)
+                return await client.get(url, headers=headers, timeout=self.timeout)
 
         if request_timeout is None:
             response = await request()
@@ -435,31 +332,6 @@ class ArxivClient:
         if len(response.content) > 20 * 1024 * 1024:
             raise ValueError("arXiv feed response exceeded 20 MiB")
         return response.content
-
-    async def fetch_by_ids(self, arxiv_ids: Sequence[str]) -> list[ArxivRecord]:
-        """Fetch richer Atom metadata for a bounded set of known papers."""
-
-        clean = list(
-            dict.fromkeys(
-                normalized.base_id
-                for value in arxiv_ids
-                if isinstance(value, str) and value.strip()
-                for normalized in [parse_arxiv_id(value)]
-            )
-        )
-        records: list[ArxivRecord] = []
-        for offset in range(0, len(clean), 50):
-            batch = clean[offset : offset + 50]
-            payload = await self._get(
-                ATOM_API_URL,
-                params={
-                    "id_list": ",".join(batch),
-                    "start": 0,
-                    "max_results": len(batch),
-                },
-            )
-            records.extend(parse_arxiv_feed(payload))
-        return deduplicate_records(records)
 
     async def fetch_semantic_scholar_affiliations(
         self, arxiv_ids: Sequence[str]
@@ -703,13 +575,10 @@ def upsert_papers(
     return result
 
 
-# Backward-friendly aliases for small route modules and tests.
-parse_feed = parse_arxiv_feed
 fetch_daily_papers = ArxivClient.fetch_daily
 
 
 __all__ = [
-    "ATOM_API_URL",
     "ArxivClient",
     "ArxivRecord",
     "NormalizedArxivId",
@@ -718,10 +587,8 @@ __all__ = [
     "deduplicate_records",
     "extract_arxiv_version",
     "normalize_arxiv_id",
-    "parse_arxiv_feed",
     "parse_html_affiliations",
     "parse_arxiv_id",
-    "parse_feed",
     "polite_wait",
     "upsert_papers",
 ]
