@@ -15,15 +15,17 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import Integer, desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .api.auth import require_server_auth
+from .api.auth import router as auth_router
 from .config import get_config, provider_status
 from .database import SessionLocal, get_db, init_db, session_scope
 from .env import xivpulse_env
@@ -55,17 +57,7 @@ from .services.analytics import (
     build_topic_trends,
     current_date_in_timezone,
 )
-from .services.auth import (
-    SESSION_COOKIE,
-    SESSION_MAX_AGE,
-    auth_config,
-    clear_login_failures,
-    issue_session,
-    login_retry_after,
-    record_login_failure,
-    session_username,
-    verify_password,
-)
+from .services.auth import auth_config
 from .services.direction_catalog import direction_catalog_payload
 from .services.direction_matching import (
     canonical_requested_direction_names,
@@ -212,11 +204,6 @@ class ProviderTestPayload(BaseModel):
     base_url: str | None = None
     model: str | None = None
     api_key: str | None = None
-
-
-class LoginPayload(BaseModel):
-    username: str = Field(min_length=1, max_length=200)
-    password: str = Field(min_length=1, max_length=10000)
 
 
 class MethodCandidateDecisionPayload(BaseModel):
@@ -411,86 +398,8 @@ trusted_hosts = [
 if trusted_hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 
-
-def _source_ip(request: Request) -> str:
-    config = auth_config()
-    if config.trust_proxy:
-        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        if forwarded:
-            return forwarded
-    return request.client.host if request.client is not None else "unknown"
-
-
-@app.middleware("http")
-async def require_server_auth(request: Request, call_next: Any) -> Response:
-    config = auth_config()
-    path = request.url.path
-    public_api = {
-        "/api/health",
-        "/api/auth/session",
-        "/api/auth/login",
-        "/api/auth/logout",
-    }
-    if config.enabled and path.startswith("/api/") and path not in public_api:
-        username = session_username(config, request.cookies.get(SESSION_COOKIE))
-        if username is None:
-            return JSONResponse(status_code=401, content={"detail": "请先登录"})
-        request.state.auth_user = username
-    return await call_next(request)
-
-
-@app.get("/api/auth/session")
-def auth_session(request: Request) -> dict[str, Any]:
-    config = auth_config()
-    username = session_username(config, request.cookies.get(SESSION_COOKIE))
-    return {
-        "enabled": config.enabled,
-        "authenticated": not config.enabled or username is not None,
-        "username": username,
-    }
-
-
-@app.post("/api/auth/login")
-def auth_login(payload: LoginPayload, request: Request, response: Response) -> dict[str, Any]:
-    config = auth_config()
-    if not config.enabled:
-        return {"enabled": False, "authenticated": True, "username": "local"}
-    source_ip = _source_ip(request)
-    retry_after = login_retry_after(source_ip)
-    if retry_after:
-        raise HTTPException(
-            status_code=429,
-            detail="登录失败次数过多，请稍后再试",
-            headers={"Retry-After": str(retry_after)},
-        )
-    if not verify_password(config, payload.username, payload.password):
-        retry_after = record_login_failure(source_ip)
-        headers = {"Retry-After": str(retry_after)} if retry_after else None
-        raise HTTPException(status_code=401, detail="用户名或密码错误", headers=headers)
-    clear_login_failures(source_ip)
-    response.set_cookie(
-        SESSION_COOKIE,
-        issue_session(config),
-        max_age=SESSION_MAX_AGE,
-        httponly=True,
-        secure=config.secure_cookies,
-        samesite="lax",
-        path="/",
-    )
-    return {"enabled": True, "authenticated": True, "username": config.username}
-
-
-@app.post("/api/auth/logout")
-def auth_logout(response: Response) -> dict[str, Any]:
-    config = auth_config()
-    response.delete_cookie(
-        SESSION_COOKIE,
-        httponly=True,
-        secure=config.secure_cookies,
-        samesite="lax",
-        path="/",
-    )
-    return {"enabled": config.enabled, "authenticated": False}
+app.middleware("http")(require_server_auth)
+app.include_router(auth_router)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
