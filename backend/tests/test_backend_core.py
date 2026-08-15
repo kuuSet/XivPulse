@@ -13,17 +13,18 @@ from app.env import xivpulse_env
 from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, OpenAICompatibleAdapter, PaperAnalyzer
-from app.services.arxiv import (
-    ArxivClient,
-    ArxivRecord,
-    build_date_query,
-    build_profile_query,
+from app.services.arxiv.client import ArxivClient, build_date_query, build_profile_query
+from app.services.arxiv.parsing import (
     normalize_arxiv_id,
     parse_arxiv_feed,
     parse_arxiv_id,
     parse_html_affiliations,
-    upsert_papers,
 )
+from app.services.arxiv.records import ArxivRecord
+from app.services.arxiv.semantic_scholar import (
+    fetch_affiliations as fetch_semantic_scholar_affiliations,
+)
+from app.services.arxiv.storage import upsert_papers
 from app.services.direction_catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -317,7 +318,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
 async def test_daily_fetch_retries_transient_network_and_http_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services import arxiv as arxiv_module
+    from app.services.arxiv import client as arxiv_client_module
 
     payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
     requests: list[httpx.Request] = []
@@ -334,7 +335,7 @@ async def test_daily_fetch_retries_transient_network_and_http_failures(
             return httpx.Response(503, headers={"Retry-After": "0"})
         return httpx.Response(200, content=payload)
 
-    monkeypatch.setattr(arxiv_module.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", fake_sleep)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         records = await ArxivClient(
             http_client=http_client,
@@ -377,7 +378,7 @@ async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
 async def test_daily_fetch_stops_after_three_transient_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services import arxiv as arxiv_module
+    from app.services.arxiv import client as arxiv_client_module
 
     requests: list[httpx.Request] = []
 
@@ -388,7 +389,7 @@ async def test_daily_fetch_stops_after_three_transient_failures(
         requests.append(request)
         return httpx.Response(503, headers={"Retry-After": "0"}, request=request)
 
-    monkeypatch.setattr(arxiv_module.asyncio, "sleep", no_wait)
+    monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", no_wait)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         with pytest.raises(httpx.HTTPStatusError):
             await ArxivClient(
@@ -537,9 +538,9 @@ async def test_semantic_scholar_affiliations_require_exact_arxiv_ids() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await ArxivClient(
-            http_client=client, rate_limit_seconds=0
-        ).fetch_semantic_scholar_affiliations(["2608.01234v2"])
+        values = await fetch_semantic_scholar_affiliations(
+            ["2608.01234v2"], http_client=client
+        )
 
     assert values == {"2608.01234": ["Google DeepMind", "University College London"]}
 

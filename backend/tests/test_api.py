@@ -1345,7 +1345,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.services import paper_sync
-    from app.services.arxiv import ArxivRecord
+    from app.services.arxiv.records import ArxivRecord
     from app.services.semantic import SemanticMatch
 
     records = [
@@ -1376,11 +1376,6 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[ArxivRecord]:
             return records
 
-        async def fetch_semantic_scholar_affiliations(
-            self, _arxiv_ids: list[str]
-        ) -> dict[str, list[str]]:
-            return {}
-
         async def fetch_html_affiliations(
             self, _arxiv_ids: list[str]
         ) -> dict[str, list[str]]:
@@ -1398,6 +1393,9 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         }
 
     monkeypatch.setattr(paper_sync, "ArxivClient", FakeArxivClient)
+    monkeypatch.setattr(
+        paper_sync, "fetch_semantic_scholar_affiliations", AsyncMock(return_value={})
+    )
     monkeypatch.setattr(paper_sync, "latest_complete_submission_date", lambda: fetch_date)
     monkeypatch.setattr(paper_sync, "semantic_match_papers", semantic_results)
 
@@ -1433,7 +1431,7 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.services import paper_sync
-    from app.services.arxiv import ArxivRecord
+    from app.services.arxiv.records import ArxivRecord
     from app.services.state import set_setting
 
     record = ArxivRecord(
@@ -1451,11 +1449,6 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[ArxivRecord]:
             return [record]
 
-        async def fetch_semantic_scholar_affiliations(
-            self, _arxiv_ids: list[str]
-        ) -> dict[str, list[str]]:
-            return {}
-
         async def fetch_html_affiliations(
             self, _arxiv_ids: list[str]
         ) -> dict[str, list[str]]:
@@ -1465,6 +1458,9 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         raise paper_sync.SemanticEmbeddingError("model download unavailable")
 
     monkeypatch.setattr(paper_sync, "ArxivClient", FakeArxivClient)
+    monkeypatch.setattr(
+        paper_sync, "fetch_semantic_scholar_affiliations", AsyncMock(return_value={})
+    )
     monkeypatch.setattr(paper_sync, "semantic_match_papers", unavailable)
     with database.SessionLocal() as session:
         set_setting(session, "author_watchlist", ["Researcher"])

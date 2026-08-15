@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 from ..config import AppConfig, get_config
 from ..models import Analysis, Paper, Profile, Topic
 from ..schemas import DeepAnalysisResult, ProviderTestResult, ScreeningResult
-from .arxiv import DEFAULT_USER_AGENT, parse_arxiv_id, polite_wait
+from .arxiv.client import DEFAULT_USER_AGENT, polite_wait
+from .arxiv.parsing import parse_arxiv_id
 from .direction_matching import (
     canonical_requested_direction_names,
     direction_evidence,

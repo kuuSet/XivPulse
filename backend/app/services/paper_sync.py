@@ -12,7 +12,9 @@ from sqlalchemy.orm import selectinload
 
 from ..database import SessionLocal, session_scope
 from ..models import Paper, PaperMatch, ScreeningQueueItem
-from .arxiv import ArxivClient, build_profile_query, upsert_papers
+from .arxiv.client import ArxivClient, build_profile_query
+from .arxiv.semantic_scholar import fetch_affiliations as fetch_semantic_scholar_affiliations
+from .arxiv.storage import upsert_papers
 from .semantic import MODEL_ID as SEMANTIC_MODEL_ID
 from .semantic import RECALL_THRESHOLDS, SemanticEmbeddingError, recall_mode
 from .semantic import is_candidate as is_semantic_candidate
@@ -163,7 +165,7 @@ async def sync_papers() -> dict[str, Any]:
     missing_ids = selected_ids
     if missing_ids:
         try:
-            semantic_affiliations = await client.fetch_semantic_scholar_affiliations(missing_ids)
+            semantic_affiliations = await fetch_semantic_scholar_affiliations(missing_ids)
             enriched_by_id.update(semantic_affiliations)
         except (TimeoutError, httpx.HTTPError, ValueError) as exc:
             LOG.warning("Semantic Scholar affiliation enrichment failed: %s", exc)
