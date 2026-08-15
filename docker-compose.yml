@@ -46,6 +46,8 @@ services:
     depends_on:
       xivpulse:
         condition: service_healthy
+    healthcheck:
+      disable: true
 
 volumes:
   xivpulse-data:
