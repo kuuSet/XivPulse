@@ -47,7 +47,7 @@ from .models import (
     Topic,
     utcnow,
 )
-from .pipeline import RUNNING_STATUSES, PipelineCoordinator, update_job_progress
+from .pipeline import PipelineCoordinator
 from .schemas import ProfileUpdate
 from .services.analytics import (
     build_daily_research_report,
@@ -76,6 +76,7 @@ from .services.direction_taxonomy import (
     has_current_direction_attribution,
     stamp_direction_attribution,
 )
+from .services.jobs import RUNNING_STATUSES, update_job_progress
 from .services.mailer import build_daily_message, deliver_message, smtp_config
 from .services.method_catalog import (
     METHOD_CANDIDATE_MIN_PAPERS,

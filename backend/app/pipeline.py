@@ -18,12 +18,11 @@ from sqlalchemy import desc, select
 
 from .database import session_scope
 from .models import Job, utcnow
+from .services.jobs import RUNNING_STATUSES, update_job_progress
 
 LOG = logging.getLogger("xivpulse")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_LOCK_PATH = PROJECT_ROOT / "data" / "pipeline.lock"
-RUNNING_STATUSES = ("queued", "running")
-
 PipelineKind = Literal["daily", "sync", "analyze"]
 PipelineResult = dict[str, Any]
 SyncStage = Callable[[], Awaitable[PipelineResult]]
@@ -71,24 +70,6 @@ def _release_pipeline_lock(token: str) -> None:
             PIPELINE_LOCK_PATH.unlink()
     except (FileNotFoundError, OSError, UnicodeError):
         return
-
-
-def update_job_progress(
-    job_id: str | None,
-    *,
-    progress: int,
-    message: str,
-    details: dict[str, Any] | None = None,
-) -> None:
-    if job_id is None:
-        return
-    with session_scope() as db:
-        job = db.get(Job, job_id)
-        if job is not None and job.status in RUNNING_STATUSES:
-            job.progress = max(0, min(100, progress))
-            job.message = message
-            if details:
-                job.result_json = {**job.result, **details}
 
 
 class PipelineCoordinator:
