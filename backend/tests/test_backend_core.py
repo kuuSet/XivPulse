@@ -16,8 +16,10 @@ from app.services.analyzer import ANALYSIS_BUDGETS, OpenAICompatibleAdapter, Pap
 from app.services.arxiv import (
     ArxivClient,
     ArxivRecord,
+    build_date_query,
     build_profile_query,
     normalize_arxiv_id,
+    parse_arxiv_feed,
     parse_arxiv_id,
     parse_html_affiliations,
     upsert_papers,
@@ -274,54 +276,64 @@ def test_normalize_dedupe_and_version_upsert() -> None:
 
 
 @pytest.mark.asyncio
-async def test_daily_fetch_invokes_rust_date_binary(monkeypatch: pytest.MonkeyPatch) -> None:
-    import app.services.arxiv as arxiv_module
+async def test_daily_fetch_uses_python_atom_date_query() -> None:
+    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
+    requests: list[httpx.Request] = []
 
-    captured: dict[str, object] = {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=payload)
 
-    class Process:
-        returncode = 0
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        records = await ArxivClient(
+            http_client=http_client, rate_limit_seconds=0
+        ).fetch_daily(
+            [
+                {"enabled": True, "arxiv_categories": ["cs.RO", "cs.AI"]},
+                {"enabled": True, "arxiv_categories": ["cs.RO"]},
+            ],
+            target_date=date(2026, 8, 13),
+            max_results=17,
+        )
 
-        async def communicate(self) -> tuple[bytes, bytes]:
-            return (
-                b'{"arxiv_id":"2608.01234","version":2,"title":"Robot paper",'
-                b'"affiliations":["OpenAI"],"categories":["cs.RO","cs.AI"],'
-                b'"primary_category":"cs.RO","comment":"12 pages",'
-                b'"journal_ref":"Journal of Robots 1 (2026)","doi":"10.1000/robot.1",'
-                b'"published_at":"2026-08-14T00:00:00-04:00",'
-                b'"updated_at":"2026-08-14T00:00:00-04:00","source":"atom"}\n',
-                b"date=2026-08-14 categories=cs.RO,cs.AI total=1 emitted=1\n",
-            )
-
-    async def create_subprocess(*args: object, **kwargs: object) -> Process:
-        captured["args"] = args
-        captured["env"] = kwargs["env"]
-        return Process()
-
-    monkeypatch.setattr(arxiv_module.asyncio, "create_subprocess_exec", create_subprocess)
-    records = await ArxivClient().fetch_daily(
-        [
-            {"enabled": True, "arxiv_categories": ["cs.RO", "cs.AI"]},
-            {"enabled": True, "arxiv_categories": ["cs.RO"]},
-        ],
-        target_date=date(2026, 8, 14),
-        max_results=17,
+    assert len(requests) == 1
+    assert requests[0].url.params["search_query"] == build_date_query(
+        date(2026, 8, 13), ["cs.RO", "cs.AI"]
     )
-
-    assert captured["args"] == ("xivpulse-rs", "fetch", "2026-08-14")
-    environment = captured["env"]
-    assert isinstance(environment, dict)
-    assert environment["XIVPULSE_ARXIV_CATEGORIES"] == "cs.RO,cs.AI"
-    assert environment["XIVPULSE_FETCH_LIMIT"] == "17"
-    assert len(records) == 1
-    assert records[0].arxiv_id == "2608.01234"
+    assert requests[0].url.params["max_results"] == "17"
+    assert requests[0].url.params["sortBy"] == "submittedDate"
+    assert len(records) == 2
+    assert records[0].arxiv_id == "2608.00001"
     assert records[0].version == 2
     assert records[0].affiliations == ["OpenAI"]
-    assert records[0].comment == "12 pages"
+    assert records[0].comment == "12 pages, 3 figures"
     assert records[0].journal_ref == "Journal of Robots 1 (2026)"
     assert records[0].doi == "10.1000/robot.1"
-    assert records[0].published_at == datetime(2026, 8, 14, 4, tzinfo=UTC)
+    assert records[0].published_at == datetime(2026, 8, 13, 1, tzinfo=UTC)
     assert records[0].source == "atom"
+
+
+def test_atom_parser_deduplicates_and_preserves_reported_total() -> None:
+    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
+    total, records = parse_arxiv_feed(payload)
+
+    assert total == 3
+    assert [record.arxiv_id for record in records] == ["2608.00001", "2608.00002"]
+    assert records[0].title == "A newer robot paper"
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_rejects_a_truncated_result_set() -> None:
+    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200, content=payload))
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(ValueError, match="exceeding the configured limit 2"):
+            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
+                [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+                target_date=date(2026, 8, 13),
+                max_results=2,
+            )
 
 
 def test_html_affiliations_only_reads_explicit_author_roles() -> None:

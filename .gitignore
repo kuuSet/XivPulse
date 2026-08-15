@@ -10,6 +10,7 @@ node_modules/
 frontend/dist/
 build/
 dist/
+rust/target/
 *.egg-info/
 data/
 logs/

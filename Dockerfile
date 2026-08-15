@@ -1,11 +1,3 @@
-FROM rust:1.85-slim-bookworm AS rust-build
-
-WORKDIR /build/rust
-COPY rust/Cargo.toml rust/Cargo.lock ./
-COPY rust/src/ ./src/
-RUN cargo build --locked --release
-
-
 FROM node:22-alpine AS frontend-build
 
 WORKDIR /build/frontend
@@ -35,7 +27,6 @@ RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt \
 
 COPY --chown=xivpulse:xivpulse backend/ /app/backend/
 COPY --from=frontend-build --chown=xivpulse:xivpulse /build/frontend/dist/ /app/frontend/dist/
-COPY --from=rust-build /build/rust/target/release/xivpulse /usr/local/bin/xivpulse-rs
 
 USER xivpulse
 EXPOSE 8765

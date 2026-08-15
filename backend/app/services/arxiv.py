@@ -1,14 +1,13 @@
-"""Rust fetch integration, metadata fallbacks, identifier normalization, and upserts."""
+"""arXiv fetching, metadata fallbacks, identifier normalization, and upserts."""
 
 from __future__ import annotations
 
 import asyncio
 import html
-import json
-import os
 import re
 import threading
 import time
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
@@ -23,8 +22,8 @@ from sqlalchemy.orm import Session
 from ..models import Paper, PaperVersion, Topic, utcnow
 
 SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
-RUST_FETCH_BINARY = "xivpulse-rs"
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"
     r"(?:v(?P<version>\d+))?",
@@ -238,16 +237,112 @@ def deduplicate_records(records: Iterable[ArxivRecord]) -> list[ArxivRecord]:
     return sorted(selected.values(), key=lambda item: positions[item.arxiv_id])
 
 
-def _parse_rust_records(payload: bytes) -> list[ArxivRecord]:
-    records: list[ArxivRecord] = []
-    for line in payload.splitlines():
-        if not line.strip():
-            continue
-        value = json.loads(line)
-        value["published_at"] = _parse_datetime(value.get("published_at"))
-        value["updated_at"] = _parse_datetime(value.get("updated_at"))
-        records.append(ArxivRecord(**value))
-    return records
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _child_text(element: ET.Element, name: str) -> str | None:
+    for child in element:
+        if _local_name(child.tag) == name:
+            return _clean_text(child.text)
+    return None
+
+
+def _parse_atom_entry(entry: ET.Element) -> ArxivRecord:
+    raw_id = _child_text(entry, "id")
+    title = _child_text(entry, "title")
+    published = _child_text(entry, "published")
+    if not raw_id or not title or not published:
+        raise ValueError("arXiv entry is missing id, title, or published timestamp")
+    normalized = parse_arxiv_id(raw_id)
+    authors: list[str] = []
+    affiliations: list[str] = []
+    categories: list[str] = []
+    primary_category: str | None = None
+    abs_url = ""
+    pdf_url = ""
+    for child in entry:
+        name = _local_name(child.tag)
+        if name == "author":
+            author = _child_text(child, "name")
+            if author:
+                authors.append(author)
+            affiliations.extend(
+                value
+                for item in child
+                if _local_name(item.tag) == "affiliation"
+                and (value := _clean_text(item.text))
+            )
+        elif name == "category" and (category := child.attrib.get("term", "").strip()):
+            categories.append(category)
+        elif name == "primary_category":
+            primary_category = child.attrib.get("term") or primary_category
+        elif name == "link" and (href := child.attrib.get("href")):
+            if child.attrib.get("rel") == "alternate":
+                abs_url = href
+            if (
+                child.attrib.get("type") == "application/pdf"
+                or child.attrib.get("title") == "pdf"
+            ):
+                pdf_url = href
+    record = ArxivRecord(
+        arxiv_id=normalized.base_id,
+        version=normalized.version,
+        title=title,
+        abstract=_child_text(entry, "summary") or "",
+        authors=list(dict.fromkeys(authors)),
+        affiliations=list(dict.fromkeys(affiliations)),
+        categories=list(dict.fromkeys(categories)),
+        primary_category=primary_category or (categories[0] if categories else None),
+        comment=_child_text(entry, "comment") or None,
+        journal_ref=_child_text(entry, "journal_ref") or None,
+        doi=_child_text(entry, "doi") or None,
+        abs_url=abs_url,
+        pdf_url=pdf_url,
+        published_at=_parse_datetime(published),
+        updated_at=_parse_datetime(_child_text(entry, "updated") or published),
+        source="atom",
+    )
+    record.canonicalize_urls()
+    return record
+
+
+def parse_arxiv_feed(payload: str | bytes) -> tuple[int, list[ArxivRecord]]:
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as exc:
+        raise ValueError("Invalid arXiv Atom response") from exc
+    total_text = next(
+        (
+            _clean_text(element.text)
+            for element in root.iter()
+            if _local_name(element.tag) == "totalResults"
+        ),
+        "",
+    )
+    try:
+        total = int(total_text)
+    except ValueError as exc:
+        raise ValueError("arXiv response is missing a valid totalResults") from exc
+    records = deduplicate_records(
+        _parse_atom_entry(element)
+        for element in root
+        if _local_name(element.tag) == "entry"
+    )
+    records.sort(
+        key=lambda item: (
+            _as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
+            item.arxiv_id,
+            item.version,
+        )
+    )
+    return total, records
+
+
+def build_date_query(target_date: date, categories: Sequence[str]) -> str:
+    compact = target_date.strftime("%Y%m%d")
+    category_query = " OR ".join(f"cat:{category}" for category in categories)
+    return f"({category_query}) AND submittedDate:[{compact}0000 TO {compact}2359]"
 
 
 def _topic_attr(topic: Topic | dict[str, Any], name: str, default: Any = None) -> Any:
@@ -310,6 +405,7 @@ class ArxivClient:
         *,
         accept: str,
         request_timeout: float | None = None,
+        params: dict[str, str | int] | None = None,
     ) -> bytes:
         await polite_wait(self.rate_limit_seconds)
         headers = {
@@ -319,9 +415,11 @@ class ArxivClient:
 
         async def request() -> httpx.Response:
             if self._client is not None:
-                return await self._client.get(url, headers=headers, timeout=self.timeout)
+                return await self._client.get(
+                    url, headers=headers, params=params, timeout=self.timeout
+                )
             async with httpx.AsyncClient(follow_redirects=True) as client:
-                return await client.get(url, headers=headers, timeout=self.timeout)
+                return await client.get(url, headers=headers, params=params, timeout=self.timeout)
 
         if request_timeout is None:
             response = await request()
@@ -453,22 +551,35 @@ class ArxivClient:
         )
         if not clean:
             raise ValueError("At least one valid arXiv category is required")
-        environment = os.environ.copy()
-        environment["XIVPULSE_ARXIV_CATEGORIES"] = ",".join(clean)
-        environment["XIVPULSE_FETCH_LIMIT"] = str(min(max(1, int(max_results)), 2000))
-        process = await asyncio.create_subprocess_exec(
-            RUST_FETCH_BINARY,
-            "fetch",
-            target_date.isoformat(),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=environment,
+        limit = min(max(1, int(max_results)), 2000)
+        payload = await self._get(
+            ARXIV_API_URL,
+            accept="application/atom+xml,application/xml",
+            params={
+                "search_query": build_date_query(target_date, clean),
+                "start": 0,
+                "max_results": limit,
+                "sortBy": "submittedDate",
+                "sortOrder": "ascending",
+            },
         )
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0:
-            detail = stderr.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(detail or f"Rust arXiv fetch exited with {process.returncode}")
-        return _parse_rust_records(stdout)
+        total, records = parse_arxiv_feed(payload)
+        if total > limit:
+            raise ValueError(
+                f"arXiv reports {total} papers for {target_date}, exceeding the configured "
+                f"limit {limit}"
+            )
+        outside_date = [
+            record.arxiv_id
+            for record in records
+            if record.published_at is None or record.published_at.date() != target_date
+        ]
+        if outside_date:
+            raise ValueError(
+                f"arXiv returned papers outside requested date {target_date}: "
+                + ", ".join(outside_date[:3])
+            )
+        return records
 
 
 def upsert_papers(
@@ -579,14 +690,17 @@ fetch_daily_papers = ArxivClient.fetch_daily
 
 
 __all__ = [
+    "ARXIV_API_URL",
     "ArxivClient",
     "ArxivRecord",
     "NormalizedArxivId",
     "UpsertResult",
+    "build_date_query",
     "build_profile_query",
     "deduplicate_records",
     "extract_arxiv_version",
     "normalize_arxiv_id",
+    "parse_arxiv_feed",
     "parse_html_affiliations",
     "parse_arxiv_id",
     "polite_wait",
