@@ -8,13 +8,11 @@ import threading
 import time
 from collections.abc import Sequence
 from datetime import date
-from typing import Any
 from urllib.parse import quote
 
 import httpx
 
 from ...domain.paper import Paper
-from ...models import Topic
 from .parsing import parse_arxiv_feed, parse_arxiv_id, parse_html_affiliations
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
@@ -63,14 +61,6 @@ def build_date_query(target_date: date, categories: Sequence[str]) -> str:
     compact = target_date.strftime("%Y%m%d")
     category_query = " OR ".join(f"cat:{category}" for category in categories)
     return f"({category_query}) AND submittedDate:[{compact}0000 TO {compact}2359]"
-
-
-def _topic_attr(topic: Topic | dict[str, Any], name: str, default: Any = None) -> Any:
-    if isinstance(topic, dict):
-        if name in topic:
-            return topic[name]
-        return topic.get(f"{name}_json", default)
-    return getattr(topic, name, getattr(topic, f"{name}_json", default))
 
 
 class ArxivClient:
@@ -163,17 +153,11 @@ class ArxivClient:
 
     async def fetch_daily(
         self,
-        topics: Sequence[Topic | dict[str, Any]],
+        categories: Sequence[str],
         *,
         target_date: date,
         max_results: int = 100,
     ) -> list[Paper]:
-        categories = [
-            category
-            for topic in topics
-            if _topic_attr(topic, "enabled", True)
-            for category in (_topic_attr(topic, "arxiv_categories", []) or [])
-        ]
         clean = list(
             dict.fromkeys(
                 value.strip()

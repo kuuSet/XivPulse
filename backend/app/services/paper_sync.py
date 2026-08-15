@@ -65,9 +65,15 @@ async def sync_papers(
     options = _load_options(factory)
     target_date = date_provider()
 
+    categories = [
+        category
+        for topic in options.topics
+        if topic.enabled
+        for category in topic.arxiv_categories
+    ]
     papers = (
         await arxiv.fetch_daily(
-            options.topics,
+            categories,
             target_date=target_date,
             max_results=options.max_results,
         )

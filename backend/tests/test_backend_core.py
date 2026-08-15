@@ -286,10 +286,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
         records = await ArxivClient(
             http_client=http_client, rate_limit_seconds=0
         ).fetch_daily(
-            [
-                {"enabled": True, "arxiv_categories": ["cs.RO", "cs.AI"]},
-                {"enabled": True, "arxiv_categories": ["cs.RO"]},
-            ],
+            ["cs.RO", "cs.AI", "cs.RO"],
             target_date=date(2026, 8, 13),
             max_results=17,
         )
@@ -339,7 +336,7 @@ async def test_daily_fetch_retries_transient_network_and_http_failures(
             http_client=http_client,
             rate_limit_seconds=0,
         ).fetch_daily(
-            [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+            ["cs.RO"],
             target_date=date(2026, 8, 13),
             max_results=17,
         )
@@ -364,7 +361,7 @@ async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
                 http_client=http_client,
                 rate_limit_seconds=0,
             ).fetch_daily(
-                [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+                ["cs.RO"],
                 target_date=date(2026, 8, 13),
                 max_results=17,
             )
@@ -394,7 +391,7 @@ async def test_daily_fetch_stops_after_three_transient_failures(
                 http_client=http_client,
                 rate_limit_seconds=0,
             ).fetch_daily(
-                [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+                ["cs.RO"],
                 target_date=date(2026, 8, 13),
                 max_results=17,
             )
@@ -419,7 +416,7 @@ async def test_daily_fetch_rejects_a_truncated_result_set() -> None:
     async with httpx.AsyncClient(transport=transport) as http_client:
         with pytest.raises(ValueError, match="exceeding the configured limit 2"):
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-                [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+                ["cs.RO"],
                 target_date=date(2026, 8, 13),
                 max_results=2,
             )
