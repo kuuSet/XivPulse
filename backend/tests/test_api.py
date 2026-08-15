@@ -170,9 +170,9 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
 async def test_screening_queue_processes_65_candidates_in_three_batches(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
     from app.schemas import ScreeningResult
     from app.services import analyzer as analyzer_module
+    from app.services import paper_analysis
 
     assert client.put("/api/settings", json={"screen_batch_size": 30}).status_code == 200
     with database.SessionLocal() as session:
@@ -214,8 +214,8 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
             )
 
     monkeypatch.setattr(analyzer_module, "PaperAnalyzer", FakePaperAnalyzer)
-    monkeypatch.setattr(main, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
-    result = await main._analyze_stage(limit=0)
+    monkeypatch.setattr(paper_analysis, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
+    result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 65
     assert result["screening_batches"] == 3
     assert result["screening_total_batches"] == 3
@@ -229,9 +229,9 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
 async def test_screening_retries_and_keeps_final_failure_in_queue(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
     from app.schemas import ScreeningResult
     from app.services import analyzer as analyzer_module
+    from app.services import paper_analysis
 
     attempts: dict[str, int] = {}
     with database.SessionLocal() as session:
@@ -276,8 +276,8 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
             )
 
     monkeypatch.setattr(analyzer_module, "PaperAnalyzer", RetryAnalyzer)
-    monkeypatch.setattr(main, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
-    result = await main._analyze_stage(limit=0)
+    monkeypatch.setattr(paper_analysis, "SCREENING_RETRY_DELAYS", (0.0, 0.0))
+    result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 1
     assert result["screening_failed"] == 1
     assert result["report_incomplete"] is True
@@ -1239,10 +1239,10 @@ def test_digest_status_and_missing_job(client: TestClient) -> None:
 async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
     from app.models import Analysis
     from app.schemas import ScreeningResult
     from app.services import analyzer as analyzer_module
+    from app.services import paper_analysis
 
     with database.SessionLocal() as session:
         profile = session.query(Profile).filter(Profile.active.is_(True)).one()
@@ -1290,7 +1290,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 
     monkeypatch.setattr(analyzer_module, "PaperAnalyzer", FakePaperAnalyzer)
 
-    result = await main._analyze_stage(limit=0)
+    result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 1
 
     with database.SessionLocal() as session:
