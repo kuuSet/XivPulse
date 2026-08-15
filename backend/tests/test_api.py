@@ -44,6 +44,7 @@ def client(monkeypatch: pytest.MonkeyPatch):
 
     import app.main as main
     import app.pipeline as pipeline_module
+    import app.runtime as runtime
     from app.services import paper_sync
 
     monkeypatch.setattr(main, "SessionLocal", database.SessionLocal)
@@ -52,7 +53,7 @@ def client(monkeypatch: pytest.MonkeyPatch):
         "semantic_match_papers",
         lambda _db, _papers, _topics: {},
     )
-    monkeypatch.setattr(main, "_initialized", True)
+    monkeypatch.setattr(runtime, "_initialized", True)
     monkeypatch.setattr(main.daily_pipeline, "_active_job_id", None)
     monkeypatch.setattr(
         pipeline_module,

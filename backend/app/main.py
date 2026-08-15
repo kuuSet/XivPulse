@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import threading
 import unicodedata
 from collections import Counter
 from contextlib import asynccontextmanager
@@ -27,7 +26,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .api.auth import require_server_auth
 from .api.auth import router as auth_router
 from .config import get_config, provider_status
-from .database import SessionLocal, get_db, init_db, session_scope
+from .database import SessionLocal, get_db, session_scope
 from .env import xivpulse_env
 from .models import (
     Analysis,
@@ -50,6 +49,7 @@ from .models import (
     utcnow,
 )
 from .pipeline import PipelineCoordinator
+from .runtime import initialize_application
 from .schemas import ProfileUpdate
 from .services.analytics import (
     build_daily_research_report,
@@ -57,7 +57,6 @@ from .services.analytics import (
     build_topic_trends,
     current_date_in_timezone,
 )
-from .services.auth import auth_config
 from .services.direction_catalog import direction_catalog_payload
 from .services.direction_matching import (
     canonical_requested_direction_names,
@@ -91,16 +90,10 @@ from .services.report_synthesis import (
     synthesis_has_enough_data,
 )
 from .services.semantic import (
-    MODEL_ID as SEMANTIC_MODEL_ID,
-)
-from .services.semantic import (
     RECALL_THRESHOLDS,
     SemanticEmbeddingError,
     embedding_status,
     recall_mode,
-)
-from .services.semantic import (
-    match_papers as semantic_match_papers,
 )
 from .services.state import (
     active_profile as _active_profile,
@@ -124,9 +117,6 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 FAVORITES_LIBRARY_KIND = "favorites"
 FAVORITES_LIBRARY_NAME = "收藏库"
 FAVORITES_LIBRARY_COLOR = "#b54747"
-_initialization_lock = threading.Lock()
-_initialized = False
-_embedding_backfill_started = False
 
 
 class SettingsPayload(BaseModel):
@@ -282,99 +272,6 @@ class ProjectPaperUpdatePayload(BaseModel):
     priority: int | None = Field(default=None, ge=1, le=5)
     notes: str | None = Field(default=None, max_length=20000)
     tags: list[str] | None = Field(default=None, max_length=50)
-
-
-def _backfill_existing_semantic_embeddings() -> None:
-    """Populate local vectors for existing papers without invoking AI analysis."""
-
-    try:
-        with SessionLocal() as db:
-            profile = _active_profile(db)
-            paper_ids = list(db.scalars(select(Paper.id).order_by(Paper.id)).all())
-            profile_id = profile.id
-        total = len(paper_ids)
-        processed = 0
-        for start in range(0, total, 128):
-            selected_ids = paper_ids[start : start + 128]
-            with session_scope() as db:
-                profile = _active_profile(db)
-                papers = list(
-                    db.scalars(select(Paper).where(Paper.id.in_(selected_ids))).all()
-                )
-                results = semantic_match_papers(db, papers, list(profile.topics))
-                direction_names = _enabled_direction_names(profile)
-                matches = db.scalars(
-                    select(PaperMatch).where(
-                        PaperMatch.profile_id == profile_id,
-                        PaperMatch.paper_id.in_(selected_ids),
-                    )
-                ).all()
-                for match in matches:
-                    semantic = results.get(match.paper_id)
-                    if semantic is not None:
-                        match.semantic_score = semantic.score
-                        match.semantic_topics_json = semantic.topic_scores
-                        match.semantic_model = SEMANTIC_MODEL_ID
-                    match.matched_topics_json = _canonical_directions(
-                        match.matched_topics, direction_names
-                    )
-                processed += len(selected_ids)
-                _set_setting(
-                    db,
-                    "embedding_backfill",
-                    {"status": "running", "processed": processed, "total": total},
-                )
-        with session_scope() as db:
-            _set_setting(
-                db,
-                "embedding_backfill",
-                {"status": "completed", "processed": processed, "total": total},
-            )
-    except Exception as exc:
-        LOG.exception("Existing-paper semantic embedding backfill failed")
-        try:
-            with session_scope() as db:
-                _set_setting(
-                    db,
-                    "embedding_backfill",
-                    {"status": "failed", "error": str(exc)[:1000]},
-                )
-        except Exception:
-            LOG.exception("Failed to persist embedding backfill error")
-
-
-def initialize_application() -> None:
-    global _embedding_backfill_started, _initialized
-    if _initialized:
-        return
-    with _initialization_lock:
-        if _initialized:
-            return
-        auth_config()
-        init_db()
-        with session_scope() as db:
-            stale_before = utcnow() - timedelta(hours=2)
-            for job in db.scalars(select(Job).where(Job.status.in_(RUNNING_STATUSES))).all():
-                heartbeat = _as_utc(job.started_at or job.created_at)
-                if heartbeat and heartbeat < stale_before:
-                    job.status = "failed"
-                    job.error = "应用退出后遗留的任务已自动关闭"
-                    job.message = "任务超时"
-                    job.completed_at = utcnow()
-        _initialized = True
-        backfill_enabled = str(xivpulse_env("EMBEDDING_BACKFILL", "true")).strip().casefold() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-        if backfill_enabled and not _embedding_backfill_started:
-            _embedding_backfill_started = True
-            threading.Thread(
-                target=_backfill_existing_semantic_embeddings,
-                name="semantic-embedding-backfill",
-                daemon=True,
-            ).start()
 
 
 @asynccontextmanager
