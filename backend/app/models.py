@@ -272,8 +272,6 @@ class PaperMatch(Base):
     semantic_topics_json: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
     semantic_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
     relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Retained only so existing SQLite databases do not require a destructive migration.
-    recommendation_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     reason: Mapped[str] = mapped_column(Text, default="")
     screened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

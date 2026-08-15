@@ -558,7 +558,7 @@ function PaperWorkspace(props: PaperWorkspaceProps) {
     return [...source]
       .filter((paper) => {
         if (category !== 'all' && !paper.categories.includes(category)) return false
-        if (priority === 'recommended' && (paper.recommendation_score ?? paper.relevance_score) < 80) return false
+        if (priority === 'recommended' && paper.relevance_score < 80) return false
         if (priority === 'saved' && paper.feedback?.action !== 'save') return false
         if (priority === 'unread' && getReading(paper).state !== 'unread') return false
         if (!normalized) return true
@@ -570,7 +570,7 @@ function PaperWorkspace(props: PaperWorkspaceProps) {
       .sort((a, b) => {
         if (sort === 'time') return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
         if (sort === 'relevance') return b.relevance_score - a.relevance_score
-        return (b.recommendation_score ?? b.relevance_score) - (a.recommendation_score ?? a.relevance_score)
+        return b.relevance_score - a.relevance_score
       })
   }, [data, libraryPage, mode, query, category, priority, sort])
 
@@ -773,7 +773,7 @@ function SelectControl({ value, onChange, options, label, icon }: { value: strin
 }
 
 function PaperListItem({ paper, active, onSelect, onFeedback }: { paper: Paper; active: boolean; onSelect: () => void; onFeedback: (action: FeedbackAction) => void }) {
-  const score = Math.round(paper.recommendation_score ?? paper.relevance_score)
+  const score = Math.round(paper.relevance_score)
   const saved = paper.feedback?.action === 'save'
   const dismissed = paper.feedback?.action === 'dismiss' || paper.feedback?.action === 'skip'
   const matchSignals = paperMatchSignals(paper, 2)
@@ -909,7 +909,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
     ['新颖', analysis.novelty_score ?? paper.novelty_score, '#9a6700'],
     ['方法', analysis.method_score ?? paper.quality_score, '#325ea8'],
     ['证据', analysis.evidence_score ?? paper.quality_score, '#7c4d9e'],
-    ['潜力', analysis.potential_score ?? paper.recommendation_score, '#b54747'],
+    ['潜力', analysis.potential_score ?? paper.relevance_score, '#b54747'],
   ] as Array<[string, number | null | undefined, string]>
   const analysisSignals = paperAnalysisSignals(paper, analysis)
   const semanticSignals = (paper.semantic_candidate_topics ?? []).slice(0, 4).map((item) => `${item.name} ${Math.round(item.score * 100)}%`)
@@ -1309,7 +1309,7 @@ function StructuredReport({ report, papers }: { report: DailyReport; papers: Pap
               <article key={String(item.paper_id)}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
                 <div>
-                  <div><strong>{Math.round(item.score ?? paper?.recommendation_score ?? 0)} 分</strong><em>{item.recommendation ?? '重点关注'}</em></div>
+                  <div><strong>{Math.round(item.score ?? paper?.relevance_score ?? 0)} 分</strong><em>{item.recommendation ?? '重点关注'}</em></div>
                   {organizations.length > 0 && <div className="report-organizations">{organizations.map((organization) => <OrganizationBadge key={organization} name={organization} />)}</div>}
                   <h4>{item.title}</h4>
                   <p>{item.summary ?? paper?.summary ?? item.why_it_matters ?? ''}</p>
@@ -2337,7 +2337,7 @@ function buildReportText(report: DailyReport, papers: Paper[]) {
     '## 代表论文', '',
     ...report.highlight_papers.flatMap((item, index) => {
       const paper = papers.find((candidate) => String(candidate.id) === String(item.paper_id))
-      return [`### ${index + 1}. ${item.title}`, '', `- 推荐分：${Math.round(item.score ?? paper?.recommendation_score ?? 0)}`, `- arXiv：${item.arxiv_id ?? paper?.arxiv_id ?? ''}`, '', item.summary ?? paper?.summary ?? item.why_it_matters ?? '', '', item.why_it_matters ? `研究意义：${item.why_it_matters}` : '', '']
+      return [`### ${index + 1}. ${item.title}`, '', `- 推荐分：${Math.round(item.score ?? paper?.relevance_score ?? 0)}`, `- arXiv：${item.arxiv_id ?? paper?.arxiv_id ?? ''}`, '', item.summary ?? paper?.summary ?? item.why_it_matters ?? '', '', item.why_it_matters ? `研究意义：${item.why_it_matters}` : '', '']
     }),
     '## 共同方法', '', ...methods, '', '## 共同证据', '', ...evidence, '',
     '## 推荐阅读队列', '', ...report.suggested_reading_queue.map((item) => `${item.rank}. **${item.title}** · ${READING_QUEUE_LABELS[item.priority] ?? item.priority}${item.estimated_minutes ? ` · ${item.estimated_minutes} 分钟` : ''}\n   ${item.next_action ?? item.reason ?? ''}`), '',

@@ -1041,7 +1041,6 @@ def _paper_wire(
         "semantic_candidate_topics": semantic_candidates,
         "quality_score": rigor,
         "novelty_score": novelty,
-        "recommendation_score": round(float(score or 0), 1),
         "priority": priority,
         "match_reasons": reasons,
         "matched_topics": matched_topics,
@@ -2788,7 +2787,7 @@ def dashboard(
                 "paper": item,
                 "recommendation": {
                     "paper_id": item["id"],
-                    "score": item["recommendation_score"],
+                    "score": item["relevance_score"],
                     "explanation": item["why_recommended"] or "符合研究画像",
                     "matched_topics": item["match_reasons"],
                     "matched_keywords": item["match_reasons"],

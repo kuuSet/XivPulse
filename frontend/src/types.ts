@@ -128,7 +128,6 @@ export interface Paper {
   relevance_score: number
   quality_score?: number | null
   novelty_score?: number | null
-  recommendation_score?: number | null
   priority?: string
   match_reasons: string[]
   matched_topics?: string[]

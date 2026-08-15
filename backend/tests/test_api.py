@@ -773,8 +773,6 @@ def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
         paper = session.get(Paper, paper_id)
         assert paper is not None
         paper.affiliations = ["NVIDIA Research", "Carnegie Mellon University"]
-        match = session.query(PaperMatch).filter_by(paper_id=paper_id).one()
-        match.recommendation_score = 5  # ignored legacy composite score
         session.commit()
     listing = client.get("/api/papers", params={"q": "Embodied", "min_score": 80})
     assert listing.status_code == 200
@@ -786,7 +784,6 @@ def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
     assert detail.status_code == 200
     assert detail.json()["title"] == "An Embodied AI Paper"
     assert detail.json()["relevance_score"] == 92
-    assert detail.json()["recommendation_score"] == 92
     assert detail.json()["affiliations"] == [
         "NVIDIA Research",
         "Carnegie Mellon University",
