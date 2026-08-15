@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import desc, select
 
 from .database import SessionLocal
-from .main import initialize_application, run_daily_pipeline
+from .main import daily_pipeline, initialize_application
 from .models import AppSetting, Job
 
 LOG = logging.getLogger("xivpulse.scheduler")
@@ -75,7 +75,7 @@ async def main() -> None:
     while True:
         try:
             if should_run_now():
-                result = await run_daily_pipeline(trigger="docker-scheduler")
+                result = await daily_pipeline.run_daily(trigger="docker-scheduler")
                 if result.get("accepted"):
                     LOG.info(
                         "Daily update finished: success=%s fetched=%s screened=%s analyzed=%s",

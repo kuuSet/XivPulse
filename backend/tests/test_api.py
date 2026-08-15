@@ -42,17 +42,23 @@ def client(monkeypatch: pytest.MonkeyPatch):
         database.seed_defaults(session)
 
     import app.main as main
+    import app.pipeline as pipeline_module
 
     monkeypatch.setattr(main, "SessionLocal", database.SessionLocal)
     monkeypatch.setattr(main, "semantic_match_papers", lambda _db, _papers, _topics: {})
     monkeypatch.setattr(main, "_initialized", True)
-    monkeypatch.setattr(main, "PIPELINE_LOCK_PATH", Path.cwd() / ".pytest_pipeline.lock")
-    main.PIPELINE_LOCK_PATH.unlink(missing_ok=True)
+    monkeypatch.setattr(main.daily_pipeline, "_active_job_id", None)
+    monkeypatch.setattr(
+        pipeline_module,
+        "PIPELINE_LOCK_PATH",
+        Path.cwd() / ".pytest_pipeline.lock",
+    )
+    pipeline_module.PIPELINE_LOCK_PATH.unlink(missing_ok=True)
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
-        main.PIPELINE_LOCK_PATH.unlink(missing_ok=True)
+        pipeline_module.PIPELINE_LOCK_PATH.unlink(missing_ok=True)
         engine.dispose()
 
 
@@ -1426,8 +1432,8 @@ async def test_direct_daily_job_is_persisted_and_rejects_overlap(
     import app.main as main
 
     pipeline = AsyncMock(return_value={"fetched": 3, "analyzed": 1})
-    monkeypatch.setattr(main, "_execute_pipeline", pipeline)
-    result = await main.run_daily_pipeline(trigger="test")
+    monkeypatch.setattr(main.daily_pipeline, "execute", pipeline)
+    result = await main.daily_pipeline.run_daily(trigger="test")
     assert result["success"] is True
     assert result["fetched"] == 3
     pipeline.assert_awaited_once()
@@ -1440,5 +1446,5 @@ async def test_direct_daily_job_is_persisted_and_rejects_overlap(
 
         session.add(Job(kind="sync", status="running", message="active"))
         session.commit()
-    blocked = await main.run_daily_pipeline(trigger="test-overlap")
+    blocked = await main.daily_pipeline.run_daily(trigger="test-overlap")
     assert blocked["accepted"] is False

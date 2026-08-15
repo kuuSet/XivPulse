@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
-import socket
 import threading
 import unicodedata
 from collections import Counter
@@ -49,6 +47,7 @@ from .models import (
     Topic,
     utcnow,
 )
+from .pipeline import RUNNING_STATUSES, PipelineCoordinator, update_job_progress
 from .schemas import ProfileUpdate
 from .services.analytics import (
     build_daily_research_report,
@@ -117,53 +116,13 @@ from .services.semantic import (
 LOG = logging.getLogger("xivpulse")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
-PIPELINE_LOCK_PATH = PROJECT_ROOT / "data" / "pipeline.lock"
-RUNNING_STATUSES = ("queued", "running")
 SCREENING_RETRY_DELAYS = (5.0, 30.0)
 FAVORITES_LIBRARY_KIND = "favorites"
 FAVORITES_LIBRARY_NAME = "收藏库"
 FAVORITES_LIBRARY_COLOR = "#b54747"
 _initialization_lock = threading.Lock()
 _initialized = False
-_job_lock = threading.Lock()
-_active_job_id: str | None = None
 _embedding_backfill_started = False
-
-
-def _acquire_pipeline_lock(token: str) -> bool:
-    """Atomically coordinate web and scheduled jobs across local processes."""
-
-    PIPELINE_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-    for _ in range(2):
-        try:
-            descriptor = os.open(
-                PIPELINE_LOCK_PATH,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-            )
-        except FileExistsError:
-            try:
-                age = datetime.now().timestamp() - PIPELINE_LOCK_PATH.stat().st_mtime
-                if age <= timedelta(hours=2).total_seconds():
-                    return False
-                PIPELINE_LOCK_PATH.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError:
-                return False
-            continue
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(f"{token}\n{os.getpid()}\n{socket.gethostname()}\n")
-        return True
-    return False
-
-
-def _release_pipeline_lock(token: str) -> None:
-    try:
-        owner = PIPELINE_LOCK_PATH.read_text(encoding="utf-8").splitlines()[0]
-        if owner == token:
-            PIPELINE_LOCK_PATH.unlink()
-    except (FileNotFoundError, OSError, UnicodeError):
-        return
 
 
 class SettingsPayload(BaseModel):
@@ -1813,7 +1772,7 @@ async def _analyze_stage(
             screened += 1
         completed_or_failed = screened + screening_failed
         progress = 35 + int(42 * completed_or_failed / max(1, screening_queue_total))
-        _update_job_progress(
+        update_job_progress(
             job_id,
             progress=progress,
             message=(
@@ -2347,248 +2306,74 @@ async def _send_daily_report_email(
     }
 
 
-def _update_job_progress(
+async def _finalize_daily_stage(
+    pipeline_date: date,
+    result: dict[str, Any],
     job_id: str | None,
-    *,
-    progress: int,
-    message: str,
-    details: dict[str, Any] | None = None,
-) -> None:
-    if job_id is None:
-        return
-    with session_scope() as db:
-        job = db.get(Job, job_id)
-        if job is not None and job.status in RUNNING_STATUSES:
-            job.progress = max(0, min(100, progress))
-            job.message = message
-            if details:
-                job.result_json = {**job.result, **details}
-
-
-async def _execute_pipeline(
-    kind: Literal["daily", "sync", "analyze"],
-    *,
-    job_id: str | None = None,
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    pipeline_date: date | None = None
-    if kind in ("daily", "sync"):
-        _update_job_progress(job_id, progress=10, message="正在抓取并匹配 arXiv 候选")
-        result.update(await _sync_stage())
-        pipeline_date = date.fromisoformat(str(result["fetch_date"]))
-    if kind in ("daily", "analyze"):
-        _update_job_progress(job_id, progress=35, message="正在进行 AI 摘要初筛与全文深读")
-        result.update(await _analyze_stage(job_id=job_id, report_date=pipeline_date))
-    if kind == "daily":
-        if pipeline_date is None:
-            raise RuntimeError("Daily pipeline is missing its fetch date")
-        _update_job_progress(job_id, progress=88, message="正在重排推荐并保存当日研究日报")
-        result.update(_create_digest(pipeline_date))
-        result.update(
-            _create_daily_research_report(report_date=pipeline_date, screening_status=result)
-        )
-        current_report_date = date.fromisoformat(str(result["report_date"]))
-        refreshed_report_dates: list[str] = []
-        for value in result.get("screening_report_dates", []):
-            selected_date = date.fromisoformat(str(value))
-            if selected_date == current_report_date:
-                continue
-            with SessionLocal() as db:
-                profile = _active_profile(db)
-                status_rows = dict(
-                    db.execute(
-                        select(
-                            ScreeningQueueItem.status,
-                            func.count(ScreeningQueueItem.id),
-                        )
-                        .where(
-                            ScreeningQueueItem.profile_id == profile.id,
-                            ScreeningQueueItem.report_date == selected_date,
-                        )
-                        .group_by(ScreeningQueueItem.status)
-                    ).all()
-                )
-            total = sum(int(count) for count in status_rows.values())
-            failed = int(status_rows.get("failed", 0))
-            _create_daily_research_report(
-                report_date=selected_date,
-                screening_status={
-                    "screening_queue_total": total,
-                    "screening_completed": int(status_rows.get("completed", 0)),
-                    "screening_failed": failed,
-                    "screening_batches": 0,
-                    "report_incomplete": failed > 0,
-                },
+    update_job_progress(job_id, progress=88, message="正在重排推荐并保存当日研究日报")
+    result.update(_create_digest(pipeline_date))
+    result.update(
+        _create_daily_research_report(report_date=pipeline_date, screening_status=result)
+    )
+    current_report_date = date.fromisoformat(str(result["report_date"]))
+    refreshed_report_dates: list[str] = []
+    for value in result.get("screening_report_dates", []):
+        selected_date = date.fromisoformat(str(value))
+        if selected_date == current_report_date:
+            continue
+        with SessionLocal() as db:
+            profile = _active_profile(db)
+            status_rows = dict(
+                db.execute(
+                    select(
+                        ScreeningQueueItem.status,
+                        func.count(ScreeningQueueItem.id),
+                    )
+                    .where(
+                        ScreeningQueueItem.profile_id == profile.id,
+                        ScreeningQueueItem.report_date == selected_date,
+                    )
+                    .group_by(ScreeningQueueItem.status)
+                ).all()
             )
-            refreshed_report_dates.append(selected_date.isoformat())
-        result["refreshed_report_dates"] = refreshed_report_dates
-        _update_job_progress(job_id, progress=94, message="正在生成并保存 AI 综合研判")
-        result.update(
-            await _synthesize_daily_research_report(
-                current_report_date,
-                force=False,
-                respect_enabled=True,
-            )
+        total = sum(int(count) for count in status_rows.values())
+        failed = int(status_rows.get("failed", 0))
+        _create_daily_research_report(
+            report_date=selected_date,
+            screening_status={
+                "screening_queue_total": total,
+                "screening_completed": int(status_rows.get("completed", 0)),
+                "screening_failed": failed,
+                "screening_batches": 0,
+                "report_incomplete": failed > 0,
+            },
         )
-        result.update(
-            await _send_daily_report_email(
-                current_report_date,
-                delivery_kind="automatic",
-            )
+        refreshed_report_dates.append(selected_date.isoformat())
+    result["refreshed_report_dates"] = refreshed_report_dates
+    update_job_progress(job_id, progress=94, message="正在生成并保存 AI 综合研判")
+    result.update(
+        await _synthesize_daily_research_report(
+            current_report_date,
+            force=False,
+            respect_enabled=True,
         )
+    )
+    result.update(
+        await _send_daily_report_email(
+            current_report_date,
+            delivery_kind="automatic",
+        )
+    )
     return result
 
 
-async def run_daily_pipeline(trigger: str = "manual") -> dict[str, Any]:
-    """Run once in the caller process, used by Windows Task Scheduler."""
-    global _active_job_id
-    initialize_application()
-    with _job_lock:
-        if _active_job_id is not None:
-            return {"accepted": False, "success": False, "message": "已有任务正在运行"}
-        lock_token = f"direct:{uuid4()}"
-        if not _acquire_pipeline_lock(lock_token):
-            return {"accepted": False, "success": False, "message": "已有任务正在运行"}
-        try:
-            with session_scope() as db:
-                existing = db.scalar(
-                    select(Job)
-                    .where(Job.status.in_(RUNNING_STATUSES))
-                    .order_by(desc(Job.created_at))
-                )
-                if existing:
-                    heartbeat = _as_utc(existing.started_at or existing.created_at)
-                    if not heartbeat or heartbeat >= utcnow() - timedelta(hours=2):
-                        _release_pipeline_lock(lock_token)
-                        return {
-                            "accepted": False,
-                            "success": False,
-                            "message": "已有任务正在运行",
-                        }
-                    existing.status = "failed"
-                    existing.error = "应用退出后遗留的任务已自动关闭"
-                    existing.completed_at = utcnow()
-                job = Job(
-                    kind="daily",
-                    status="running",
-                    message=f"计划任务执行中（{trigger}）",
-                    progress=5,
-                    started_at=utcnow(),
-                )
-                db.add(job)
-                db.flush()
-                job_id = job.id
-        except Exception:
-            _release_pipeline_lock(lock_token)
-            raise
-        if "job_id" not in locals():
-            _release_pipeline_lock(lock_token)
-            return {"accepted": False, "success": False, "message": "无法创建任务"}
-        _active_job_id = job_id
-    try:
-        result = await _execute_pipeline("daily", job_id=job_id)
-        with session_scope() as db:
-            job = db.get(Job, job_id)
-            if job:
-                job.status = "completed"
-                job.progress = 100
-                job.result_json = result
-                job.message = "计划任务已完成"
-                job.completed_at = utcnow()
-        return {"accepted": True, "success": True, **result}
-    except Exception as exc:
-        LOG.exception("Direct daily pipeline failed")
-        with session_scope() as db:
-            job = db.get(Job, job_id)
-            if job:
-                job.status = "failed"
-                job.error = str(exc)
-                job.message = "计划任务失败"
-                job.completed_at = utcnow()
-        return {"accepted": True, "success": False, "error": str(exc)}
-    finally:
-        with _job_lock:
-            if _active_job_id == job_id:
-                _active_job_id = None
-        _release_pipeline_lock(lock_token)
-
-
-async def _run_job(job_id: str, kind: Literal["daily", "sync", "analyze"]) -> None:
-    global _active_job_id
-    try:
-        with session_scope() as db:
-            job = db.get(Job, job_id)
-            if job is None:
-                return
-            job.status = "running"
-            job.started_at = utcnow()
-            job.message = "任务执行中"
-            job.progress = 5
-        result = await _execute_pipeline(kind, job_id=job_id)
-        with session_scope() as db:
-            job = db.get(Job, job_id)
-            if job:
-                job.status = "completed"
-                job.progress = 100
-                job.result_json = result
-                job.message = "任务已完成"
-                job.completed_at = utcnow()
-    except Exception as exc:
-        LOG.exception("Background job %s failed", job_id)
-        with session_scope() as db:
-            job = db.get(Job, job_id)
-            if job:
-                job.status = "failed"
-                job.error = str(exc)
-                job.message = "任务失败"
-                job.completed_at = utcnow()
-    finally:
-        with _job_lock:
-            if _active_job_id == job_id:
-                _active_job_id = None
-        _release_pipeline_lock(job_id)
-
-
-def _start_job(kind: Literal["daily", "sync", "analyze"]) -> dict[str, Any]:
-    global _active_job_id
-    initialize_application()
-    with _job_lock:
-        if _active_job_id is not None:
-            raise HTTPException(status_code=409, detail="已有抓取或分析任务正在运行")
-        try:
-            with session_scope() as db:
-                existing = db.scalar(
-                    select(Job)
-                    .where(Job.status.in_(RUNNING_STATUSES))
-                    .order_by(desc(Job.created_at))
-                )
-                if existing:
-                    heartbeat = _as_utc(existing.started_at or existing.created_at)
-                    if heartbeat and heartbeat < utcnow() - timedelta(hours=2):
-                        existing.status = "failed"
-                        existing.error = "应用上次退出后遗留的任务已自动关闭"
-                        existing.message = "任务超时"
-                        existing.completed_at = utcnow()
-                    else:
-                        _active_job_id = existing.id
-                        raise HTTPException(
-                            status_code=409,
-                            detail="已有抓取或分析任务正在运行",
-                        )
-                job_id = str(uuid4())
-                if not _acquire_pipeline_lock(job_id):
-                    raise HTTPException(
-                        status_code=409,
-                        detail="已有抓取或分析任务正在运行",
-                    )
-                db.add(Job(id=job_id, kind=kind, status="queued", message="任务已排队"))
-        except Exception:
-            if "job_id" in locals():
-                _release_pipeline_lock(job_id)
-            raise
-        _active_job_id = job_id
-    asyncio.create_task(_run_job(job_id, kind))
-    return {"job_id": job_id, "status": "queued", "message": "任务已在后台启动"}
+daily_pipeline = PipelineCoordinator(
+    initialize=initialize_application,
+    sync_stage=_sync_stage,
+    analyze_stage=_analyze_stage,
+    finalize_daily_stage=_finalize_daily_stage,
+)
 
 
 def _provider_public_status(db: Session) -> dict[str, Any]:
@@ -3582,22 +3367,22 @@ async def test_email_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @app.post("/api/refresh", status_code=status.HTTP_202_ACCEPTED)
 async def refresh() -> dict[str, Any]:
-    return _start_job("daily")
+    return daily_pipeline.start_job("daily")
 
 
 @app.post("/api/run-daily", status_code=status.HTTP_202_ACCEPTED)
 async def start_daily() -> dict[str, Any]:
-    return _start_job("daily")
+    return daily_pipeline.start_job("daily")
 
 
 @app.post("/api/sync", status_code=status.HTTP_202_ACCEPTED)
 async def sync() -> dict[str, Any]:
-    return _start_job("sync")
+    return daily_pipeline.start_job("sync")
 
 
 @app.post("/api/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze() -> dict[str, Any]:
-    return _start_job("analyze")
+    return daily_pipeline.start_job("analyze")
 
 
 @app.get("/api/jobs/{job_id}")
@@ -3886,4 +3671,4 @@ else:
         <p><a href="/docs">打开 API 文档</a></p>"""
 
 
-__all__ = ["app", "initialize_application", "run_daily_pipeline"]
+__all__ = ["app", "daily_pipeline", "initialize_application"]
