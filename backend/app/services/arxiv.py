@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
+import os
 import re
 import threading
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, date, datetime
-from datetime import time as datetime_time
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -23,9 +24,9 @@ from sqlalchemy.orm import Session
 from ..models import Paper, PaperVersion, Topic, utcnow
 
 ATOM_API_URL = "https://export.arxiv.org/api/query"
-RSS_BASE_URL = "https://rss.arxiv.org/rss"
 SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
+RUST_FETCH_BINARY = "xivpulse-rs"
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"
     r"(?:v(?P<version>\d+))?",
@@ -218,30 +219,6 @@ def _child_text(element: ET.Element, names: set[str]) -> str | None:
     return None
 
 
-def _entry_id(element: ET.Element) -> str | None:
-    candidates = [
-        _child_text(element, {"id", "guid"}),
-        _child_text(element, {"link"}),
-    ]
-    for child in element:
-        if _local_name(child.tag) == "link":
-            candidates.append(child.attrib.get("href"))
-    for value in candidates:
-        if not value:
-            continue
-        try:
-            return parse_arxiv_id(value).versioned_id
-        except ValueError:
-            continue
-    return None
-
-
-def _html_to_text(value: str | None) -> str:
-    if not value:
-        return ""
-    return _clean_text(BeautifulSoup(value, "html.parser").get_text(" "))
-
-
 def parse_html_affiliations(payload: str | bytes) -> list[str]:
     """Extract only explicitly marked affiliations from an arXiv HTML author block."""
 
@@ -325,44 +302,6 @@ def _parse_atom_entry(entry: ET.Element) -> ArxivRecord | None:
     return record
 
 
-def _parse_rss_item(item: ET.Element) -> ArxivRecord | None:
-    raw_id = _entry_id(item)
-    if raw_id is None:
-        return None
-    normalized = parse_arxiv_id(raw_id)
-    categories = [
-        _clean_text(child.text)
-        for child in item
-        if _local_name(child.tag) in {"category", "primary_category"} and child.text
-    ]
-    raw_authors = _child_text(item, {"creator", "author"}) or ""
-    authors = [
-        part.strip()
-        for part in re.split(r"\s*(?:,|;|\band\b)\s*", _clean_text(raw_authors))
-        if part.strip()
-    ]
-    link = _clean_text(_child_text(item, {"link"}))
-    description = _child_text(item, {"description", "summary"})
-    # RSS descriptions sometimes start with an author line; preserve it because
-    # removing it heuristically could delete legitimate abstract text.
-    abstract = _html_to_text(description)
-    record = ArxivRecord(
-        arxiv_id=normalized.base_id,
-        version=normalized.version,
-        title=_clean_text(_child_text(item, {"title"})),
-        abstract=abstract,
-        authors=authors,
-        categories=list(dict.fromkeys(category for category in categories if category)),
-        primary_category=categories[0] if categories else None,
-        abs_url=link if "/abs/" in link else "",
-        published_at=_parse_datetime(_child_text(item, {"pubdate", "date", "published"})),
-        updated_at=_parse_datetime(_child_text(item, {"updated", "pubdate", "date"})),
-        source="rss",
-    )
-    record.canonicalize_urls()
-    return record
-
-
 def deduplicate_records(records: Iterable[ArxivRecord]) -> list[ArxivRecord]:
     selected: dict[str, ArxivRecord] = {}
     positions: dict[str, int] = {}
@@ -382,28 +321,33 @@ def deduplicate_records(records: Iterable[ArxivRecord]) -> list[ArxivRecord]:
 
 
 def parse_arxiv_feed(payload: str | bytes) -> list[ArxivRecord]:
-    """Parse an arXiv Atom or RSS document and deduplicate base identifiers."""
+    """Parse arXiv Atom metadata used by bounded ID enrichment."""
 
     try:
         root = ET.fromstring(payload)
     except (ET.ParseError, TypeError) as exc:
         raise ValueError("Invalid arXiv XML feed") from exc
     root_name = _local_name(root.tag)
-    if root_name == "feed":
-        parsed = [
-            record
-            for child in root
-            if _local_name(child.tag) == "entry" and (record := _parse_atom_entry(child))
-        ]
-    elif root_name in {"rss", "rdf"}:
-        parsed = [
-            record
-            for child in root.iter()
-            if _local_name(child.tag) == "item" and (record := _parse_rss_item(child))
-        ]
-    else:
+    if root_name != "feed":
         raise ValueError(f"Unsupported feed root: {root_name}")
+    parsed = [
+        record
+        for child in root
+        if _local_name(child.tag) == "entry" and (record := _parse_atom_entry(child))
+    ]
     return deduplicate_records(parsed)
+
+
+def _parse_rust_records(payload: bytes) -> list[ArxivRecord]:
+    records: list[ArxivRecord] = []
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        value = json.loads(line)
+        value["published_at"] = _parse_datetime(value.get("published_at"))
+        value["updated_at"] = _parse_datetime(value.get("updated_at"))
+        records.append(ArxivRecord(**value))
+    return records
 
 
 def _topic_attr(topic: Topic | dict[str, Any], name: str, default: Any = None) -> Any:
@@ -491,31 +435,6 @@ class ArxivClient:
         if len(response.content) > 20 * 1024 * 1024:
             raise ValueError("arXiv feed response exceeded 20 MiB")
         return response.content
-
-    async def fetch_atom(
-        self,
-        query: str,
-        *,
-        start: int = 0,
-        max_results: int = 100,
-        sort_by: str = "submittedDate",
-        sort_order: str = "descending",
-    ) -> list[ArxivRecord]:
-        if not query.strip():
-            raise ValueError("arXiv search query cannot be empty")
-        max_results = min(max(1, int(max_results)), 2000)
-        start = max(0, int(start))
-        payload = await self._get(
-            ATOM_API_URL,
-            params={
-                "search_query": query,
-                "start": start,
-                "max_results": max_results,
-                "sortBy": sort_by,
-                "sortOrder": sort_order,
-            },
-        )
-        return parse_arxiv_feed(payload)
 
     async def fetch_by_ids(self, arxiv_ids: Sequence[str]) -> list[ArxivRecord]:
         """Fetch richer Atom metadata for a bounded set of known papers."""
@@ -640,7 +559,18 @@ class ArxivClient:
         fetched = await asyncio.gather(*(fetch_one(arxiv_id) for arxiv_id in clean))
         return {arxiv_id: affiliations for arxiv_id, affiliations in fetched if affiliations}
 
-    async def fetch_rss(self, categories: Sequence[str]) -> list[ArxivRecord]:
+    async def fetch_daily(
+        self,
+        topics: Sequence[Topic | dict[str, Any]],
+        *,
+        max_results: int = 100,
+    ) -> list[ArxivRecord]:
+        categories = [
+            category
+            for topic in topics
+            if _topic_attr(topic, "enabled", True)
+            for category in (_topic_attr(topic, "arxiv_categories", []) or [])
+        ]
         clean = list(
             dict.fromkeys(
                 value.strip()
@@ -650,51 +580,21 @@ class ArxivClient:
         )
         if not clean:
             raise ValueError("At least one valid arXiv category is required")
-        category_path = "+".join(quote(value, safe=".-") for value in clean)
-        payload = await self._get(f"{RSS_BASE_URL}/{category_path}")
-        return parse_arxiv_feed(payload)
-
-    async def fetch_daily(
-        self,
-        topics: Sequence[Topic | dict[str, Any]],
-        *,
-        since: date | datetime | None = None,
-        until: date | datetime | None = None,
-        max_results: int = 100,
-        use_rss: bool = False,
-    ) -> list[ArxivRecord]:
-        if use_rss:
-            categories: list[str] = []
-            for topic in topics:
-                if _topic_attr(topic, "enabled", True):
-                    categories.extend(_topic_attr(topic, "arxiv_categories", []) or [])
-            records = await self.fetch_rss(categories)
-        else:
-            query = build_profile_query(topics)
-            records = await self.fetch_atom(query, max_results=max_results)
-
-        start_dt = _date_boundary(since, end=False) if since is not None else None
-        end_dt = _date_boundary(until, end=True) if until is not None else None
-        if start_dt is None and end_dt is None:
-            return records
-        return [
-            record
-            for record in records
-            if (
-                start_dt is None
-                or (record.published_at or record.updated_at or start_dt) >= start_dt
-            )
-            and (end_dt is None or (record.published_at or record.updated_at or end_dt) <= end_dt)
-        ]
-
-
-def _date_boundary(value: date | datetime, *, end: bool) -> datetime:
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=UTC)
-        return value.astimezone(UTC)
-    boundary = datetime_time.max if end else datetime_time.min
-    return datetime.combine(value, boundary, tzinfo=UTC)
+        environment = os.environ.copy()
+        environment["XIVPULSE_ARXIV_CATEGORIES"] = ",".join(clean)
+        environment["XIVPULSE_FETCH_LIMIT"] = str(min(max(1, int(max_results)), 2000))
+        process = await asyncio.create_subprocess_exec(
+            RUST_FETCH_BINARY,
+            "fetch",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=environment,
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            detail = stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(detail or f"Rust arXiv fetch exited with {process.returncode}")
+        return _parse_rust_records(stdout)
 
 
 def upsert_papers(
@@ -811,7 +711,6 @@ __all__ = [
     "ArxivClient",
     "ArxivRecord",
     "NormalizedArxivId",
-    "RSS_BASE_URL",
     "UpsertResult",
     "build_profile_query",
     "deduplicate_records",

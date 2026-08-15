@@ -1380,7 +1380,6 @@ async def _sync_stage() -> dict[str, Any]:
     records = await client.fetch_daily(
         topics,
         max_results=max_results,
-        use_rss=True,
     )
     records = records[:max_results]
     enrichment_candidates: list[tuple[float, str]] = []

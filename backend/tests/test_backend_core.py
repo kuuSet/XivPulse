@@ -296,6 +296,49 @@ def test_parse_normalize_dedupe_and_version_upsert() -> None:
         assert latest_version.affiliations == ["NVIDIA Research"]
 
 
+@pytest.mark.asyncio
+async def test_daily_fetch_invokes_rust_rss_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.services.arxiv as arxiv_module
+
+    captured: dict[str, object] = {}
+
+    class Process:
+        returncode = 0
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return (
+                b'{"arxiv_id":"2608.01234","version":2,"title":"Robot paper",'
+                b'"published_at":"2026-08-14T00:00:00-04:00",'
+                b'"updated_at":"2026-08-14T00:00:00-04:00","source":"rss"}\n',
+                b"categories=cs.RO,cs.AI fetched=1 emitted=1\n",
+            )
+
+    async def create_subprocess(*args: object, **kwargs: object) -> Process:
+        captured["args"] = args
+        captured["env"] = kwargs["env"]
+        return Process()
+
+    monkeypatch.setattr(arxiv_module.asyncio, "create_subprocess_exec", create_subprocess)
+    records = await ArxivClient().fetch_daily(
+        [
+            {"enabled": True, "arxiv_categories": ["cs.RO", "cs.AI"]},
+            {"enabled": True, "arxiv_categories": ["cs.RO"]},
+        ],
+        max_results=17,
+    )
+
+    assert captured["args"] == ("xivpulse-rs", "fetch")
+    environment = captured["env"]
+    assert isinstance(environment, dict)
+    assert environment["XIVPULSE_ARXIV_CATEGORIES"] == "cs.RO,cs.AI"
+    assert environment["XIVPULSE_FETCH_LIMIT"] == "17"
+    assert len(records) == 1
+    assert records[0].arxiv_id == "2608.01234"
+    assert records[0].version == 2
+    assert records[0].published_at == datetime(2026, 8, 14, 4, tzinfo=UTC)
+    assert records[0].source == "rss"
+
+
 def test_html_affiliations_only_reads_explicit_author_roles() -> None:
     payload = """
     <html><body><div class="ltx_authors">

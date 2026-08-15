@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:arxiv="http://arxiv.org/schemas/atom"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     version="2.0">
+  <channel>
+    <title>cs.RO, cs.AI updates on arXiv.org</title>
+    <pubDate>Fri, 14 Aug 2026 00:00:00 -0400</pubDate>
+    <item>
+      <title>An older robot paper</title>
+      <link>https://arxiv.org/abs/2608.00001</link>
+      <description><![CDATA[arXiv:2608.00001v1 Announce Type: new <br/> Abstract: First abstract.]]></description>
+      <guid isPermaLink="false">oai:arXiv.org:2608.00001v1</guid>
+      <category>cs.RO</category>
+      <dc:creator>Ada Researcher</dc:creator>
+      <pubDate>Thu, 13 Aug 2026 00:00:00 -0400</pubDate>
+      <arxiv:announce_type>new</arxiv:announce_type>
+    </item>
+    <item>
+      <title>A second paper</title>
+      <link>https://arxiv.org/abs/2608.00002</link>
+      <description>arXiv:2608.00002v1 Announce Type: cross Abstract: A second abstract.</description>
+      <guid isPermaLink="false">oai:arXiv.org:2608.00002v1</guid>
+      <category>cs.AI</category>
+      <dc:creator>Alan Author</dc:creator>
+      <pubDate>Fri, 14 Aug 2026 00:00:00 -0400</pubDate>
+    </item>
+    <item>
+      <title>A newer robot paper</title>
+      <link>https://arxiv.org/abs/2608.00001</link>
+      <description>arXiv:2608.00001v2 Announce Type: replace Abstract: Revised abstract.</description>
+      <guid isPermaLink="false">oai:arXiv.org:2608.00001v2</guid>
+      <category>cs.RO</category>
+      <category>cs.AI</category>
+      <dc:creator>Ada Researcher, Grace Scientist</dc:creator>
+      <pubDate>Fri, 14 Aug 2026 00:00:00 -0400</pubDate>
+      <arxiv:journal_reference>Journal of Robots 1 (2026)</arxiv:journal_reference>
+      <arxiv:DOI>10.1000/robot.1</arxiv:DOI>
+    </item>
+  </channel>
+</rss>
