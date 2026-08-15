@@ -355,14 +355,14 @@ def test_server_auth_login_cookie_and_logout(
 async def test_email_delivery_is_idempotent_for_automatic_report(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.services import daily_reports
 
     sent_subjects: list[str] = []
 
     def fake_deliver(_config: object, message: object) -> None:
         sent_subjects.append(str(message["Subject"]))  # type: ignore[index]
 
-    monkeypatch.setattr(main, "deliver_message", fake_deliver)
+    monkeypatch.setattr(daily_reports, "deliver_message", fake_deliver)
     saved = client.put(
         "/api/settings",
         json={
@@ -380,10 +380,10 @@ async def test_email_delivery_is_idempotent_for_automatic_report(
     assert "secret" not in saved.text
     report_date = date(2026, 8, 14)
     assert client.get(f"/api/reports/daily?date={report_date.isoformat()}").status_code == 200
-    first = await main._send_daily_report_email(
+    first = await daily_reports.send_daily_report_email(
         report_date, delivery_kind="automatic", require_enabled=False
     )
-    second = await main._send_daily_report_email(
+    second = await daily_reports.send_daily_report_email(
         report_date, delivery_kind="automatic", require_enabled=False
     )
     assert first["email_sent"] == 1
@@ -530,7 +530,7 @@ def _saved_synthesis_report(report_date: date) -> dict[str, object]:
 async def test_daily_ai_synthesis_is_persisted_and_counted(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.services import daily_reports
     from app.services.analyzer import GenerationResult, TokenUsage
     from app.services.report_synthesis import DailyReportSynthesis, SynthesisThread
 
@@ -589,7 +589,7 @@ async def test_daily_ai_synthesis_is_persisted_and_counted(
         usage=TokenUsage(input_tokens=800, output_tokens=300, total_tokens=1100),
     )
     fake_generate = AsyncMock(return_value=generated)
-    monkeypatch.setattr(main, "generate_daily_report_synthesis", fake_generate)
+    monkeypatch.setattr(daily_reports, "generate_daily_report_synthesis", fake_generate)
 
     response = client.post(
         "/api/reports/daily/synthesize",
@@ -613,7 +613,7 @@ async def test_daily_ai_synthesis_is_persisted_and_counted(
 def test_daily_ai_synthesis_without_key_does_not_call_provider(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.services import daily_reports
 
     report_date = date(2026, 8, 13)
     with database.SessionLocal() as session:
@@ -627,7 +627,7 @@ def test_daily_ai_synthesis_without_key_does_not_call_provider(
         )
         session.commit()
     fake_generate = AsyncMock()
-    monkeypatch.setattr(main, "generate_daily_report_synthesis", fake_generate)
+    monkeypatch.setattr(daily_reports, "generate_daily_report_synthesis", fake_generate)
 
     response = client.post(
         "/api/reports/daily/synthesize",
@@ -1110,7 +1110,7 @@ def test_trends_roadmap_and_daily_report_use_requested_date(client: TestClient) 
 def test_daily_report_snapshot_is_stable_refreshable_and_listed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
+    from app.services import daily_reports
 
     builds: list[int] = []
 
@@ -1127,7 +1127,7 @@ def test_daily_report_snapshot_is_stable_refreshable_and_listed(
             "suggested_reading_queue": [],
         }
 
-    monkeypatch.setattr(main, "build_daily_research_report", fake_report)
+    monkeypatch.setattr(daily_reports, "build_daily_research_report", fake_report)
     report_date = "2026-07-03"
 
     first = client.get("/api/reports/daily", params={"date": report_date})
@@ -1154,7 +1154,7 @@ def test_daily_report_snapshot_is_stable_refreshable_and_listed(
             "status": "ready",
             "headline": "已保存的综合研判",
             "overall_assessment": "这份内容必须在确定性日报重建后继续保留。",
-            "source_hash": main.report_source_hash(payload),
+            "source_hash": daily_reports.report_source_hash(payload),
             "stale": False,
         }
         snapshot.payload_json = payload
@@ -1219,8 +1219,8 @@ def test_daily_report_without_date_uses_latest_complete_digest(
 def test_pipeline_report_stage_uses_configured_timezone_and_upserts(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.main as main
     from app.models import DailyResearchReport
+    from app.services import daily_reports
 
     report_day = date(2026, 7, 4)
     timezone_calls: list[str] = []
@@ -1240,11 +1240,11 @@ def test_pipeline_report_stage_uses_configured_timezone_and_upserts(
             "coverage": {"paper_count": 0},
         }
 
-    monkeypatch.setattr(main, "current_date_in_timezone", fake_current_date)
-    monkeypatch.setattr(main, "build_daily_research_report", fake_report)
+    monkeypatch.setattr(daily_reports, "current_date_in_timezone", fake_current_date)
+    monkeypatch.setattr(daily_reports, "build_daily_research_report", fake_report)
 
-    first = main._create_daily_research_report()
-    second = main._create_daily_research_report()
+    first = daily_reports.create_daily_report()
+    second = daily_reports.create_daily_report()
     assert first["report_snapshot_id"] == second["report_snapshot_id"]
     assert first["report_date"] == report_day.isoformat()
     assert timezone_calls == ["Asia/Shanghai", "Asia/Shanghai"]

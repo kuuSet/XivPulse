@@ -9,6 +9,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .state import clean_string_list
+
 METHOD_CATALOG_VERSION = "2026.08.1"
 METHOD_CANDIDATE_WINDOW_DAYS = 30
 METHOD_CANDIDATE_MIN_PAPERS = 2
@@ -987,6 +989,28 @@ METHOD_CATALOG: tuple[MethodTerm, ...] = (
 def normalize_method_key(value: object) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
     return re.sub(r"[\s_\-‐‑‒–—]+", "", text)
+
+
+def clean_custom_methods(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in value[:100]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        key = normalize_method_key(name)
+        if not name or not key or key in seen:
+            continue
+        result.append(
+            {
+                "name": name,
+                "aliases": clean_string_list(item.get("aliases", []), limit=20),
+            }
+        )
+        seen.add(key)
+    return result
 
 
 def _has_term(text: str, term: str) -> bool:

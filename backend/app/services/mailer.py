@@ -69,6 +69,13 @@ def smtp_config(settings: Mapping[str, Any]) -> SmtpConfig:
     )
 
 
+def email_enabled(settings: Mapping[str, Any]) -> bool:
+    environment = env_value("XIVPULSE_EMAIL_ENABLED", "ARXIV_DAILY_EMAIL_ENABLED")
+    if environment is not None:
+        return environment.strip().casefold() in {"1", "true", "yes", "on"}
+    return bool(settings.get("email_enabled", False))
+
+
 def _report_url(config: SmtpConfig, report_date: str) -> str:
     if not config.public_base_url:
         return ""

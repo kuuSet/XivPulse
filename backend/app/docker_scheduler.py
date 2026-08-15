@@ -10,8 +10,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import desc, select
 
 from .database import SessionLocal
-from .main import daily_pipeline, initialize_application
 from .models import AppSetting, Job
+from .runtime import initialize_application
+from .workflow import daily_pipeline
 
 LOG = logging.getLogger("xivpulse.scheduler")
 
