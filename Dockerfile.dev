@@ -1,0 +1,14 @@
+ARG RUST_IMAGE=rust:1.85-slim-bookworm
+FROM ${RUST_IMAGE}
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup component add clippy rustfmt
+
+WORKDIR /workspace/rust
+
+ENV CARGO_BUILD_JOBS=2 \
+    CARGO_TARGET_DIR=/cargo-target
+
+CMD ["sleep", "infinity"]
