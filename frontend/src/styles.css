@@ -2207,6 +2207,16 @@ select:focus-visible,
   gap: 12px;
 }
 
+.direction-language-note {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid #4384bb;
+  color: #42617c;
+  background: var(--blue-soft);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
 .direction-editor {
   display: grid;
   gap: 13px;

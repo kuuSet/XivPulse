@@ -1869,6 +1869,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
             <footer className="catalog-footer"><CircleAlert size={14} /><span>建议最终启用 3–12 个边界明确的方向。选择过多会扩大抓取范围、削弱日报重点，并增加摘要初筛成本。</span></footer>
           </FormSection>}
           <FormSection title="我关注的研究方向" description="一个方向对应趋势和日报中的一个名称。相近概念放在同一方向的匹配词里，不必拆成多个标签。">
+            <p className="direction-language-note">方向名称可以使用中文；参与语义召回的别名、匹配词、领域限定词和排除词请使用英文。</p>
             <div className="direction-editor-list">
               {profile.topics.map((topic, index) => <article className={`direction-editor ${topic.enabled === false ? 'disabled' : ''}`} key={topic.id ?? `new-${index}`}>
                 <header>
@@ -1878,7 +1879,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
                     <button type="button" className="icon-button danger" title="删除方向" onClick={() => removeTopic(index)}><Trash2 size={16} /></button>
                   </div>
                 </header>
-                <TagEditor label="匹配词" tone="positive" tags={topic.keywords ?? []} placeholder="例如 world model、接触丰富操作" onChange={(keywords) => updateTopic(index, { keywords })} />
+                <TagEditor label="匹配词" tone="positive" tags={topic.keywords ?? []} placeholder="例如 world model、contact-rich manipulation" onChange={(keywords) => updateTopic(index, { keywords })} />
                 <details className="direction-advanced">
                   <summary><SlidersHorizontal size={14} /><span>高级规则</span><small>别名、误匹配控制与抓取范围</small><ChevronDown size={14} /></summary>
                   <div>
