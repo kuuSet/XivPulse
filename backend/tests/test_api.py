@@ -1348,6 +1348,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     from app.services.paper_sync import sync_papers
     from app.services.semantic import SemanticMatch
 
+    stages: list[str] = []
     records = [
         PaperDocument(
             arxiv_id="2608.08888",
@@ -1374,6 +1375,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
 
     class FakeArxivClient:
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[PaperDocument]:
+            stages.append("fetch")
             return records
 
         async def fetch_html_affiliations(
@@ -1385,11 +1387,14 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         async def fetch_affiliations(
             self, _arxiv_ids: list[str]
         ) -> dict[str, list[str]]:
+            stages.append("enrich")
             return {}
 
     def semantic_results(
         _session: object, papers: list[Paper], _topics: object
     ) -> dict[int, SemanticMatch]:
+        stages.append("recall")
+        assert all(paper.id is not None for paper in papers)
         return {
             paper.id: SemanticMatch(
                 score=0.2 if paper.arxiv_id == "2608.08888" else 0.8,
@@ -1408,6 +1413,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     assert result["fetched"] == 2
     assert result["queued"] == 1
     assert result["fetch_date"] == "2026-08-14"
+    assert stages == ["fetch", "recall", "enrich"]
     with database.SessionLocal() as session:
         matches = {
             match.paper.arxiv_id: match
@@ -1435,7 +1441,8 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient,
 ) -> None:
-    from app.services.paper_sync import SemanticEmbeddingError, sync_papers
+    from app.services.paper_sync import sync_papers
+    from app.services.semantic import SemanticEmbeddingError
     from app.services.state import set_setting
 
     record = PaperDocument(
