@@ -313,6 +313,96 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
     assert records[0].source == "atom"
 
 
+@pytest.mark.asyncio
+async def test_daily_fetch_retries_transient_network_and_http_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import arxiv as arxiv_module
+
+    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
+    requests: list[httpx.Request] = []
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            raise httpx.ConnectError("temporary connection failure", request=request)
+        if len(requests) == 2:
+            return httpx.Response(503, headers={"Retry-After": "0"})
+        return httpx.Response(200, content=payload)
+
+    monkeypatch.setattr(arxiv_module.asyncio, "sleep", fake_sleep)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        records = await ArxivClient(
+            http_client=http_client,
+            rate_limit_seconds=0,
+        ).fetch_daily(
+            [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+            target_date=date(2026, 8, 13),
+            max_results=17,
+        )
+
+    assert len(requests) == 3
+    assert len(delays) == 2
+    assert delays[-1] == 0
+    assert len(records) == 2
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(400, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await ArxivClient(
+                http_client=http_client,
+                rate_limit_seconds=0,
+            ).fetch_daily(
+                [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+                target_date=date(2026, 8, 13),
+                max_results=17,
+            )
+
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_stops_after_three_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import arxiv as arxiv_module
+
+    requests: list[httpx.Request] = []
+
+    async def no_wait(_delay: float) -> None:
+        pass
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(503, headers={"Retry-After": "0"}, request=request)
+
+    monkeypatch.setattr(arxiv_module.asyncio, "sleep", no_wait)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await ArxivClient(
+                http_client=http_client,
+                rate_limit_seconds=0,
+            ).fetch_daily(
+                [{"enabled": True, "arxiv_categories": ["cs.RO"]}],
+                target_date=date(2026, 8, 13),
+                max_results=17,
+            )
+
+    assert len(requests) == 3
+
+
 def test_atom_parser_deduplicates_and_preserves_reported_total() -> None:
     payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
     total, records = parse_arxiv_feed(payload)

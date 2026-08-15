@@ -24,6 +24,9 @@ from ..models import Paper, PaperVersion, Topic, utcnow
 SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
+_MAX_REQUEST_ATTEMPTS = 3
+_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_RETRY_DELAY_SECONDS = 30.0
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"
     r"(?:v(?P<version>\d+))?",
@@ -203,6 +206,13 @@ def _as_utc(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
+    retry_after = response.headers.get("Retry-After", "").strip() if response else ""
+    if retry_after.isdigit():
+        return min(float(retry_after), _MAX_RETRY_DELAY_SECONDS)
+    return min(float(2**attempt), _MAX_RETRY_DELAY_SECONDS)
 
 
 def parse_html_affiliations(payload: str | bytes) -> list[str]:
@@ -407,7 +417,6 @@ class ArxivClient:
         request_timeout: float | None = None,
         params: dict[str, str | int] | None = None,
     ) -> bytes:
-        await polite_wait(self.rate_limit_seconds)
         headers = {
             "User-Agent": self.user_agent,
             "Accept": accept,
@@ -421,15 +430,30 @@ class ArxivClient:
             async with httpx.AsyncClient(follow_redirects=True) as client:
                 return await client.get(url, headers=headers, params=params, timeout=self.timeout)
 
-        if request_timeout is None:
-            response = await request()
-        else:
-            async with asyncio.timeout(max(1.0, request_timeout)):
-                response = await request()
-        response.raise_for_status()
-        if len(response.content) > 20 * 1024 * 1024:
-            raise ValueError("arXiv feed response exceeded 20 MiB")
-        return response.content
+        for attempt in range(_MAX_REQUEST_ATTEMPTS):
+            await polite_wait(self.rate_limit_seconds)
+            try:
+                if request_timeout is None:
+                    response = await request()
+                else:
+                    async with asyncio.timeout(max(1.0, request_timeout)):
+                        response = await request()
+            except (TimeoutError, httpx.TransportError):
+                if attempt + 1 == _MAX_REQUEST_ATTEMPTS:
+                    raise
+                await asyncio.sleep(_retry_delay(attempt))
+                continue
+            if (
+                response.status_code in _TRANSIENT_STATUS_CODES
+                and attempt + 1 < _MAX_REQUEST_ATTEMPTS
+            ):
+                await asyncio.sleep(_retry_delay(attempt, response))
+                continue
+            response.raise_for_status()
+            if len(response.content) > 20 * 1024 * 1024:
+                raise ValueError("arXiv feed response exceeded 20 MiB")
+            return response.content
+        raise RuntimeError("arXiv request retry loop ended unexpectedly")
 
     async def fetch_semantic_scholar_affiliations(
         self, arxiv_ids: Sequence[str]
