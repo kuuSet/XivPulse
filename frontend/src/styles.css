@@ -263,6 +263,25 @@ select:focus-visible,
   font-size: 13px;
 }
 
+.auto-save-status {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.auto-save-status.saved { color: var(--green); background: var(--green-soft); }
+.auto-save-status.pending, .auto-save-status.saving { color: #42617c; background: var(--blue-soft); }
+.auto-save-status.error { border-color: #e1c4c4; color: var(--red); background: var(--red-soft); }
+.auto-save-status button { padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; font-weight: 700; }
+
 .eyebrow-row {
   display: flex;
   align-items: center;

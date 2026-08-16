@@ -47,7 +47,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react'
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './lib/api'
 import { sampleDailyReport, sampleDashboard, sampleProfile, sampleProjects, samplePromptCatalog, sampleRoadmap, sampleSettings, sampleTrends } from './sample'
 import type {
@@ -1808,7 +1808,12 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
   const [pickerOpen, setPickerOpen] = useState(false)
   const [state, setState] = useState<LoadState>('loading')
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved')
+  const [saveRetry, setSaveRetry] = useState(0)
+  const savedProfileRef = useRef('')
+  const saveVersionRef = useRef(0)
+  const pendingSavesRef = useRef(0)
+  const saveQueueRef = useRef(Promise.resolve())
 
   const load = useCallback(async () => {
     setState('loading')
@@ -1816,8 +1821,10 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
       const [nextProfile, nextCatalog] = isDemo
         ? [sampleProfile, demoDirectionCatalog(sampleProfile)]
         : await Promise.all([api.profile(), api.directionCatalog()])
+      savedProfileRef.current = profileFingerprint(nextProfile)
       setProfile(nextProfile)
       setCatalog(nextCatalog)
+      setSaveState('saved')
       setState('ready')
       setError('')
     } catch (loadError) {
@@ -1827,6 +1834,39 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    if (!profile || state !== 'ready') return
+    const fingerprint = profileFingerprint(profile)
+    if (fingerprint === savedProfileRef.current && pendingSavesRef.current === 0) return
+    if (!profile.topics.some((topic) => topic.enabled !== false)) {
+      setSaveState('error')
+      return
+    }
+    const version = ++saveVersionRef.current
+    setSaveState('pending')
+    const timer = window.setTimeout(() => {
+      const queuedProfile = profile
+      setSaveState('saving')
+      pendingSavesRef.current += 1
+      saveQueueRef.current = saveQueueRef.current.then(async () => {
+        try {
+          const saved = isDemo ? queuedProfile : await api.saveProfile(queuedProfile)
+          savedProfileRef.current = profileFingerprint(saved)
+          if (version !== saveVersionRef.current) return
+          setProfile(saved)
+          setSaveState('saved')
+        } catch (saveError) {
+          if (version !== saveVersionRef.current) return
+          setSaveState('error')
+          onToast('error', saveError instanceof Error ? saveError.message : '自动保存失败')
+        } finally {
+          pendingSavesRef.current -= 1
+        }
+      })
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [onToast, profile, saveRetry, state])
 
   const topicIdentities = useMemo(
     () => new Set((profile?.topics ?? []).filter((topic) => topic.enabled !== false).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(directionIdentity)),
@@ -1867,6 +1907,10 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
 
   const removeTopic = (index: number) => {
     if (!profile) return
+    if (profile.topics.filter((topic) => topic.enabled !== false).length <= 1) {
+      onToast('error', '至少保留一个关注标签')
+      return
+    }
     setProfile({ ...profile, topics: profile.topics.filter((_, topicIndex) => topicIndex !== index) })
   }
 
@@ -1914,44 +1958,19 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
     setCatalogQuery('')
   }
 
-  const save = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!profile) return
-    if (!profile.topics.length || profile.topics.some((topic) => !topic.name.trim())) {
-      onToast('error', '至少保留一个有名称的研究方向')
-      return
-    }
-    if (!profile.topics.some((topic) => topic.enabled !== false)) {
-      onToast('error', '至少需要启用一个研究方向')
-      return
-    }
-    const directionLabels = profile.topics.flatMap((topic) => [topic.name, ...(topic.aliases ?? [])])
-    const directionKeys = directionLabels.map(directionIdentity)
-    if (new Set(directionKeys).size !== directionKeys.length) {
-      onToast('error', '正式名称和别名不能重复；相同含义请放在同一个方向下')
-      return
-    }
-    setSaving(true)
-    try {
-      const saved = isDemo ? profile : await api.saveProfile(profile)
-      setProfile(saved)
-      onToast('success', '研究画像已保存，将用于下一次筛选')
-    } catch (saveError) {
-      onToast('error', saveError instanceof Error ? saveError.message : '保存失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   if (state === 'loading' || !profile) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
 
   return (
     <div className="standard-page settings-page">
       <section className="page-heading">
         <div><div className="eyebrow-row"><SlidersHorizontal size={14} /> 个性化筛选</div><h1>关注设置</h1><p>用少量英文标签描述长期关注的研究方向。</p></div>
-        <button className="button primary" type="submit" form="profile-form" disabled={saving} aria-label={saving ? '正在保存关注设置' : '保存关注设置'} title={saving ? '正在保存' : '保存更改'}><Save size={16} /><span>{saving ? '保存中' : '保存更改'}</span></button>
+        <div className={`auto-save-status ${saveState}`} aria-live="polite">
+          {saveState === 'saving' || saveState === 'pending' ? <LoaderCircle className={saveState === 'saving' ? 'spin' : ''} size={15} /> : saveState === 'error' ? <CircleAlert size={15} /> : <CheckCircle2 size={15} />}
+          <span>{saveState === 'pending' ? '等待自动保存' : saveState === 'saving' ? '正在保存' : saveState === 'error' ? '保存失败' : '已自动保存'}</span>
+          {saveState === 'error' && <button type="button" onClick={() => setSaveRetry((value) => value + 1)}>重试</button>}
+        </div>
       </section>
-      <form id="profile-form" className="form-layout profile-form-layout" onSubmit={save}>
+      <div className="form-layout profile-form-layout">
         <div className="form-main">
           <FormSection title="关注标签" description="使用简短、自然的英文研究方向；预设标签已经包含合适的语义词和 arXiv 抓取分类。">
             <div className="interest-tag-editor">
@@ -1962,7 +1981,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
                 </span>)}
                 <button className="interest-add-tag" type="button" onClick={() => setPickerOpen(true)} aria-label="添加关注标签" title="添加关注标签"><Plus size={16} /></button>
               </div>
-              <p>建议保留 3–12 个边界清晰的方向。删除或添加后，点击页面右上角保存。</p>
+              <p>建议保留 3–12 个边界清晰的方向；删除和添加后会自动保存。</p>
             </div>
           </FormSection>
           <details className="form-section optional-section">
@@ -1974,7 +1993,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
             </div>
           </details>
         </div>
-      </form>
+      </div>
       {pickerOpen && <Modal title="添加关注标签" onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
         <div className="interest-picker">
           <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }} placeholder="Search presets or type a new interest" />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
@@ -1995,6 +2014,10 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
 
 function directionIdentity(value: string) {
   return value.normalize('NFKC').trim().replace(/[\s_-]+/g, '').toLocaleLowerCase()
+}
+
+function profileFingerprint(profile: Profile) {
+  return JSON.stringify(profile)
 }
 
 function englishDirectionLabel(topic: Pick<BackendTopic, 'name' | 'aliases' | 'keywords'>) {
