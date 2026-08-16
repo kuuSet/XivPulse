@@ -19,14 +19,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--date", required=True, type=date.fromisoformat)
     parser.add_argument("--category", required=True, action="append", dest="categories")
-    parser.add_argument("--limit", type=int, default=1000)
+    parser.add_argument("--limit", required=True, type=int)
     args = parser.parse_args(argv)
 
     papers = asyncio.run(
         ArxivClient().fetch_daily(
             args.categories,
             target_date=args.date,
-            max_results=args.limit,
+            limit=args.limit,
         )
     )
     for paper in papers:

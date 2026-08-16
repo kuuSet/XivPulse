@@ -27,7 +27,7 @@ class _SyncOptions:
     profile_id: int
     topics: list[Topic]
     author_watchlist: list[str]
-    max_results: int
+    fetch_limit: int
     batch_size: int
     recall_mode: str
 
@@ -44,7 +44,7 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
             profile_id=profile.id,
             topics=list(profile.topics),
             author_watchlist=list(settings.watched_authors),
-            max_results=settings.arxiv_fetch_limit,
+            fetch_limit=settings.arxiv_fetch_limit,
             batch_size=settings.screening_batch_size,
             recall_mode=recall_mode(settings.semantic_recall_mode),
         )
@@ -73,7 +73,7 @@ async def sync_papers(
     papers = await arxiv.fetch_daily(
         categories,
         target_date=target_date,
-        max_results=options.max_results,
+        limit=options.fetch_limit,
     )
 
     with session_scope(factory) as db:

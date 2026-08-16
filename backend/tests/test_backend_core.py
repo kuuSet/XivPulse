@@ -268,7 +268,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
         records = await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
             [" cs.RO ", "cs.AI", "cs.RO"],
             target_date=date(2026, 8, 13),
-            max_results=17,
+            limit=17,
         )
 
     assert len(requests) == 1
@@ -318,7 +318,7 @@ async def test_daily_fetch_retries_transient_network_and_http_failures(
         ).fetch_daily(
             ["cs.RO"],
             target_date=date(2026, 8, 13),
-            max_results=17,
+            limit=17,
         )
 
     assert len(requests) == 3
@@ -343,7 +343,7 @@ async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
             ).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
-                max_results=17,
+                limit=17,
             )
 
     assert len(requests) == 1
@@ -374,7 +374,7 @@ async def test_daily_fetch_stops_after_three_transient_failures(
             ).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
-                max_results=17,
+                limit=17,
             )
 
     assert len(requests) == 3
@@ -443,7 +443,7 @@ async def test_daily_fetch_pages_retries_and_deduplicates_across_pages(
         ).fetch_daily(
             ["cs.RO"],
             target_date=date(2026, 8, 13),
-            max_results=450,
+            limit=450,
         )
 
     assert [request.url.params["start"] for request in requests] == ["0", "200", "200", "400"]
@@ -479,7 +479,7 @@ async def test_daily_fetch_rejects_an_incomplete_page() -> None:
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
-                max_results=201,
+                limit=201,
             )
 
 
@@ -495,7 +495,7 @@ async def test_daily_fetch_rejects_papers_outside_requested_date() -> None:
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
-                max_results=1,
+                limit=1,
             )
 
 
@@ -510,7 +510,7 @@ async def test_daily_fetch_wraps_invalid_atom_responses() -> None:
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
-                max_results=1,
+                limit=1,
             )
 
     assert isinstance(raised.value.__cause__, ValueError)
@@ -538,7 +538,7 @@ async def test_daily_fetch_rejects_a_truncated_result_set() -> None:
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
-                max_results=2,
+                limit=2,
             )
 
 
@@ -564,7 +564,7 @@ async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 categories,
                 target_date=date(2026, 8, 13),
-                max_results=limit,
+                limit=limit,
             )
 
 
