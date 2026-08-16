@@ -5,7 +5,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 
-from ..domain.paper import Paper
+from ...domain.paper import Paper
 from .normalization import clean_text, parse_arxiv_id
 
 

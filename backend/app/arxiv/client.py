@@ -13,9 +13,9 @@ from urllib.parse import quote
 import httpx
 
 from ..domain.paper import Paper, as_utc, deduplicate_papers
-from .atom import parse_arxiv_feed
-from .html import parse_html_affiliations
-from .normalization import parse_arxiv_id
+from .parse.atom import parse_arxiv_feed
+from .parse.html import parse_html_affiliations
+from .parse.normalization import parse_arxiv_id
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"

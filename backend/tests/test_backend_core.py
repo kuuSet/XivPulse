@@ -14,9 +14,9 @@ from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.arxiv.client import ArxivClient, ArxivFetchError, build_date_query
-from app.arxiv.atom import parse_arxiv_feed
-from app.arxiv.html import parse_html_affiliations
-from app.arxiv.normalization import parse_arxiv_id
+from app.arxiv.parse.atom import parse_arxiv_feed
+from app.arxiv.parse.html import parse_html_affiliations
+from app.arxiv.parse.normalization import parse_arxiv_id
 from app.arxiv.repository import PaperRepository
 from app.arxiv.semantic_scholar import SemanticScholarClient
 from app.services.direction_catalog import (
