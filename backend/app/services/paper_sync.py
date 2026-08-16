@@ -12,10 +12,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Topic
-from ..arxiv.affiliations import enrich_affiliations
+from ..arxiv.affiliations import AffiliationClient
 from ..arxiv.client import ArxivClient
 from ..arxiv.repository import PaperRepository
-from ..arxiv.semantic_scholar import SemanticScholarClient
 from .paper_recall import SemanticMatcher, recall_papers
 from .semantic import match_papers as semantic_match_papers
 from .semantic import recall_mode
@@ -54,13 +53,13 @@ async def sync_papers(
     *,
     session_factory: sessionmaker[Session] | None = None,
     arxiv_client: ArxivClient | None = None,
-    semantic_scholar: SemanticScholarClient | None = None,
+    affiliation_client: AffiliationClient | None = None,
     semantic_matcher: SemanticMatcher | None = None,
     date_provider: Callable[[], date] = latest_complete_submission_date,
 ) -> dict[str, Any]:
     factory = session_factory or SessionLocal
     arxiv = arxiv_client or ArxivClient()
-    scholar = semantic_scholar or SemanticScholarClient()
+    affiliation = affiliation_client or AffiliationClient()
     options = _load_options(factory)
     target_date = date_provider()
 
@@ -90,11 +89,7 @@ async def sync_papers(
             matcher=semantic_matcher or semantic_match_papers,
         )
 
-    affiliations = await enrich_affiliations(
-        recalled.enrichment_ids,
-        arxiv_client=arxiv,
-        semantic_scholar=scholar,
-    )
+    affiliations = await affiliation.fetch(recalled.enrichment_ids)
     if affiliations:
         with session_scope(factory) as db:
             PaperRepository(db).update_affiliations(affiliations)

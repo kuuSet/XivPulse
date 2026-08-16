@@ -1392,11 +1392,8 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
             stages.append("fetch")
             return records
 
-        async def fetch_html_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
-            return {}
-
-    class FakeSemanticScholarClient:
-        async def fetch_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
+    class FakeAffiliationClient:
+        async def fetch(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
             stages.append("enrich")
             return {}
 
@@ -1416,7 +1413,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     result = await sync_papers(
         session_factory=database.SessionLocal,
         arxiv_client=FakeArxivClient(),
-        semantic_scholar=FakeSemanticScholarClient(),
+        affiliation_client=FakeAffiliationClient(),
         semantic_matcher=semantic_results,
         date_provider=lambda: fetch_date,
     )
@@ -1470,11 +1467,8 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[PaperDocument]:
             return [record]
 
-        async def fetch_html_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
-            return {}
-
-    class FakeSemanticScholarClient:
-        async def fetch_affiliations(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
+    class FakeAffiliationClient:
+        async def fetch(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
             return {}
 
     def unavailable(*_args: object, **_kwargs: object) -> dict[int, object]:
@@ -1487,7 +1481,7 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     result = await sync_papers(
         session_factory=database.SessionLocal,
         arxiv_client=FakeArxivClient(),
-        semantic_scholar=FakeSemanticScholarClient(),
+        affiliation_client=FakeAffiliationClient(),
         semantic_matcher=unavailable,
         date_provider=lambda: date(2026, 8, 14),
     )

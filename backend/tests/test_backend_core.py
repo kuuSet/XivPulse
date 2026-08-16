@@ -13,12 +13,11 @@ from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
-from app.arxiv.affiliations import parse_html_affiliations
+from app.arxiv.affiliations import AffiliationClient, parse_html_affiliations
 from app.arxiv.client import ArxivClient, ArxivFetchError
 from app.arxiv.download import DownloadTooLargeError, limited_bytes
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
-from app.arxiv.semantic_scholar import SemanticScholarClient
 from app.services.direction_catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -481,8 +480,10 @@ def test_watched_organization_normalization_avoids_name_collisions() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_html_affiliations_reads_author_header_only() -> None:
+async def test_affiliation_client_falls_back_to_arxiv_author_header() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.semanticscholar.org":
+            return httpx.Response(200, json=[])
         assert request.url.path == "/html/2608.01234"
         return httpx.Response(
             200,
@@ -494,9 +495,9 @@ async def test_fetch_html_affiliations_reads_author_header_only() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await ArxivClient(
+        values = await AffiliationClient(
             http_client=client, rate_limit_seconds=0
-        ).fetch_html_affiliations(["2608.01234v2"])
+        ).fetch(["2608.01234v2"])
 
     assert values == {"2608.01234": ["Meta AI"]}
 
@@ -505,16 +506,20 @@ async def test_fetch_html_affiliations_reads_author_header_only() -> None:
 async def test_affiliation_html_has_an_independent_streaming_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.arxiv import client as arxiv_client_module
+    from app.arxiv import affiliations as affiliations_module
 
-    monkeypatch.setattr(arxiv_client_module, "_MAX_AFFILIATION_HTML_BYTES", 8)
-    transport = httpx.MockTransport(lambda _request: httpx.Response(200, content=b"x" * 9))
+    monkeypatch.setattr(affiliations_module, "_MAX_AFFILIATION_HTML_BYTES", 8)
 
-    async with httpx.AsyncClient(transport=transport) as client:
-        values = await ArxivClient(
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.semanticscholar.org":
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, content=b"x" * 9)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        values = await AffiliationClient(
             http_client=client,
             rate_limit_seconds=0,
-        ).fetch_html_affiliations(["2608.01234"])
+        ).fetch(["2608.01234"])
 
     assert values == {}
 
@@ -542,9 +547,7 @@ async def test_semantic_scholar_affiliations_require_exact_arxiv_ids() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await SemanticScholarClient(http_client=client).fetch_affiliations(
-            ["2608.01234v2"]
-        )
+        values = await AffiliationClient(http_client=client).fetch(["2608.01234v2"])
 
     assert values == {"2608.01234": ["Google DeepMind", "University College London"]}
 
