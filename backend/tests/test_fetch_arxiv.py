@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from app import fetch_arxiv as command
+from app.arxiv import command
 from app.domain.paper import Paper
 
 

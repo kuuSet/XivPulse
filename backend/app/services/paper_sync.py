@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Topic
-from .arxiv.affiliations import enrich_affiliations
-from .arxiv.client import ArxivClient
-from .arxiv.repository import PaperRepository
-from .arxiv.semantic_scholar import SemanticScholarClient
+from ..arxiv.affiliations import enrich_affiliations
+from ..arxiv.client import ArxivClient
+from ..arxiv.repository import PaperRepository
+from ..arxiv.semantic_scholar import SemanticScholarClient
 from .paper_recall import SemanticMatcher, recall_papers
 from .semantic import match_papers as semantic_match_papers
 from .semantic import recall_mode

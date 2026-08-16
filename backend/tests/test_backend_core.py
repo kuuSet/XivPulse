@@ -13,14 +13,14 @@ from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
-from app.services.arxiv.client import ArxivClient, build_date_query
-from app.services.arxiv.parsing import (
+from app.arxiv.client import ArxivClient, build_date_query
+from app.arxiv.parsing import (
     parse_arxiv_feed,
     parse_arxiv_id,
     parse_html_affiliations,
 )
-from app.services.arxiv.repository import PaperRepository
-from app.services.arxiv.semantic_scholar import SemanticScholarClient
+from app.arxiv.repository import PaperRepository
+from app.arxiv.semantic_scholar import SemanticScholarClient
 from app.services.direction_catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -293,7 +293,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
 async def test_daily_fetch_retries_transient_network_and_http_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services.arxiv import client as arxiv_client_module
+    from app.arxiv import client as arxiv_client_module
 
     payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
     requests: list[httpx.Request] = []
@@ -353,7 +353,7 @@ async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
 async def test_daily_fetch_stops_after_three_transient_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services.arxiv import client as arxiv_client_module
+    from app.arxiv import client as arxiv_client_module
 
     requests: list[httpx.Request] = []
 

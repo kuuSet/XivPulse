@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import httpx
 
-from ...domain.paper import Paper
+from ..domain.paper import Paper
 from .parsing import parse_arxiv_feed, parse_arxiv_id, parse_html_affiliations
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"

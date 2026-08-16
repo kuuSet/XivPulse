@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from bs4 import BeautifulSoup
 
-from ...domain.paper import Paper, as_utc, deduplicate_papers
+from ..domain.paper import Paper, as_utc, deduplicate_papers
 
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"

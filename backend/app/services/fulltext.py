@@ -15,8 +15,8 @@ from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 from ..models import Paper
-from .arxiv.client import DEFAULT_USER_AGENT, polite_wait
-from .arxiv.parsing import parse_arxiv_id
+from ..arxiv.client import DEFAULT_USER_AGENT, polite_wait
+from ..arxiv.parsing import parse_arxiv_id
 
 
 @dataclass(slots=True)

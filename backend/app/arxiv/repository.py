@@ -9,9 +9,9 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ...domain.paper import Paper, as_utc, deduplicate_papers
-from ...models import Paper as StoredPaper
-from ...models import PaperVersion, utcnow
+from ..domain.paper import Paper, as_utc, deduplicate_papers
+from ..models import Paper as StoredPaper
+from ..models import PaperVersion, utcnow
 
 
 def _paper_values(paper: Paper) -> dict[str, object]:
