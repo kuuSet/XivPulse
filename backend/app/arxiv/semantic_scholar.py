@@ -29,10 +29,9 @@ class SemanticScholarClient:
 
         clean = list(
             dict.fromkeys(
-                normalized.base_id
+                parse_arxiv_id(value)[0]
                 for value in arxiv_ids
                 if isinstance(value, str) and value.strip()
-                for normalized in [parse_arxiv_id(value)]
             )
         )[:100]
         if not clean:
@@ -74,7 +73,7 @@ class SemanticScholarClient:
             external_ids = item.get("externalIds")
             raw_id = external_ids.get("ArXiv") if isinstance(external_ids, dict) else None
             try:
-                arxiv_id = parse_arxiv_id(str(raw_id)).base_id
+                arxiv_id, _ = parse_arxiv_id(str(raw_id))
             except ValueError:
                 continue
             if arxiv_id not in expected:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 import arxiv
@@ -19,13 +18,7 @@ _ARXIV_ID_RE = re.compile(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class NormalizedArxivId:
-    base_id: str
-    version: int = 1
-
-
-def parse_arxiv_id(value: str) -> NormalizedArxivId:
+def parse_arxiv_id(value: str) -> tuple[str, int]:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("arXiv identifier cannot be empty")
     cleaned = html.unescape(value).strip()
@@ -42,7 +35,7 @@ def parse_arxiv_id(value: str) -> NormalizedArxivId:
     version = int(match.group("version") or 1)
     if version < 1:
         raise ValueError("arXiv version must be positive")
-    return NormalizedArxivId(base_id=base_id, version=version)
+    return base_id, version
 
 
 def clean_text(value: str | None) -> str:
@@ -50,10 +43,10 @@ def clean_text(value: str | None) -> str:
 
 
 def to_paper(result: arxiv.Result) -> Paper:
-    normalized = parse_arxiv_id(result.get_short_id())
+    arxiv_id, version = parse_arxiv_id(result.get_short_id())
     paper = Paper(
-        arxiv_id=normalized.base_id,
-        version=normalized.version,
+        arxiv_id=arxiv_id,
+        version=version,
         title=clean_text(result.title),
         abstract=clean_text(result.summary),
         authors=list(dict.fromkeys(clean_text(author.name) for author in result.authors)),

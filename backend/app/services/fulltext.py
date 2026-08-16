@@ -72,12 +72,12 @@ class FullTextFetcher:
 
     async def fetch(self, paper: Paper | str) -> FullTextDocument:
         raw_id = paper.arxiv_id if isinstance(paper, Paper) else paper
-        normalized = parse_arxiv_id(raw_id)
+        arxiv_id, parsed_version = parse_arxiv_id(raw_id)
         if isinstance(paper, Paper):
-            version = max(1, int(paper.latest_version or normalized.version))
+            version = max(1, int(paper.latest_version or parsed_version))
         else:
-            version = normalized.version
-        versioned = f"{normalized.base_id}v{version}"
+            version = parsed_version
+        versioned = f"{arxiv_id}v{version}"
         encoded = quote(versioned, safe="/.")
         html_url = f"https://arxiv.org/html/{encoded}"
         pdf_url = f"https://arxiv.org/pdf/{encoded}"

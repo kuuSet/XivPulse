@@ -57,10 +57,9 @@ class ArxivClient:
         }
         clean = list(
             dict.fromkeys(
-                normalized.base_id
+                parse_arxiv_id(value)[0]
                 for value in arxiv_ids
                 if isinstance(value, str) and value.strip()
-                for normalized in [parse_arxiv_id(value)]
             )
         )
 

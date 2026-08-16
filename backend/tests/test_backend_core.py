@@ -196,8 +196,10 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
 
 
 def test_parse_dedupe_and_version_upsert() -> None:
-    normalized = parse_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf")
-    assert (normalized.base_id, normalized.version) == ("2608.01234", 3)
+    assert parse_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf") == (
+        "2608.01234",
+        3,
+    )
     records = [
         PaperDocument(
             arxiv_id="2608.01234",
