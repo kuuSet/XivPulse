@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
+from ..domain.paper import Paper
 from ..models import Topic
-from ..arxiv.affiliations import AffiliationClient
-from ..arxiv.client import ArxivClient
+from ..arxiv.affiliations import fetch_affiliations
+from ..arxiv.fetch import fetch_daily
 from ..arxiv.repository import PaperRepository
 from .paper_recall import SemanticMatcher, recall_papers
 from .semantic import match_papers as semantic_match_papers
@@ -52,14 +53,12 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
 async def sync_papers(
     *,
     session_factory: sessionmaker[Session] | None = None,
-    arxiv_client: ArxivClient | None = None,
-    affiliation_client: AffiliationClient | None = None,
+    paper_fetcher: Callable[..., Awaitable[list[Paper]]] | None = None,
+    affiliation_fetcher: Callable[..., Awaitable[dict[str, list[str]]]] | None = None,
     semantic_matcher: SemanticMatcher | None = None,
     date_provider: Callable[[], date] = latest_complete_submission_date,
 ) -> dict[str, Any]:
     factory = session_factory or SessionLocal
-    arxiv = arxiv_client or ArxivClient()
-    affiliation = affiliation_client or AffiliationClient()
     options = _load_options(factory)
     target_date = date_provider()
 
@@ -69,7 +68,7 @@ async def sync_papers(
         if topic.enabled
         for category in topic.arxiv_categories
     ]
-    papers = await arxiv.fetch_daily(
+    papers = await (paper_fetcher or fetch_daily)(
         categories,
         target_date=target_date,
         limit=options.fetch_limit,
@@ -89,7 +88,9 @@ async def sync_papers(
             matcher=semantic_matcher or semantic_match_papers,
         )
 
-    affiliations = await affiliation.fetch(recalled.enrichment_ids)
+    affiliations = await (affiliation_fetcher or fetch_affiliations)(
+        recalled.enrichment_ids
+    )
     if affiliations:
         with session_scope(factory) as db:
             PaperRepository(db).update_affiliations(affiliations)

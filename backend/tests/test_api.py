@@ -1387,15 +1387,15 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     ]
     fetch_date = date(2026, 8, 14)
 
-    class FakeArxivClient:
-        async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[PaperDocument]:
-            stages.append("fetch")
-            return records
+    async def fetch_papers(*_args: object, **_kwargs: object) -> list[PaperDocument]:
+        stages.append("fetch")
+        return records
 
-    class FakeAffiliationClient:
-        async def fetch(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
-            stages.append("enrich")
-            return {}
+    async def fetch_paper_affiliations(
+        _arxiv_ids: list[str],
+    ) -> dict[str, list[str]]:
+        stages.append("enrich")
+        return {}
 
     def semantic_results(
         _session: object, papers: list[Paper], _topics: object
@@ -1412,8 +1412,8 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
 
     result = await sync_papers(
         session_factory=database.SessionLocal,
-        arxiv_client=FakeArxivClient(),
-        affiliation_client=FakeAffiliationClient(),
+        paper_fetcher=fetch_papers,
+        affiliation_fetcher=fetch_paper_affiliations,
         semantic_matcher=semantic_results,
         date_provider=lambda: fetch_date,
     )
@@ -1463,13 +1463,13 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         published_at=datetime.now(UTC),
     )
 
-    class FakeArxivClient:
-        async def fetch_daily(self, *_args: object, **_kwargs: object) -> list[PaperDocument]:
-            return [record]
+    async def fetch_papers(*_args: object, **_kwargs: object) -> list[PaperDocument]:
+        return [record]
 
-    class FakeAffiliationClient:
-        async def fetch(self, _arxiv_ids: list[str]) -> dict[str, list[str]]:
-            return {}
+    async def fetch_paper_affiliations(
+        _arxiv_ids: list[str],
+    ) -> dict[str, list[str]]:
+        return {}
 
     def unavailable(*_args: object, **_kwargs: object) -> dict[int, object]:
         raise SemanticEmbeddingError("model download unavailable")
@@ -1480,8 +1480,8 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
 
     result = await sync_papers(
         session_factory=database.SessionLocal,
-        arxiv_client=FakeArxivClient(),
-        affiliation_client=FakeAffiliationClient(),
+        paper_fetcher=fetch_papers,
+        affiliation_fetcher=fetch_paper_affiliations,
         semantic_matcher=unavailable,
         date_provider=lambda: date(2026, 8, 14),
     )

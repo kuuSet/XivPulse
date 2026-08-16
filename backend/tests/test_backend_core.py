@@ -13,9 +13,9 @@ from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
-from app.arxiv.affiliations import AffiliationClient
-from app.arxiv.client import ArxivClient, ArxivFetchError
+from app.arxiv.affiliations import fetch_affiliations
 from app.arxiv.download import DownloadTooLargeError, limited_bytes
+from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
 from app.services.direction_catalog import (
@@ -306,13 +306,12 @@ def _arxiv_result(
 @pytest.mark.asyncio
 async def test_daily_fetch_uses_arxiv_library_query_and_maps_results() -> None:
     metadata = _FakeArxivMetadataClient([_arxiv_result("2608.00001", version=2)])
-    records = await ArxivClient(
-        metadata_client=metadata,
-        rate_limit_seconds=0,
-    ).fetch_daily(
+    records = await fetch_daily(
         [" cs.RO ", "cs.AI", "cs.RO"],
         target_date=date(2026, 8, 13),
         limit=17,
+        client=metadata,
+        rate_limit_seconds=0,
     )
 
     search = metadata.searches[0]
@@ -334,12 +333,26 @@ async def test_daily_fetch_uses_arxiv_library_query_and_maps_results() -> None:
     assert records[0].source == "atom"
 
 
-def test_default_arxiv_client_delegates_paging_delay_and_retries() -> None:
-    client = ArxivClient(rate_limit_seconds=1.5)
+@pytest.mark.asyncio
+async def test_daily_fetch_configures_paging_delay_and_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    options: dict[str, object] = {}
 
-    assert client._metadata.page_size == 200
-    assert client._metadata.delay_seconds == 1.5
-    assert client._metadata.num_retries == 2
+    class FakeClient(_FakeArxivMetadataClient):
+        def __init__(self, **values: object) -> None:
+            super().__init__()
+            options.update(values)
+
+    monkeypatch.setattr(arxiv, "Client", FakeClient)
+    await fetch_daily(
+        ["cs.RO"],
+        target_date=date(2026, 8, 13),
+        limit=1,
+        rate_limit_seconds=1.5,
+    )
+
+    assert options == {"page_size": 200, "delay_seconds": 1.5, "num_retries": 2}
 
 
 @pytest.mark.asyncio
@@ -348,10 +361,11 @@ async def test_daily_fetch_wraps_metadata_client_errors() -> None:
     metadata = _FakeArxivMetadataClient(error=error)
 
     with pytest.raises(ArxivFetchError, match="metadata request failed") as raised:
-        await ArxivClient(metadata_client=metadata).fetch_daily(
+        await fetch_daily(
             ["cs.RO"],
             target_date=date(2026, 8, 13),
             limit=17,
+            client=metadata,
         )
 
     assert raised.value.__cause__ is error
@@ -367,10 +381,11 @@ async def test_daily_fetch_deduplicates_library_results() -> None:
         ]
     )
 
-    records = await ArxivClient(metadata_client=metadata).fetch_daily(
+    records = await fetch_daily(
         ["cs.RO"],
         target_date=date(2026, 8, 13),
         limit=3,
+        client=metadata,
     )
 
     assert len(records) == 2
@@ -385,10 +400,11 @@ async def test_daily_fetch_rejects_papers_outside_requested_date() -> None:
     )
 
     with pytest.raises(ArxivFetchError, match="outside requested date 2026-08-13"):
-        await ArxivClient(metadata_client=metadata).fetch_daily(
+        await fetch_daily(
             ["cs.RO"],
             target_date=date(2026, 8, 13),
             limit=1,
+            client=metadata,
         )
 
 
@@ -399,10 +415,11 @@ async def test_daily_fetch_rejects_results_above_limit() -> None:
     )
 
     with pytest.raises(ArxivFetchError, match="configured limit 2"):
-        await ArxivClient(metadata_client=metadata).fetch_daily(
+        await fetch_daily(
             ["cs.RO"],
             target_date=date(2026, 8, 13),
             limit=2,
+            client=metadata,
         )
 
 
@@ -422,10 +439,11 @@ async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
 ) -> None:
     metadata = _FakeArxivMetadataClient()
     with pytest.raises(ValueError, match=message):
-        await ArxivClient(metadata_client=metadata).fetch_daily(
+        await fetch_daily(
             categories,
             target_date=date(2026, 8, 13),
             limit=limit,
+            client=metadata,
         )
     assert metadata.searches == []
 
@@ -465,7 +483,7 @@ def test_watched_organization_normalization_avoids_name_collisions() -> None:
 
 
 @pytest.mark.asyncio
-async def test_affiliation_client_falls_back_to_arxiv_author_header() -> None:
+async def test_affiliation_fetch_falls_back_to_arxiv_author_header() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "api.semanticscholar.org":
             return httpx.Response(200, json=[])
@@ -480,9 +498,9 @@ async def test_affiliation_client_falls_back_to_arxiv_author_header() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await AffiliationClient(
-            http_client=client, rate_limit_seconds=0
-        ).fetch(["2608.01234v2"])
+        values = await fetch_affiliations(
+            ["2608.01234v2"], http_client=client, rate_limit_seconds=0
+        )
 
     assert values == {"2608.01234": ["Meta AI"]}
 
@@ -501,10 +519,11 @@ async def test_affiliation_html_has_an_independent_streaming_limit(
         return httpx.Response(200, content=b"x" * 9)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await AffiliationClient(
+        values = await fetch_affiliations(
+            ["2608.01234"],
             http_client=client,
             rate_limit_seconds=0,
-        ).fetch(["2608.01234"])
+        )
 
     assert values == {}
 
@@ -532,7 +551,7 @@ async def test_semantic_scholar_affiliations_require_exact_arxiv_ids() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await AffiliationClient(http_client=client).fetch(["2608.01234v2"])
+        values = await fetch_affiliations(["2608.01234v2"], http_client=client)
 
     assert values == {"2608.01234": ["Google DeepMind", "University College London"]}
 
