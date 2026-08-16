@@ -12,4 +12,4 @@
 
 ## Secret Handling
 
-XivPulse 不会通过设置 API 返回模型 API Key 或 SMTP 授权码。`.env*`、数据库、证书和运行日志默认不进入 Git 或 Docker 构建上下文。公开仓库默认不会读取 `~/.codex`；只有显式设置 `XIVPULSE_IMPORT_CODEX_CONFIG=true` 才会启用兼容导入。
+XivPulse 不会通过设置 API 返回模型 API Key 或 SMTP 授权码。`.env*`、数据库、证书和运行日志默认不进入 Git 或 Docker 构建上下文。

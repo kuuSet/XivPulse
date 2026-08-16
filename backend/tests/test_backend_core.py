@@ -91,62 +91,6 @@ def test_process_config_uses_only_xivpulse_environment_names(
     assert config_module._build_process_config().provider.model == "current-model"
 
 
-def test_public_config_does_not_read_codex_credentials_without_opt_in(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    for name in (
-        "XIVPULSE_IMPORT_CODEX_CONFIG",
-        "XIVPULSE_API_KEY",
-        "OPENAI_API_KEY",
-    ):
-        monkeypatch.delenv(name, raising=False)
-
-    def unexpected_read() -> object:
-        raise AssertionError("Codex credentials must not be read by default")
-
-    monkeypatch.setattr(config_module, "_load_codex_config", unexpected_read)
-    monkeypatch.setattr(config_module, "_load_codex_api_key", unexpected_read)
-    config = config_module._build_process_config().provider
-    assert config.mock_mode is True
-
-
-def test_process_config_imports_codex_only_when_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    for name in (
-        "XIVPULSE_PROVIDER_NAME",
-        "XIVPULSE_BASE_URL",
-        "XIVPULSE_MODEL",
-        "XIVPULSE_API_KEY",
-        "OPENAI_API_KEY",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("XIVPULSE_IMPORT_CODEX_CONFIG", "true")
-    monkeypatch.setattr(
-        config_module,
-        "_load_codex_config",
-        lambda: {
-            "model_provider": "codex-provider",
-            "model": "codex-model",
-            "model_providers": {
-                "codex-provider": {
-                    "base_url": "https://codex.test/v1/",
-                    "wire_api": "chat",
-                }
-            },
-        },
-    )
-    monkeypatch.setattr(config_module, "_load_codex_api_key", lambda: "codex-secret")
-
-    provider = config_module._build_process_config().provider
-
-    assert provider.provider_name == "codex-provider"
-    assert provider.base_url == "https://codex.test/v1"
-    assert provider.model == "codex-model"
-    assert provider.api_mode == "chat"
-    assert provider.api_key == "codex-secret"
-
-
 def test_environment_key_fallback_and_secrets_are_hidden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

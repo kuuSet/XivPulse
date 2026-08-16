@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import tomllib
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -19,34 +17,6 @@ from pydantic_settings import (
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_DB_PATH = (_REPO_ROOT / "data" / "xivpulse.db").resolve()
 _DEFAULT_MODEL_CACHE = (_REPO_ROOT / "data" / "model-cache").resolve()
-_CODEX_DIR = Path.home() / ".codex"
-_CODEX_CONFIG_PATH = _CODEX_DIR / "config.toml"
-_CODEX_AUTH_PATH = _CODEX_DIR / "auth.json"
-
-
-def _load_codex_config() -> dict[str, Any]:
-    try:
-        with _CODEX_CONFIG_PATH.open("rb") as handle:
-            value = tomllib.load(handle)
-        return value if isinstance(value, dict) else {}
-    except (FileNotFoundError, OSError, tomllib.TOMLDecodeError):
-        return {}
-
-
-def _load_codex_api_key() -> str | None:
-    try:
-        with _CODEX_AUTH_PATH.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    value = payload.get("OPENAI_API_KEY")
-    return value.strip() if isinstance(value, str) and value.strip() else None
-
-
-def _string_or_none(value: Any) -> str | None:
-    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:
@@ -133,7 +103,6 @@ class ProcessConfig(BaseSettings):
     session_secret: str = Field(default="", repr=False, exclude=True)
     secure_cookies: bool | None = None
     trust_proxy: bool = False
-    import_codex_config: bool = False
 
     @field_validator("trusted_hosts", mode="before")
     @classmethod
@@ -146,27 +115,6 @@ class ProcessConfig(BaseSettings):
         return value.expanduser().resolve()
 
 
-def _build_provider_config(*, import_codex: bool) -> ProviderConfig:
-    codex = _load_codex_config() if import_codex else {}
-    codex_provider_name = str(codex.get("model_provider") or "openai")
-    providers = codex.get("model_providers")
-    codex_provider: dict[str, Any] = {}
-    if isinstance(providers, dict):
-        candidate = providers.get(codex_provider_name)
-        if isinstance(candidate, dict):
-            codex_provider = candidate
-
-    wire_api = (_string_or_none(codex_provider.get("wire_api")) or "responses").lower()
-    return ProviderConfig(
-        provider_name=codex_provider_name,
-        base_url=_string_or_none(codex_provider.get("base_url"))
-        or "https://api.openai.com/v1",
-        model=_string_or_none(codex.get("model")) or "gpt-4o-mini",
-        api_mode="chat" if wire_api == "chat" else "responses",
-        api_key=_load_codex_api_key() if import_codex else None,
-    )
-
-
 def _build_process_config() -> ProcessConfig:
     process = ProcessConfig()
     secure_cookies = (
@@ -174,7 +122,6 @@ def _build_process_config() -> ProcessConfig:
     )
     return process.model_copy(
         update={
-            "provider": _build_provider_config(import_codex=process.import_codex_config),
             "secure_cookies": secure_cookies,
         }
     )

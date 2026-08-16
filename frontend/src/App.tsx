@@ -2107,7 +2107,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
         <div className="form-main">
           <FormSection title="模型 API" description="支持 OpenAI 兼容接口。密钥仅由本地后端读取和保存。">
             <div className="field-grid two">
-              <label className="field"><span>服务商</span><select value={settings.provider_name} onChange={(event) => setSettings({ ...settings, provider_name: event.target.value })}><option value="codex">Codex 本机配置</option><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>
+              <label className="field"><span>服务商</span><select value={settings.provider_name} onChange={(event) => setSettings({ ...settings, provider_name: event.target.value })}><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>
               <label className="field"><span>模型</span><input value={settings.model} onChange={(event) => setSettings({ ...settings, model: event.target.value })} placeholder="gpt-5-mini" /></label>
             </div>
             <label className="field"><span>Base URL</span><input value={settings.base_url} onChange={(event) => { setSettings({ ...settings, base_url: event.target.value }); setTestResult(null) }} placeholder="https://api.openai.com/v1" /></label>
