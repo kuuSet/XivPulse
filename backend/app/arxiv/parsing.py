@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from bs4 import BeautifulSoup
 
-from ..domain.paper import Paper, as_utc, deduplicate_papers
+from ..domain.paper import Paper
 
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"
@@ -168,16 +168,9 @@ def parse_arxiv_feed(payload: str | bytes) -> tuple[int, list[Paper]]:
         total = int(total_text)
     except ValueError as exc:
         raise ValueError("arXiv response is missing a valid totalResults") from exc
-    papers = deduplicate_papers(
+    papers = [
         _parse_atom_entry(element)
         for element in root
         if _local_name(element.tag) == "entry"
-    )
-    papers.sort(
-        key=lambda item: (
-            as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
-            item.arxiv_id,
-            item.version,
-        )
-    )
+    ]
     return total, papers

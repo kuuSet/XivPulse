@@ -7,12 +7,12 @@ import re
 import threading
 import time
 from collections.abc import Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from urllib.parse import quote
 
 import httpx
 
-from ..domain.paper import Paper
+from ..domain.paper import Paper, as_utc, deduplicate_papers
 from .parsing import parse_arxiv_feed, parse_arxiv_id, parse_html_affiliations
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
@@ -20,6 +20,7 @@ DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
 _MAX_REQUEST_ATTEMPTS = 3
 _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRY_DELAY_SECONDS = 30.0
+_PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")
 
 
@@ -167,24 +168,60 @@ class ArxivClient:
         )
         if not clean:
             raise ValueError("At least one valid arXiv category is required")
-        limit = min(max(1, int(max_results)), 2000)
-        payload = await self._get(
-            ARXIV_API_URL,
-            accept="application/atom+xml,application/xml",
-            params={
-                "search_query": build_date_query(target_date, clean),
-                "start": 0,
-                "max_results": limit,
-                "sortBy": "submittedDate",
-                "sortOrder": "ascending",
-            },
-        )
-        total, papers = parse_arxiv_feed(payload)
+        limit = int(max_results)
+        if limit < 1:
+            raise ValueError("arXiv result limit must be positive")
+        query = build_date_query(target_date, clean)
+
+        async def fetch_page(start: int, size: int) -> tuple[int, list[Paper]]:
+            payload = await self._get(
+                ARXIV_API_URL,
+                accept="application/atom+xml,application/xml",
+                params={
+                    "search_query": query,
+                    "start": start,
+                    "max_results": size,
+                    "sortBy": "submittedDate",
+                    "sortOrder": "ascending",
+                },
+            )
+            return parse_arxiv_feed(payload)
+
+        first_size = min(_PAGE_SIZE, limit)
+        total, entries = await fetch_page(0, first_size)
         if total > limit:
             raise ValueError(
                 f"arXiv reports {total} papers for {target_date}, exceeding the configured "
                 f"limit {limit}"
             )
+        expected = min(total, first_size)
+        if len(entries) != expected:
+            raise ValueError(
+                f"arXiv returned an incomplete page at offset 0: "
+                f"expected {expected}, received {len(entries)}"
+            )
+        for start in range(_PAGE_SIZE, total, _PAGE_SIZE):
+            size = min(_PAGE_SIZE, total - start)
+            page_total, page = await fetch_page(start, size)
+            if page_total != total:
+                raise ValueError(
+                    f"arXiv result count changed during pagination: {total} to {page_total}"
+                )
+            if len(page) != size:
+                raise ValueError(
+                    f"arXiv returned an incomplete page at offset {start}: "
+                    f"expected {size}, received {len(page)}"
+                )
+            entries.extend(page)
+
+        papers = deduplicate_papers(entries)
+        papers.sort(
+            key=lambda item: (
+                as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
+                item.arxiv_id,
+                item.version,
+            )
+        )
         outside_date = [
             paper.arxiv_id
             for paper in papers

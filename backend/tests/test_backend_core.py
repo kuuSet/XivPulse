@@ -379,13 +379,134 @@ async def test_daily_fetch_stops_after_three_transient_failures(
     assert len(requests) == 3
 
 
-def test_atom_parser_deduplicates_and_preserves_reported_total() -> None:
+def _atom_page(total: int, entries: list[tuple[str, int, str]]) -> bytes:
+    body = "".join(
+        f"""
+  <entry>
+    <id>https://arxiv.org/abs/{arxiv_id}v{version}</id>
+    <updated>2026-08-13T02:00:00Z</updated>
+    <published>2026-08-13T01:00:00Z</published>
+    <title>{title}</title>
+    <summary>Test abstract.</summary>
+    <author><name>Test Author</name></author>
+    <category term="cs.RO" />
+  </entry>"""
+        for arxiv_id, version, title in entries
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <opensearch:totalResults>{total}</opensearch:totalResults>
+  {body}
+</feed>""".encode()
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_pages_retries_and_deduplicates_across_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.arxiv import client as arxiv_client_module
+
+    first = [(f"2608.{index:05d}", 1, f"Paper {index}") for index in range(1, 201)]
+    second = [("2608.00200", 2, "Paper 200 revised")] + [
+        (f"2608.{index:05d}", 1, f"Paper {index}") for index in range(201, 400)
+    ]
+    third = [(f"2608.{index:05d}", 1, f"Paper {index}") for index in range(400, 450)]
+    pages = {
+        0: _atom_page(450, first),
+        200: _atom_page(450, second),
+        400: _atom_page(450, third),
+    }
+    requests: list[httpx.Request] = []
+    middle_attempts = 0
+
+    async def no_wait(_delay: float) -> None:
+        pass
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal middle_attempts
+        requests.append(request)
+        start = int(request.url.params["start"])
+        if start == 200:
+            middle_attempts += 1
+            if middle_attempts == 1:
+                return httpx.Response(503, headers={"Retry-After": "0"}, request=request)
+        return httpx.Response(200, content=pages[start], request=request)
+
+    monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", no_wait)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        records = await ArxivClient(
+            http_client=http_client,
+            rate_limit_seconds=0,
+        ).fetch_daily(
+            ["cs.RO"],
+            target_date=date(2026, 8, 13),
+            max_results=450,
+        )
+
+    assert [request.url.params["start"] for request in requests] == ["0", "200", "200", "400"]
+    assert [request.url.params["max_results"] for request in requests] == [
+        "200",
+        "200",
+        "200",
+        "50",
+    ]
+    assert len(records) == 449
+    revised = next(record for record in records if record.arxiv_id == "2608.00200")
+    assert revised.version == 2
+    assert revised.title == "Paper 200 revised"
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_rejects_an_incomplete_page() -> None:
+    first = [(f"2608.{index:05d}", 1, f"Paper {index}") for index in range(1, 201)]
+    pages = {
+        0: _atom_page(201, first),
+        200: _atom_page(201, []),
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=pages[int(request.url.params["start"])],
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        with pytest.raises(ValueError, match="incomplete page at offset 200"):
+            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
+                ["cs.RO"],
+                target_date=date(2026, 8, 13),
+                max_results=201,
+            )
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_rejects_papers_outside_requested_date() -> None:
+    payload = _atom_page(1, [("2608.00001", 1, "Wrong date")]).replace(
+        b"2026-08-13", b"2026-08-12"
+    )
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=payload))
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(ValueError, match="outside requested date 2026-08-13"):
+            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
+                ["cs.RO"],
+                target_date=date(2026, 8, 13),
+                max_results=1,
+            )
+
+
+def test_atom_parser_preserves_entries_and_reported_total() -> None:
     payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
     total, records = parse_arxiv_feed(payload)
 
     assert total == 3
-    assert [record.arxiv_id for record in records] == ["2608.00001", "2608.00002"]
-    assert records[0].title == "A newer robot paper"
+    assert [record.versioned_id for record in records] == [
+        "2608.00002v1",
+        "2608.00001v1",
+        "2608.00001v2",
+    ]
 
 
 @pytest.mark.asyncio

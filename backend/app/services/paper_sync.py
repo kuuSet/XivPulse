@@ -70,13 +70,11 @@ async def sync_papers(
         if topic.enabled
         for category in topic.arxiv_categories
     ]
-    papers = (
-        await arxiv.fetch_daily(
-            categories,
-            target_date=target_date,
-            max_results=options.max_results,
-        )
-    )[: options.max_results]
+    papers = await arxiv.fetch_daily(
+        categories,
+        target_date=target_date,
+        max_results=options.max_results,
+    )
 
     with session_scope(factory) as db:
         stored = PaperRepository(db).upsert(papers)
