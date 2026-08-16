@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from ..config import AppConfig, get_config
+from ..config import ProviderConfig, get_process_config
 from ..schemas import ProviderTestResult
 
 TModel = TypeVar("TModel", bound=BaseModel)
@@ -239,11 +239,11 @@ class OpenAICompatibleAdapter:
 
     def __init__(
         self,
-        config: AppConfig | None = None,
+        config: ProviderConfig | None = None,
         *,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.config = config or get_config()
+        self.config = config or get_process_config().provider
         self.base_url = _safe_base_url(self.config.base_url)
         self._client = http_client
         self.last_transport: Literal["responses", "chat", "mock"] = "mock"

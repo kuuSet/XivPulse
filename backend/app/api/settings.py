@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..config import get_config
+from ..config import get_process_config
 from ..database import get_db
 from ..models import Analysis, AppSetting, Paper, Topic, utcnow
 from ..schemas import ProfileUpdate
@@ -394,9 +394,12 @@ async def test_provider(
     payload: ProviderTestPayload, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
     settings = setting_map(db)
-    key = payload.api_key or settings.get("api_key") or get_config().api_key
-    base_url = (payload.base_url or settings.get("base_url") or get_config().base_url).rstrip("/")
-    model = payload.model or settings.get("model") or get_config().model
+    process_provider = get_process_config().provider
+    key = payload.api_key or settings.get("api_key") or process_provider.api_key
+    base_url = (
+        payload.base_url or settings.get("base_url") or process_provider.base_url
+    ).rstrip("/")
+    model = payload.model or settings.get("model") or process_provider.model
     if not key:
         return {
             "ok": True,
@@ -409,7 +412,7 @@ async def test_provider(
         from ..services.provider import OpenAICompatibleAdapter
 
         config = replace(
-            get_config(),
+            process_provider,
             provider_name=payload.provider
             or payload.provider_name
             or settings.get("provider_name")

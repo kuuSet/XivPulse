@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..config import AppConfig, get_config
+from ..config import ProviderConfig, get_process_config
 from ..models import AppSetting, Profile
 
 
@@ -25,10 +25,10 @@ def set_setting(db: Session, key: str, value: Any) -> None:
         setting.value = value
 
 
-def configured_provider_config(settings: dict[str, Any]) -> AppConfig:
+def configured_provider_config(settings: dict[str, Any]) -> ProviderConfig:
     """Overlay database provider settings without exposing stored credentials."""
 
-    config = get_config()
+    config = get_process_config().provider
     return replace(
         config,
         provider_name=str(settings.get("provider_name") or config.provider_name),

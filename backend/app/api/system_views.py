@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import Integer, desc, func, select
 from sqlalchemy.orm import Session
 
-from ..config import get_config, provider_status
+from ..config import get_process_config, provider_status
 from ..env import xivpulse_env
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.mailer import email_enabled
@@ -20,7 +20,7 @@ from .presenters import _as_utc
 
 def _settings_wire(db: Session) -> dict[str, Any]:
     values = setting_map(db)
-    config = get_config()
+    config = get_process_config().provider
     saved_key = values.get("api_key")
     base_url = values.get("base_url") or config.base_url
     model = values.get("model") or config.model

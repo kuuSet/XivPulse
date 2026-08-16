@@ -320,13 +320,19 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
 def test_server_auth_login_cookie_and_logout(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from app.api import auth as auth_api
+    from app.services.auth import AuthConfig
     from argon2 import PasswordHasher
 
-    monkeypatch.setenv("XIVPULSE_AUTH_ENABLED", "true")
-    monkeypatch.setenv("XIVPULSE_ADMIN_USERNAME", "researcher")
-    monkeypatch.setenv("XIVPULSE_ADMIN_PASSWORD_HASH", PasswordHasher().hash("test-secret"))
-    monkeypatch.setenv("XIVPULSE_SESSION_SECRET", "s" * 48)
-    monkeypatch.setenv("XIVPULSE_SECURE_COOKIES", "false")
+    config = AuthConfig(
+        enabled=True,
+        username="researcher",
+        password_hash=PasswordHasher().hash("test-secret"),
+        session_secret="s" * 48,
+        secure_cookies=False,
+        trust_proxy=False,
+    )
+    monkeypatch.setattr(auth_api, "auth_config", lambda: config)
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/settings").status_code == 401
     login = client.post(

@@ -7,11 +7,10 @@ from pathlib import Path
 import app.config as config_module
 import httpx
 import pytest
-from app.config import AppConfig, provider_status
+from app.config import ProviderConfig, provider_status
 from app.database import init_db, make_engine
 from app.database_defaults import DEFAULT_TOPICS
 from app.domain.paper import Paper as PaperDocument
-from app.env import xivpulse_env
 from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
@@ -50,9 +49,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
-def _config(**overrides: object) -> AppConfig:
+def _config(**overrides: object) -> ProviderConfig:
     values: dict[str, object] = {
-        "database_url": "sqlite:///:memory:",
         "provider_name": "test-provider",
         "base_url": "https://provider.test/v1",
         "model": "test-model",
@@ -60,7 +58,7 @@ def _config(**overrides: object) -> AppConfig:
         "api_key": "test-secret",
     }
     values.update(overrides)
-    return AppConfig(**values)  # type: ignore[arg-type]
+    return ProviderConfig(**values)  # type: ignore[arg-type]
 
 
 def test_seed_is_idempotent_and_provider_status_never_exposes_secret() -> None:
@@ -83,14 +81,14 @@ def test_seed_is_idempotent_and_provider_status_never_exposes_secret() -> None:
     assert "api_key" not in status
 
 
-def test_xivpulse_environment_prefers_new_name_and_supports_legacy(
+def test_process_config_uses_only_xivpulse_environment_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ARXIV_DAILY_MODEL", "legacy-model")
+    monkeypatch.delenv("XIVPULSE_MODEL", raising=False)
+    assert config_module._build_process_config().provider.model == "gpt-4o-mini"
     monkeypatch.setenv("XIVPULSE_MODEL", "current-model")
-    assert xivpulse_env("MODEL") == "current-model"
-    monkeypatch.delenv("XIVPULSE_MODEL")
-    assert xivpulse_env("MODEL") == "legacy-model"
+    assert config_module._build_process_config().provider.model == "current-model"
 
 
 def test_public_config_does_not_read_codex_credentials_without_opt_in(
@@ -98,9 +96,7 @@ def test_public_config_does_not_read_codex_credentials_without_opt_in(
 ) -> None:
     for name in (
         "XIVPULSE_IMPORT_CODEX_CONFIG",
-        "ARXIV_DAILY_IMPORT_CODEX_CONFIG",
         "XIVPULSE_API_KEY",
-        "ARXIV_DAILY_API_KEY",
         "OPENAI_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -110,7 +106,7 @@ def test_public_config_does_not_read_codex_credentials_without_opt_in(
 
     monkeypatch.setattr(config_module, "_load_codex_config", unexpected_read)
     monkeypatch.setattr(config_module, "_load_codex_api_key", unexpected_read)
-    config = config_module._build_config()
+    config = config_module._build_process_config().provider
     assert config.mock_mode is True
     assert config.config_source == "defaults"
     assert config.key_source == "none"

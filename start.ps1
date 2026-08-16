@@ -3,8 +3,8 @@ param(
     [switch]$SkipInstall,
     [switch]$SkipFrontend,
     [switch]$NoBrowser,
-    [string]$HostAddress = $(if ($env:XIVPULSE_HOST) { $env:XIVPULSE_HOST } elseif ($env:ARXIV_DAILY_HOST) { $env:ARXIV_DAILY_HOST } else { "127.0.0.1" }),
-    [int]$Port = $(if ($env:XIVPULSE_PORT) { [int]$env:XIVPULSE_PORT } elseif ($env:ARXIV_DAILY_PORT) { [int]$env:ARXIV_DAILY_PORT } else { 8765 })
+    [string]$HostAddress = $(if ($env:XIVPULSE_HOST) { $env:XIVPULSE_HOST } else { "127.0.0.1" }),
+    [int]$Port = $(if ($env:XIVPULSE_PORT) { [int]$env:XIVPULSE_PORT } else { 8765 })
 )
 
 $ErrorActionPreference = "Stop"

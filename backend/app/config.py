@@ -1,37 +1,42 @@
-"""Application configuration and conservative local Codex provider discovery."""
+"""Typed application configuration loaded from process environment and persisted settings."""
 
 from __future__ import annotations
 
 import json
+import os
 import threading
 import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from .env import env_value, xivpulse_env
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_XIVPULSE_DB_PATH = (_REPO_ROOT / "data" / "xivpulse.db").resolve()
-_LEGACY_DB_PATH = (_REPO_ROOT / "data" / "arxiv_daily.db").resolve()
-_DEFAULT_DB_PATH = (
-    _LEGACY_DB_PATH
-    if _LEGACY_DB_PATH.exists() and not _XIVPULSE_DB_PATH.exists()
-    else _XIVPULSE_DB_PATH
-)
+_DEFAULT_DB_PATH = (_REPO_ROOT / "data" / "xivpulse.db").resolve()
+_DEFAULT_MODEL_CACHE = (_REPO_ROOT / "data" / "model-cache").resolve()
 _CODEX_DIR = Path.home() / ".codex"
 _CODEX_CONFIG_PATH = _CODEX_DIR / "config.toml"
 _CODEX_AUTH_PATH = _CODEX_DIR / "auth.json"
 _CONFIG_LOCK = threading.Lock()
-_CACHED_CONFIG: AppConfig | None = None
+_CACHED_PROCESS_CONFIG: ProcessConfig | None = None
 
 
-def _nonempty_env(*names: str) -> str | None:
-    value = env_value(*names)
+def _environment(name: str) -> str | None:
+    return os.getenv(f"XIVPULSE_{name}")
+
+
+def _nonempty_environment(name: str) -> str | None:
+    value = _environment(name)
     if value is None:
         return None
     value = value.strip()
     return value or None
+
+
+def _environment_enabled(name: str, default: bool = False) -> bool:
+    value = _environment(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "on"}
 
 
 def _load_codex_config() -> dict[str, Any]:
@@ -63,11 +68,12 @@ def _normalise_base_url(value: str | None) -> str:
     return (value or "https://api.openai.com/v1").strip().rstrip("/")
 
 
+def _string_or_none(value: Any) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 @dataclass(frozen=True, slots=True)
-class AppConfig:
-    database_url: str
-    host: str = "127.0.0.1"
-    port: int = 8765
+class ProviderConfig:
     provider_name: str = "openai"
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-4o-mini"
@@ -82,8 +88,6 @@ class AppConfig:
         return not bool(self.api_key)
 
     def public_dict(self) -> dict[str, Any]:
-        """Return configuration safe for logs and API responses."""
-
         payload = asdict(self)
         payload.pop("api_key", None)
         payload["api_key_configured"] = not self.mock_mode
@@ -91,31 +95,39 @@ class AppConfig:
         return payload
 
 
-def _build_config() -> AppConfig:
-    import_codex = str(xivpulse_env("IMPORT_CODEX_CONFIG", "false")).strip().casefold() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+@dataclass(frozen=True, slots=True)
+class ProcessConfig:
+    database_url: str
+    provider: ProviderConfig
+    host: str = "127.0.0.1"
+    port: int = 8765
+    trusted_hosts: tuple[str, ...] = ()
+    model_cache: Path = _DEFAULT_MODEL_CACHE
+    embedding_backfill: bool = True
+    auth_enabled: bool = False
+    admin_username: str = ""
+    admin_password_hash: str = field(default="", repr=False, compare=False)
+    session_secret: str = field(default="", repr=False, compare=False)
+    secure_cookies: bool = False
+    trust_proxy: bool = False
+
+
+def _build_provider_config() -> ProviderConfig:
+    import_codex = _environment_enabled("IMPORT_CODEX_CONFIG")
     codex = _load_codex_config() if import_codex else {}
-    provider_name = str(codex.get("model_provider") or "openai")
+    codex_provider_name = str(codex.get("model_provider") or "openai")
     providers = codex.get("model_providers")
-    provider: dict[str, Any] = {}
+    codex_provider: dict[str, Any] = {}
     if isinstance(providers, dict):
-        candidate = providers.get(provider_name)
+        candidate = providers.get(codex_provider_name)
         if isinstance(candidate, dict):
-            provider = candidate
+            codex_provider = candidate
 
-    env_base_url = _nonempty_env("XIVPULSE_BASE_URL", "ARXIV_DAILY_BASE_URL")
-    env_model = _nonempty_env("XIVPULSE_MODEL", "ARXIV_DAILY_MODEL")
-    base_url = _normalise_base_url(env_base_url or _string_or_none(provider.get("base_url")))
-    model = env_model or _string_or_none(codex.get("model")) or "gpt-4o-mini"
-    wire_api = (_string_or_none(provider.get("wire_api")) or "responses").lower()
-    api_mode: Literal["responses", "chat"] = "chat" if wire_api == "chat" else "responses"
-
-    explicit_key = _nonempty_env("XIVPULSE_API_KEY", "ARXIV_DAILY_API_KEY")
-    openai_key = _nonempty_env("OPENAI_API_KEY")
+    env_provider_name = _nonempty_environment("PROVIDER_NAME")
+    env_base_url = _nonempty_environment("BASE_URL")
+    env_model = _nonempty_environment("MODEL")
+    explicit_key = _nonempty_environment("API_KEY")
+    openai_key = _string_or_none(os.getenv("OPENAI_API_KEY"))
     codex_key = (
         _load_codex_api_key() if import_codex and not explicit_key and not openai_key else None
     )
@@ -129,33 +141,22 @@ def _build_config() -> AppConfig:
     else:
         key_source = "none"
 
-    database_url = _nonempty_env("XIVPULSE_DATABASE_URL", "ARXIV_DAILY_DATABASE_URL")
-    if not database_url:
-        database_url = f"sqlite:///{_DEFAULT_DB_PATH.as_posix()}"
+    provider_name = env_provider_name or codex_provider_name
+    base_url = _normalise_base_url(
+        env_base_url or _string_or_none(codex_provider.get("base_url"))
+    )
+    model = env_model or _string_or_none(codex.get("model")) or "gpt-4o-mini"
+    wire_api = (_string_or_none(codex_provider.get("wire_api")) or "responses").lower()
+    api_mode: Literal["responses", "chat"] = "chat" if wire_api == "chat" else "responses"
+    source = "codex" if import_codex else "defaults"
+    if env_provider_name or env_base_url or env_model or explicit_key:
+        source = "environment+codex" if import_codex else "environment"
 
-    host = _nonempty_env("XIVPULSE_HOST", "ARXIV_DAILY_HOST") or "127.0.0.1"
     try:
-        port = int(_nonempty_env("XIVPULSE_PORT", "ARXIV_DAILY_PORT") or "8765")
-    except ValueError:
-        port = 8765
-    if not 1 <= port <= 65535:
-        port = 8765
-
-    try:
-        timeout = float(
-            _nonempty_env("XIVPULSE_REQUEST_TIMEOUT", "ARXIV_DAILY_REQUEST_TIMEOUT") or "180"
-        )
+        timeout = float(_nonempty_environment("REQUEST_TIMEOUT") or "180")
     except ValueError:
         timeout = 180.0
-    timeout = min(max(timeout, 5.0), 600.0)
-
-    source = "codex" if import_codex else "defaults"
-    if env_base_url or env_model or explicit_key:
-        source = "environment+codex" if import_codex else "environment"
-    return AppConfig(
-        database_url=database_url,
-        host=host,
-        port=port,
+    return ProviderConfig(
         provider_name=provider_name,
         base_url=base_url,
         model=model,
@@ -163,34 +164,62 @@ def _build_config() -> AppConfig:
         api_key=api_key,
         config_source=source,
         key_source=key_source,
-        request_timeout=timeout,
+        request_timeout=min(max(timeout, 5.0), 600.0),
     )
 
 
-def _string_or_none(value: Any) -> str | None:
-    return value.strip() if isinstance(value, str) and value.strip() else None
+def _build_process_config() -> ProcessConfig:
+    database_url = _nonempty_environment("DATABASE_URL") or (
+        f"sqlite:///{_DEFAULT_DB_PATH.as_posix()}"
+    )
+    try:
+        port = int(_nonempty_environment("PORT") or "8765")
+    except ValueError:
+        port = 8765
+    if not 1 <= port <= 65535:
+        port = 8765
+    auth_enabled = _environment_enabled("AUTH_ENABLED")
+    trusted_hosts = tuple(
+        value.strip()
+        for value in str(_environment("TRUSTED_HOSTS") or "").split(",")
+        if value.strip()
+    )
+    model_cache = _nonempty_environment("MODEL_CACHE")
+    return ProcessConfig(
+        database_url=database_url,
+        provider=_build_provider_config(),
+        host=_nonempty_environment("HOST") or "127.0.0.1",
+        port=port,
+        trusted_hosts=trusted_hosts,
+        model_cache=(
+            Path(model_cache).expanduser().resolve() if model_cache else _DEFAULT_MODEL_CACHE
+        ),
+        embedding_backfill=_environment_enabled("EMBEDDING_BACKFILL", default=True),
+        auth_enabled=auth_enabled,
+        admin_username=str(_environment("ADMIN_USERNAME") or "").strip(),
+        admin_password_hash=str(_environment("ADMIN_PASSWORD_HASH") or "").strip(),
+        session_secret=str(_environment("SESSION_SECRET") or ""),
+        secure_cookies=_environment_enabled("SECURE_COOKIES", default=auth_enabled),
+        trust_proxy=_environment_enabled("TRUST_PROXY"),
+    )
 
 
-def get_config(*, refresh: bool = False) -> AppConfig:
-    global _CACHED_CONFIG
+def get_process_config(*, refresh: bool = False) -> ProcessConfig:
+    global _CACHED_PROCESS_CONFIG
     with _CONFIG_LOCK:
-        if refresh or _CACHED_CONFIG is None:
-            _CACHED_CONFIG = _build_config()
-        return _CACHED_CONFIG
+        if refresh or _CACHED_PROCESS_CONFIG is None:
+            _CACHED_PROCESS_CONFIG = _build_process_config()
+        return _CACHED_PROCESS_CONFIG
 
 
-def provider_status(config: AppConfig | None = None) -> dict[str, Any]:
-    config = config or get_config()
-    return {
-        "provider_name": config.provider_name,
-        "base_url": config.base_url,
-        "model": config.model,
-        "api_mode": config.api_mode,
-        "api_key_configured": not config.mock_mode,
-        "mock_mode": config.mock_mode,
-        "config_source": config.config_source,
-        "key_source": config.key_source,
-    }
+def provider_status(config: ProviderConfig | None = None) -> dict[str, Any]:
+    config = config or get_process_config().provider
+    return config.public_dict()
 
 
-__all__ = ["AppConfig", "get_config", "provider_status"]
+__all__ = [
+    "ProcessConfig",
+    "ProviderConfig",
+    "get_process_config",
+    "provider_status",
+]

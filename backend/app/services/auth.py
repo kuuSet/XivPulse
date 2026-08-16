@@ -11,17 +11,13 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from ..env import xivpulse_env
+from ..config import get_process_config
 
 SESSION_COOKIE = "xivpulse_session"
 SESSION_MAX_AGE = 7 * 24 * 60 * 60
 FAILURE_LIMIT = 5
 FAILURE_WINDOW = timedelta(minutes=15)
 LOCK_DURATION = timedelta(minutes=15)
-
-
-def _enabled(value: str | None) -> bool:
-    return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True)
@@ -45,16 +41,14 @@ class AuthConfig:
 
 
 def auth_config() -> AuthConfig:
-    enabled = _enabled(xivpulse_env("AUTH_ENABLED"))
+    process = get_process_config()
     config = AuthConfig(
-        enabled=enabled,
-        username=str(xivpulse_env("ADMIN_USERNAME", "")).strip(),
-        password_hash=str(xivpulse_env("ADMIN_PASSWORD_HASH", "")).strip(),
-        session_secret=str(xivpulse_env("SESSION_SECRET", "")),
-        secure_cookies=_enabled(
-            xivpulse_env("SECURE_COOKIES", "true" if enabled else "false")
-        ),
-        trust_proxy=_enabled(xivpulse_env("TRUST_PROXY")),
+        enabled=process.auth_enabled,
+        username=process.admin_username,
+        password_hash=process.admin_password_hash,
+        session_secret=process.session_secret,
+        secure_cookies=process.secure_cookies,
+        trust_proxy=process.trust_proxy,
     )
     config.validate()
     return config

@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..env import xivpulse_env
+from ..config import get_process_config
 from ..models import Paper, PaperEmbedding, Topic
 
 MODEL_ID = "BAAI/bge-small-en-v1.5"
@@ -42,10 +42,7 @@ class SemanticMatch:
 
 
 def model_cache_dir() -> Path:
-    configured = str(xivpulse_env("MODEL_CACHE", "")).strip()
-    if configured:
-        return Path(configured).expanduser().resolve()
-    return (Path(__file__).resolve().parents[3] / "data" / "model-cache").resolve()
+    return get_process_config().model_cache
 
 
 def _load_model() -> Any:

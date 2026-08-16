@@ -8,8 +8,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from .config import get_process_config
 from .database import init_db, session_scope
-from .env import xivpulse_env
 from .models import Job, Paper, PaperMatch, utcnow
 from .services.auth import auth_config
 from .services.direction_matching import canonical_requested_direction_names
@@ -110,13 +110,7 @@ def initialize_application() -> None:
                     job.message = "任务超时"
                     job.completed_at = utcnow()
         _initialized = True
-        backfill_enabled = str(xivpulse_env("EMBEDDING_BACKFILL", "true")).strip().casefold() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-        if backfill_enabled and not _embedding_backfill_started:
+        if get_process_config().embedding_backfill and not _embedding_backfill_started:
             _embedding_backfill_started = True
             threading.Thread(
                 target=_backfill_existing_semantic_embeddings,

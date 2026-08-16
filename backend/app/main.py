@@ -18,7 +18,7 @@ from .api.papers import router as papers_router
 from .api.projects import router as projects_router
 from .api.reports import router as reports_router
 from .api.settings import router as settings_router
-from .env import xivpulse_env
+from .config import get_process_config
 from .runtime import initialize_application
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -38,9 +38,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-trusted_hosts = [
-    value.strip() for value in str(xivpulse_env("TRUSTED_HOSTS", "")).split(",") if value.strip()
-]
+trusted_hosts = list(get_process_config().trusted_hosts)
 if trusted_hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 
