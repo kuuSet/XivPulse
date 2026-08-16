@@ -434,6 +434,8 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert settings.json()["api_key_configured"] is True
     assert "never-return-this" not in settings.text
     assert "never-return-this" not in client.get("/api/settings").text
+    assert "screen_top_n" not in settings.json()
+    assert client.put("/api/settings", json={"screen_top_n": 10}).status_code == 422
 
     dashboard = client.get("/api/dashboard").json()
     assert dashboard["total_papers"] == 1

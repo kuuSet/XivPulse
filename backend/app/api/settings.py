@@ -10,7 +10,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -41,20 +41,17 @@ router = APIRouter()
 
 
 class SettingsPayload(BaseModel):
-    provider: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
     provider_name: str | None = None
     base_url: str | None = Field(default=None, max_length=2000)
     model: str | None = Field(default=None, max_length=200)
     api_key: str | None = Field(default=None, max_length=10000)
-    refresh_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     schedule_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     timezone: str | None = Field(default=None, min_length=1, max_length=100)
-    max_candidates: int | None = Field(default=None, ge=1, le=1000)
     max_results: int | None = Field(default=None, ge=1, le=1000)
-    deep_analysis_limit: int | None = Field(default=None, ge=0, le=100)
     deep_analysis_top_n: int | None = Field(default=None, ge=0, le=100)
     deep_relevance_threshold: float | None = Field(default=None, ge=0, le=100)
-    screen_top_n: int | None = Field(default=None, ge=0, le=500)
     screen_batch_size: int | None = Field(default=None, ge=0, le=500)
     semantic_recall_mode: Literal["high", "balanced", "precise"] | None = None
     retention_days: int | None = Field(default=None, ge=1, le=3650)
@@ -110,7 +107,8 @@ class SettingsPayload(BaseModel):
 
 
 class ProviderTestPayload(BaseModel):
-    provider: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
     provider_name: str | None = None
     base_url: str | None = None
     model: str | None = None
@@ -219,50 +217,11 @@ def get_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
 @router.put("/api/settings")
 def update_settings(payload: SettingsPayload, db: Session = Depends(get_db)) -> dict[str, Any]:
     values = payload.model_dump(exclude_none=True)
-    mapping = {
-        "provider": "provider_name",
-        "provider_name": "provider_name",
-        "refresh_time": "schedule_time",
-        "schedule_time": "schedule_time",
-        "max_candidates": "max_results",
-        "max_results": "max_results",
-        "deep_analysis_limit": "deep_analysis_top_n",
-        "deep_analysis_top_n": "deep_analysis_top_n",
-        "deep_relevance_threshold": "deep_relevance_threshold",
-        "screen_top_n": "screen_batch_size",
-        "screen_batch_size": "screen_batch_size",
-        "semantic_recall_mode": "semantic_recall_mode",
-        "retention_days": "retention_days",
-        "analysis_budget_mode": "analysis_budget_mode",
-        "daily_ai_synthesis_enabled": "daily_ai_synthesis_enabled",
-        "analysis_prompt_template_id": "analysis_prompt_template_id",
-        "screening_prompt": "screening_prompt",
-        "deep_prompt": "deep_prompt",
-        "base_url": "base_url",
-        "model": "model",
-        "api_key": "api_key",
-        "timezone": "timezone",
-        "email_enabled": "email_enabled",
-        "smtp_host": "smtp_host",
-        "smtp_port": "smtp_port",
-        "smtp_security": "smtp_security",
-        "smtp_username": "smtp_username",
-        "smtp_password": "smtp_password",
-        "smtp_from": "smtp_from",
-        "email_recipients": "email_recipients",
-        "public_base_url": "public_base_url",
-    }
-    for source, target in mapping.items():
-        if source not in values:
-            continue
-        value = values[source]
-        if target in {"api_key", "smtp_password"} and value == "":
-            delete_setting(db, target)
-        elif target not in {"api_key", "smtp_password"} or value:
-            set_setting(db, target, value)
-    if "screen_top_n" in values or "screen_batch_size" in values:
-        compatible_batch_size = values.get("screen_batch_size", values.get("screen_top_n", 30))
-        set_setting(db, "screen_top_n", int(compatible_batch_size))
+    for key, value in values.items():
+        if key in {"api_key", "smtp_password"} and value == "":
+            delete_setting(db, key)
+        elif key not in {"api_key", "smtp_password"} or value:
+            set_setting(db, key, value)
     db.commit()
     return _settings_wire(db)
 
@@ -406,8 +365,7 @@ async def test_provider(
 
         config = replace(
             settings.provider,
-            provider_name=payload.provider
-            or payload.provider_name
+            provider_name=payload.provider_name
             or settings.provider.provider_name
             or "openai-compatible",
             base_url=base_url,
@@ -420,7 +378,7 @@ async def test_provider(
         return {
             "ok": False,
             "message": f"连接失败：{exc}",
-            "provider_name": payload.provider or "openai-compatible",
+            "provider_name": payload.provider_name or "openai-compatible",
             "model": model,
             "transport": "http",
         }

@@ -1,6 +1,5 @@
 import type {
   BackendProfile,
-  BackendSettings,
   AnalysisPromptCatalog,
   AppStatus,
   AuthSession,
@@ -107,7 +106,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(toBackendProfile(profile)),
     })),
-  settings: async () => toSettings(await request<BackendSettings | Settings>('/settings')),
+  settings: () => request<Settings>('/settings'),
   promptCatalog: () => request<AnalysisPromptCatalog>('/prompts/catalog'),
   methodCatalog: () => request<MethodCatalog>('/methods/catalog'),
   methodCandidates: () => request<MethodCandidates>('/methods/candidates'),
@@ -121,8 +120,8 @@ export const api = {
     method: 'PUT', body: JSON.stringify({ items }),
   }),
   saveSettings: (settings: Settings & { api_key?: string; smtp_password?: string }) =>
-    request<BackendSettings | Settings>('/settings', { method: 'PUT', body: JSON.stringify(toBackendSettings(settings)) }).then(toSettings),
-  testConnection: (settings: Pick<Settings, 'provider' | 'base_url' | 'model'> & { api_key?: string }) =>
+    request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
+  testConnection: (settings: { provider_name: string; base_url: string; model: string; api_key?: string }) =>
     request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
   testEmbedding: () => request<Settings['embedding'] & { ok: boolean; message?: string }>('/settings/embedding/test', { method: 'POST' }),
   testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
@@ -301,65 +300,15 @@ function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: n
   }
 }
 
-function isBackendSettings(settings: BackendSettings | Settings): settings is BackendSettings {
-  return 'schedule_time' in settings
-}
-
-function toSettings(settings: BackendSettings | Settings): Settings {
-  if (!isBackendSettings(settings)) return settings
+function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_password?: string }) {
   return {
-    provider: settings.provider_name,
-    base_url: settings.base_url,
-    model: settings.model,
-    api_key_configured: settings.api_key_configured,
-    source: 'arxiv',
-    refresh_time: settings.schedule_time,
+    provider_name: settings.provider_name,
+    schedule_time: settings.schedule_time,
     timezone: settings.timezone,
-    max_candidates: settings.max_results,
-    screen_top_n: settings.screen_top_n,
-    screen_batch_size: settings.screen_batch_size ?? settings.screen_top_n,
-    semantic_recall_mode: settings.semantic_recall_mode ?? 'high',
-    semantic_recall_presets: settings.semantic_recall_presets ?? {},
-    embedding: settings.embedding ?? { model: 'BAAI/bge-small-en-v1.5', dimensions: 384, cache_dir: '', loaded: false, available: false },
-    deep_analysis_limit: settings.deep_analysis_top_n,
-    deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
-    retention_days: settings.retention_days ?? 365,
-    analysis_budget_mode: settings.analysis_budget_mode ?? 'balanced',
-    daily_ai_synthesis_enabled: settings.daily_ai_synthesis_enabled ?? true,
-    analysis_prompt_template_id: settings.analysis_prompt_template_id ?? 'balanced-review',
-    screening_prompt: settings.screening_prompt ?? '',
-    deep_prompt: settings.deep_prompt ?? '',
-    analysis_prompt_version: settings.analysis_prompt_version ?? '',
-    analysis_prompt_customized: settings.analysis_prompt_customized ?? false,
-    token_usage: settings.token_usage ?? emptyTokenUsage(),
-    automatic_cleanup_enabled: settings.automatic_cleanup_enabled ?? false,
-    database_path: settings.database_path,
-    database_size_bytes: settings.database_size_bytes,
-    stored_paper_count: settings.stored_paper_count ?? 0,
-    stored_analysis_count: settings.stored_analysis_count ?? 0,
-    stored_report_count: settings.stored_report_count ?? 0,
-    email_enabled: settings.email_enabled ?? false,
-    smtp_host: settings.smtp_host ?? '',
-    smtp_port: settings.smtp_port ?? 587,
-    smtp_security: settings.smtp_security ?? 'starttls',
-    smtp_username: settings.smtp_username ?? '',
-    smtp_password_configured: settings.smtp_password_configured ?? false,
-    smtp_from: settings.smtp_from ?? '',
-    email_recipients: settings.email_recipients ?? [],
-    public_base_url: settings.public_base_url ?? '',
-  }
-}
-
-function toBackendSettings(settings: Settings & { api_key?: string; smtp_password?: string }) {
-  return {
-    provider_name: settings.provider,
-    schedule_time: settings.refresh_time,
-    timezone: settings.timezone,
-    max_results: settings.max_candidates,
-    screen_top_n: Math.min(settings.max_candidates, settings.screen_top_n),
-    screen_batch_size: Math.min(settings.max_candidates, settings.screen_batch_size),
+    max_results: settings.max_results,
+    screen_batch_size: Math.min(settings.max_results, settings.screen_batch_size),
     semantic_recall_mode: settings.semantic_recall_mode,
-    deep_analysis_top_n: settings.deep_analysis_limit,
+    deep_analysis_top_n: settings.deep_analysis_top_n,
     deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
     retention_days: settings.retention_days,
     analysis_budget_mode: settings.analysis_budget_mode,
@@ -379,21 +328,6 @@ function toBackendSettings(settings: Settings & { api_key?: string; smtp_passwor
     public_base_url: settings.public_base_url,
     ...(settings.api_key ? { api_key: settings.api_key } : {}),
     ...(settings.smtp_password ? { smtp_password: settings.smtp_password } : {}),
-  }
-}
-
-function emptyTokenUsage() {
-  return {
-    record_count: 0,
-    usage_available_count: 0,
-    usage_missing_count: 0,
-    input_tokens: 0,
-    cached_input_tokens: 0,
-    output_tokens: 0,
-    reasoning_tokens: 0,
-    total_tokens: 0,
-    by_kind: {},
-    latest: null,
   }
 }
 

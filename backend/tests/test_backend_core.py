@@ -9,9 +9,8 @@ import httpx
 import pytest
 from app.config import ProviderConfig, load_runtime_settings, provider_status, set_setting
 from app.database import init_db, make_engine
-from app.database_defaults import DEFAULT_TOPICS
 from app.domain.paper import Paper as PaperDocument
-from app.models import AppSetting, Paper, PaperVersion, Profile, Topic
+from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.services.arxiv.client import ArxivClient, build_date_query
@@ -70,10 +69,10 @@ def test_seed_is_idempotent_and_provider_status_never_exposes_secret() -> None:
         assert len(profiles) == 1
         assert profiles[0].name == "具身智能研究"
         assert len(profiles[0].topics) == 6
-        settings = {item.key: item.value for item in session.scalars(select(AppSetting)).all()}
-        assert settings["screen_top_n"] == 30
-        assert settings["deep_analysis_top_n"] == 5
-        assert settings["deep_relevance_threshold"] == 90
+        settings = load_runtime_settings(session)
+        assert settings.screen_batch_size == 30
+        assert settings.deep_analysis_top_n == 5
+        assert settings.deep_relevance_threshold == 90
 
     status = provider_status(_config(api_key="do-not-leak"))
     assert status["api_key_configured"] is True
@@ -146,107 +145,6 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
         "first@example.com",
         "second@example.com",
     )
-
-
-def test_context_anchor_migration_updates_only_exact_prototype_defaults(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "migration.db"
-    engine = make_engine(f"sqlite:///{database_path.as_posix()}")
-    init_db(engine)
-    defaults = {
-        str(topic["name"]): list(topic["context_keywords_json"]) for topic in DEFAULT_TOPICS
-    }
-    with Session(engine) as session:
-        robot_learning = session.scalar(select(Topic).where(Topic.name == "机器人学习与强化学习"))
-        world_model = session.scalar(select(Topic).where(Topic.name == "世界模型与规划"))
-        assert robot_learning is not None and world_model is not None
-        robot_learning.context_keywords = [
-            "robot",
-            "robotic",
-            "humanoid",
-            "manipulation",
-            "locomotion",
-            "navigation",
-            "autonomous driving",
-            "autonomous vehicle",
-            "embodied",
-            "control",
-        ]
-        world_model.context_keywords = ["my-custom-anchor", "agent"]
-        session.query(AppSetting).filter(
-            AppSetting.key == "migration.direction_context_defaults"
-        ).delete()
-        rule_marker = session.get(AppSetting, "migration.precise_default_direction_rules")
-        assert rule_marker is not None
-        rule_marker.value = "keep-test-focused-on-anchor-v2"
-        session.commit()
-
-    init_db(engine)
-    with Session(engine) as session:
-        robot_learning = session.scalar(select(Topic).where(Topic.name == "机器人学习与强化学习"))
-        world_model = session.scalar(select(Topic).where(Topic.name == "世界模型与规划"))
-        assert robot_learning is not None and world_model is not None
-        assert robot_learning.context_keywords == defaults[robot_learning.name]
-        assert world_model.context_keywords == ["my-custom-anchor", "agent"]
-        marker = session.get(AppSetting, "migration.direction_context_defaults")
-        assert marker is not None
-
-    # Re-running the migration is idempotent and cannot reinterpret later edits.
-    with Session(engine) as session:
-        robot_learning = session.scalar(select(Topic).where(Topic.name == "机器人学习与强化学习"))
-        assert robot_learning is not None
-        robot_learning.context_keywords = []
-        session.commit()
-    init_db(engine)
-    with Session(engine) as session:
-        robot_learning = session.scalar(select(Topic).where(Topic.name == "机器人学习与强化学习"))
-        assert robot_learning is not None
-        assert robot_learning.context_keywords == []
-    engine.dispose()
-
-
-def test_precise_direction_rule_migration_preserves_a_customized_topic(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "direction-rules.db"
-    engine = make_engine(f"sqlite:///{database_path.as_posix()}")
-    init_db(engine)
-    with Session(engine) as session:
-        navigation = session.scalar(select(Topic).where(Topic.name == "导航与空间智能"))
-        robot_learning = session.scalar(select(Topic).where(Topic.name == "机器人学习与强化学习"))
-        assert navigation is not None and robot_learning is not None
-        # Recreate the previous built-in rule for one topic, while making the
-        # other topic visibly user-owned.
-        robot_learning.context_keywords = [
-            "robot",
-            "robotic",
-            "humanoid",
-            "manipulation",
-            "locomotion",
-            "navigation",
-            "autonomous driving",
-            "autonomous vehicle",
-            "embodied",
-        ]
-        navigation.context_keywords = ["my-lab-domain"]
-        session.query(AppSetting).filter(
-            AppSetting.key == "migration.precise_default_direction_rules"
-        ).delete()
-        session.commit()
-
-    init_db(engine)
-    with Session(engine) as session:
-        robot_learning = session.scalar(select(Topic).where(Topic.name == "机器人学习与强化学习"))
-        navigation = session.scalar(select(Topic).where(Topic.name == "导航与空间智能"))
-        assert robot_learning is not None and navigation is not None
-        default_by_name = {str(item["name"]): item for item in DEFAULT_TOPICS}
-        assert robot_learning.context_keywords == list(
-            default_by_name[robot_learning.name]["context_keywords_json"]
-        )
-        assert navigation.context_keywords == ["my-lab-domain"]
-        assert session.get(AppSetting, "migration.precise_default_direction_rules")
-    engine.dispose()
 
 
 def test_parse_dedupe_and_version_upsert() -> None:

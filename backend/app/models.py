@@ -654,10 +654,6 @@ class AppSetting(Base):
     def value(self, new_value: Any) -> None:
         self.value_json = new_value
 
-
-Setting = AppSetting
-
-
 __all__ = [
     "Analysis",
     "AppSetting",
@@ -677,7 +673,6 @@ __all__ = [
     "ResearchProject",
     "ReportSynthesisRun",
     "ScreeningQueueItem",
-    "Setting",
     "Topic",
     "utcnow",
 ]

@@ -52,11 +52,9 @@ SessionLocal = make_session_factory(engine)
 def init_db(bind: Engine | None = None, *, seed: bool = True) -> Engine:
     from . import models  # noqa: F401
     from .database_defaults import seed_defaults
-    from .database_migrations import migrate_schema
 
     target = bind or engine
     Base.metadata.create_all(target)
-    migrate_schema(target)
     if seed:
         factory = make_session_factory(target)
         with factory() as session:

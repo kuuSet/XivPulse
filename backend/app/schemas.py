@@ -295,39 +295,6 @@ class JobRead(ORMModel):
     completed_at: datetime | None
 
 
-class AppSettingsUpdate(BaseModel):
-    schedule_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
-    timezone: str | None = Field(default=None, min_length=1, max_length=100)
-    max_results: int | None = Field(default=None, ge=1, le=1000)
-    screen_top_n: int | None = Field(default=None, ge=0, le=500)
-    deep_analysis_top_n: int | None = Field(default=None, ge=0, le=100)
-    deep_relevance_threshold: float | None = Field(default=None, ge=0, le=100)
-    retention_days: int | None = Field(default=None, ge=1, le=3650)
-    analysis_budget_mode: Literal["economy", "balanced", "deep"] | None = None
-    base_url: str | None = Field(default=None, max_length=2000)
-    model: str | None = Field(default=None, max_length=200)
-    api_key: str | None = Field(default=None, max_length=10000)
-
-
-class AppSettingsRead(BaseModel):
-    schedule_time: str = "13:30"
-    timezone: str = "Asia/Shanghai"
-    max_results: int = 1000
-    screen_top_n: int = 30
-    deep_analysis_top_n: int = 5
-    deep_relevance_threshold: float = 90
-    retention_days: int = 365
-    analysis_budget_mode: Literal["economy", "balanced", "deep"] = "balanced"
-    provider_name: str = "openai"
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o-mini"
-    api_mode: Literal["responses", "chat"] = "responses"
-    api_key_configured: bool = False
-    mock_mode: bool = True
-    config_source: str = "defaults"
-    key_source: str = "none"
-
-
 class ProviderTestResult(BaseModel):
     ok: bool
     provider_name: str
@@ -352,18 +319,8 @@ class DashboardRead(BaseModel):
     provider: dict[str, Any] = Field(default_factory=dict)
 
 
-# Compatibility aliases used by route and UI code.
-SettingsRead = AppSettingsRead
-SettingsUpdate = AppSettingsUpdate
-PaperListItem = PaperRead
-PaperDetailRead = PaperDetail
-RecommendationResult = RecommendationRead
-
-
 __all__ = [
     "AnalysisRead",
-    "AppSettingsRead",
-    "AppSettingsUpdate",
     "DashboardRead",
     "DashboardStats",
     "DeepAnalysisResult",
@@ -374,8 +331,6 @@ __all__ = [
     "FeedbackWrite",
     "JobRead",
     "PaperDetail",
-    "PaperDetailRead",
-    "PaperListItem",
     "PaperRead",
     "PaperVersionRead",
     "ProfileRead",
@@ -383,10 +338,7 @@ __all__ = [
     "ProviderTestResult",
     "RankedPaperRead",
     "RecommendationRead",
-    "RecommendationResult",
     "ScreeningResult",
-    "SettingsRead",
-    "SettingsUpdate",
     "TopicRead",
     "TopicWrite",
 ]

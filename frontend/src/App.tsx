@@ -1998,7 +1998,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
     setTesting(true)
     setTestResult(null)
     try {
-      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ provider: settings.provider, base_url: settings.base_url, model: settings.model, ...(apiKey ? { api_key: apiKey } : {}) })
+      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ provider_name: settings.provider_name, base_url: settings.base_url, model: settings.model, ...(apiKey ? { api_key: apiKey } : {}) })
       setTestResult(result)
     } catch (testError) {
       setTestResult({ ok: false, message: testError instanceof Error ? testError.message : '连接测试失败' })
@@ -2107,7 +2107,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
         <div className="form-main">
           <FormSection title="模型 API" description="支持 OpenAI 兼容接口。密钥仅由本地后端读取和保存。">
             <div className="field-grid two">
-              <label className="field"><span>服务商</span><select value={settings.provider} onChange={(event) => setSettings({ ...settings, provider: event.target.value })}><option value="codex">Codex 本机配置</option><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>
+              <label className="field"><span>服务商</span><select value={settings.provider_name} onChange={(event) => setSettings({ ...settings, provider_name: event.target.value })}><option value="codex">Codex 本机配置</option><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>
               <label className="field"><span>模型</span><input value={settings.model} onChange={(event) => setSettings({ ...settings, model: event.target.value })} placeholder="gpt-5-mini" /></label>
             </div>
             <label className="field"><span>Base URL</span><input value={settings.base_url} onChange={(event) => { setSettings({ ...settings, base_url: event.target.value }); setTestResult(null) }} placeholder="https://api.openai.com/v1" /></label>
@@ -2121,10 +2121,9 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
 
           <FormSection title="报告时间偏好" description="这里保存应用内的日期与时间显示偏好，不会修改 Windows 计划任务。真实自动运行时间请运行 install_task.ps1 更新。">
             <div className="field-grid two">
-              <label className="field"><span>记录的计划时间</span><input type="time" value={settings.refresh_time} onChange={(event) => setSettings({ ...settings, refresh_time: event.target.value })} /></label>
+              <label className="field"><span>记录的计划时间</span><input type="time" value={settings.schedule_time} onChange={(event) => setSettings({ ...settings, schedule_time: event.target.value })} /></label>
               <label className="field"><span>时区</span><select value={settings.timezone} onChange={(event) => setSettings({ ...settings, timezone: event.target.value })}><option value="Asia/Shanghai">Asia/Shanghai</option><option value="UTC">UTC</option><option value="America/New_York">America/New_York</option><option value="Europe/London">Europe/London</option></select></label>
             </div>
-            <label className="field"><span>论文来源</span><select value={settings.source} onChange={(event) => setSettings({ ...settings, source: event.target.value })}><option value="arxiv">arXiv API</option></select></label>
           </FormSection>
 
           <FormSection title="日报邮件" description="完整日更保存日报后自动发送态势摘要和前 10 篇重点论文；授权码只保存在后端。">
@@ -2145,21 +2144,21 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
               {budgetOptions.map((option) => <label key={option.id} className={settings.analysis_budget_mode === option.id ? 'selected' : ''}><input type="radio" name="analysis-budget" checked={settings.analysis_budget_mode === option.id} onChange={() => setSettings({ ...settings, analysis_budget_mode: option.id })} /><span><strong>{option.name}</strong><small>{option.detail}</small></span></label>)}
             </div>
             <label className="toggle-field"><input type="checkbox" checked={settings.daily_ai_synthesis_enabled} onChange={(event) => setSettings({ ...settings, daily_ai_synthesis_enabled: event.target.checked })} /><span><strong>日更后自动生成 AI 综合研判</strong><small>每天只对最终日报调用一次；经济 / 平衡 / 深度档的最大输出约为 2,000 / 3,500 / 5,000 Token，打开日报不会重复调用。</small></span></label>
-            <label className="field compact-number-field"><span>本轮最多抓取的候选论文</span><input type="number" min="10" max="1000" value={settings.max_candidates} onChange={(event) => setSettings({ ...settings, max_candidates: Number(event.target.value) })} /></label>
+            <label className="field compact-number-field"><span>本轮最多抓取的候选论文</span><input type="number" min="10" max="1000" value={settings.max_results} onChange={(event) => setSettings({ ...settings, max_results: Number(event.target.value) })} /></label>
             <div className="analysis-thresholds">
               <article>
                 <header><span>第 1 级</span><h3>摘要初筛</h3></header>
                 <p>语义相似度决定普通候选，关注作者可直接进入候选；方向词用于构造英文语义查询，不是硬命中门槛。</p>
-                <label className="field"><span>单批初筛大小</span><div><input type="number" min="1" max={settings.max_candidates} value={settings.screen_batch_size} onChange={(event) => setSettings({ ...settings, screen_batch_size: Number(event.target.value), screen_top_n: Number(event.target.value) })} /><em>篇</em></div><small>一次日更自动连续处理全部批次，每批内部最多 4 篇并发。</small></label>
+                <label className="field"><span>单批初筛大小</span><div><input type="number" min="1" max={settings.max_results} value={settings.screen_batch_size} onChange={(event) => setSettings({ ...settings, screen_batch_size: Number(event.target.value) })} /><em>篇</em></div><small>一次日更自动连续处理全部批次，每批内部最多 4 篇并发。</small></label>
               </article>
               <article>
                 <header><span>第 2 级</span><h3>全文深读</h3></header>
                 <p>摘要初筛完成后，AI 相关度达到 <strong>{settings.deep_relevance_threshold ?? 90}</strong> 分才进入全文队列。</p>
-                <label className="field"><span>每轮最多深读</span><div><input type="number" min="0" max="100" value={settings.deep_analysis_limit} onChange={(event) => setSettings({ ...settings, deep_analysis_limit: Number(event.target.value) })} /><em>篇</em></div></label>
+                <label className="field"><span>每轮最多深读</span><div><input type="number" min="0" max="100" value={settings.deep_analysis_top_n} onChange={(event) => setSettings({ ...settings, deep_analysis_top_n: Number(event.target.value) })} /><em>篇</em></div></label>
               </article>
             </div>
             <label className="field"><span>全文深读的 AI 相关度门槛</span><div className="range-readout"><span>越高越省 Token，但可能漏掉边缘相关论文</span><strong>{settings.deep_relevance_threshold ?? 90}</strong></div><input className="range" type="range" min="0" max="100" step="5" value={settings.deep_relevance_threshold ?? 90} onChange={(event) => setSettings({ ...settings, deep_relevance_threshold: Number(event.target.value) })} /></label>
-            <div className="cost-note"><Sparkles size={16} /><span>本地向量与词法召回不消耗模型 Token；所有召回候选都会分批调用摘要初筛，全文深读每次最多 {settings.deep_analysis_limit} 篇。候选越多，摘要初筛 Token 用量越高。</span></div>
+            <div className="cost-note"><Sparkles size={16} /><span>本地向量与词法召回不消耗模型 Token；所有召回候选都会分批调用摘要初筛，全文深读每次最多 {settings.deep_analysis_top_n} 篇。候选越多，摘要初筛 Token 用量越高。</span></div>
           </FormSection>
 
           <FormSection title="论文分析提示词" description="模板与编辑内容从下一次摘要初筛和全文深读开始生效，不会重写已有分析。">

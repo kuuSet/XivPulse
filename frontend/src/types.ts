@@ -563,7 +563,7 @@ export interface DashboardData {
   }
   items: Paper[]
   topic_stats: TopicStat[]
-  settings?: BackendSettings
+  settings?: Settings
   active_job?: JobInfo | null
   latest_digest?: {
     id: number
@@ -607,15 +607,13 @@ export interface AnalysisPromptCatalog {
 }
 
 export interface Settings {
-  provider: string
+  provider_name: string
   base_url: string
   model: string
   api_key_configured: boolean
-  source: string
-  refresh_time: string
+  schedule_time: string
   timezone: string
-  max_candidates: number
-  screen_top_n: number
+  max_results: number
   screen_batch_size: number
   semantic_recall_mode: 'high' | 'balanced' | 'precise'
   semantic_recall_presets: Record<string, { semantic_threshold: number }>
@@ -628,7 +626,7 @@ export interface Settings {
     message?: string
     backfill?: { status: string; processed?: number; total?: number; error?: string }
   }
-  deep_analysis_limit: number
+  deep_analysis_top_n: number
   deep_relevance_threshold?: number
   retention_days: number
   analysis_budget_mode: 'economy' | 'balanced' | 'deep'
@@ -654,51 +652,10 @@ export interface Settings {
   smtp_from: string
   email_recipients: string[]
   public_base_url: string
-}
-
-export interface BackendSettings {
-  schedule_time: string
-  timezone: string
-  max_results: number
-  screen_top_n: number
-  screen_batch_size?: number
-  semantic_recall_mode?: 'high' | 'balanced' | 'precise'
-  semantic_recall_presets?: Record<string, { semantic_threshold: number }>
-  embedding?: Settings['embedding']
-  deep_analysis_top_n: number
-  deep_relevance_threshold?: number
-  retention_days?: number
-  analysis_budget_mode?: 'economy' | 'balanced' | 'deep'
-  daily_ai_synthesis_enabled?: boolean
-  analysis_prompt_template_id?: string
-  screening_prompt?: string
-  deep_prompt?: string
-  analysis_prompt_version?: string
-  analysis_prompt_customized?: boolean
-  token_usage?: TokenUsageSummary
-  automatic_cleanup_enabled?: boolean
-  database_path?: string | null
-  database_size_bytes?: number | null
-  stored_paper_count?: number
-  stored_analysis_count?: number
-  stored_report_count?: number
-  provider_name: string
-  base_url: string
-  model: string
   api_mode?: string
-  api_key_configured: boolean
   mock_mode?: boolean
   config_source?: string
   key_source?: string
-  email_enabled?: boolean
-  smtp_host?: string
-  smtp_port?: number
-  smtp_security?: 'starttls' | 'ssl'
-  smtp_username?: string
-  smtp_password_configured?: boolean
-  smtp_from?: string
-  email_recipients?: string[]
-  public_base_url?: string
 }
 
 export interface TokenUsageTotals {

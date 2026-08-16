@@ -30,20 +30,15 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             pass
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
-        "provider": config.provider_name,
         "provider_name": config.provider_name,
         "base_url": config.base_url,
         "model": config.model,
         "api_key_configured": not config.mock_mode,
-        "source": config.config_source,
         "config_source": config.config_source,
         "key_source": config.key_source,
-        "refresh_time": settings.schedule_time,
         "schedule_time": settings.schedule_time,
         "timezone": settings.timezone,
-        "max_candidates": settings.max_results,
         "max_results": settings.max_results,
-        "screen_top_n": settings.screen_batch_size,
         "screen_batch_size": settings.screen_batch_size,
         "semantic_recall_mode": recall_mode(settings.semantic_recall_mode),
         "semantic_recall_presets": {
@@ -54,7 +49,6 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             **embedding_status(),
             "backfill": setting_value(db, "embedding_backfill", {"status": "pending"}),
         },
-        "deep_analysis_limit": settings.deep_analysis_top_n,
         "deep_analysis_top_n": settings.deep_analysis_top_n,
         "deep_relevance_threshold": settings.deep_relevance_threshold,
         "retention_days": settings.retention_days,

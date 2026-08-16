@@ -73,15 +73,6 @@ def stamp_direction_attribution(
     return stamped
 
 
-def migrate_legacy_direction_attribution(
-    payload: Mapping[str, Any],
-    topics: Sequence[object | Mapping[str, Any]],
-) -> dict[str, Any]:
-    """Mark a reviewed legacy payload as compatible with the current taxonomy."""
-
-    return stamp_direction_attribution(payload, topics)
-
-
 def has_current_direction_attribution(
     payload: Mapping[str, Any],
     expected_taxonomy_fingerprint: str,
@@ -99,6 +90,5 @@ __all__ = [
     "DIRECTION_ATTRIBUTION_VERSION",
     "direction_taxonomy_fingerprint",
     "has_current_direction_attribution",
-    "migrate_legacy_direction_attribution",
     "stamp_direction_attribution",
 ]

@@ -222,15 +222,13 @@ export const sampleProfile: Profile = {
 }
 
 export const sampleSettings: Settings = {
-  provider: 'openai-compatible',
+  provider_name: 'openai-compatible',
   base_url: 'https://api.openai.com/v1',
   model: 'gpt-5-mini',
   api_key_configured: false,
-  source: 'arxiv',
-  refresh_time: '13:30',
+  schedule_time: '13:30',
   timezone: 'Asia/Shanghai',
-  max_candidates: 1000,
-  screen_top_n: 30,
+  max_results: 1000,
   screen_batch_size: 30,
   semantic_recall_mode: 'high',
   semantic_recall_presets: {
@@ -239,7 +237,7 @@ export const sampleSettings: Settings = {
     precise: { semantic_threshold: 0.7 },
   },
   embedding: { model: 'BAAI/bge-small-en-v1.5', dimensions: 384, cache_dir: 'data/model-cache', loaded: false, available: true },
-  deep_analysis_limit: 5,
+  deep_analysis_top_n: 5,
   deep_relevance_threshold: 90,
   retention_days: 365,
   analysis_budget_mode: 'balanced',
