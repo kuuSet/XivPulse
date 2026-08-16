@@ -543,6 +543,7 @@ export interface JobCalendarDay {
 
 export interface JobCalendarData {
   month: string
+  latest_available_date: string
   days: JobCalendarDay[]
 }
 

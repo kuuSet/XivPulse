@@ -52,6 +52,7 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
 
 async def sync_papers(
     *,
+    target_date: date | None = None,
     session_factory: sessionmaker[Session] | None = None,
     paper_fetcher: Callable[..., Awaitable[list[Paper]]] | None = None,
     affiliation_fetcher: Callable[..., Awaitable[dict[str, list[str]]]] | None = None,
@@ -60,7 +61,7 @@ async def sync_papers(
 ) -> dict[str, Any]:
     factory = session_factory or SessionLocal
     options = _load_options(factory)
-    target_date = date_provider()
+    target_date = target_date or date_provider()
 
     categories = [
         category

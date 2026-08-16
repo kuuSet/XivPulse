@@ -1286,52 +1286,96 @@ def test_digest_status_and_missing_job(client: TestClient) -> None:
     assert client.get("/api/jobs/does-not-exist").status_code == 404
 
 
-def test_job_calendar_uses_latest_daily_job_in_configured_timezone(
-    client: TestClient,
+def test_run_daily_accepts_one_complete_submission_date(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from app.services.paper_sync import latest_complete_submission_date
+    from app.workflow import daily_pipeline
+
+    calls: list[tuple[str, date]] = []
+
+    def start_job(kind: str, *, target_date: date) -> dict[str, object]:
+        calls.append((kind, target_date))
+        return {"job_id": "job-1", "status": "queued", "date": target_date.isoformat()}
+
+    monkeypatch.setattr(daily_pipeline, "start_job", start_job)
+    selected_date = latest_complete_submission_date() - timedelta(days=2)
+    response = client.post("/api/run-daily", json={"date": selected_date.isoformat()})
+    assert response.status_code == 202
+    assert response.json()["date"] == selected_date.isoformat()
+    assert calls == [("daily", selected_date)]
+
+    unavailable = latest_complete_submission_date() + timedelta(days=1)
+    assert (
+        client.post("/api/run-daily", json={"date": unavailable.isoformat()}).status_code
+        == 422
+    )
+
+
+def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -> None:
+    from app.services.paper_sync import latest_complete_submission_date
+
     with database.SessionLocal() as session:
         session.add_all(
             [
                 Job(
                     kind="daily",
                     status="completed",
-                    created_at=datetime(2026, 7, 31, 17, tzinfo=UTC),
-                    result_json={"fetched": 12, "screened": 4, "analyzed": 2},
+                    created_at=datetime(2026, 8, 10, 17, tzinfo=UTC),
+                    result_json={
+                        "report_date": "2026-08-01",
+                        "fetched": 12,
+                        "screened": 4,
+                        "analyzed": 2,
+                    },
                 ),
                 Job(
                     kind="daily",
                     status="failed",
                     created_at=datetime(2026, 8, 2, 1, tzinfo=UTC),
                     error="temporary failure",
+                    result_json={"fetch_date": "2026-08-02"},
                 ),
                 Job(
                     kind="daily",
                     status="completed",
                     created_at=datetime(2026, 8, 2, 2, tzinfo=UTC),
-                    result_json={"fetched": 20, "screened": 6, "analyzed": 3},
+                    result_json={
+                        "fetch_date": "2026-08-02",
+                        "fetched": 20,
+                        "screened": 6,
+                        "analyzed": 3,
+                    },
                 ),
                 Job(
                     kind="daily",
                     status="completed",
                     created_at=datetime(2026, 8, 3, 2, tzinfo=UTC),
                     message="任务已完成",
-                    result_json={"fetched": 10, "report_incomplete": True},
+                    result_json={
+                        "fetch_date": "2026-08-03",
+                        "fetched": 10,
+                        "report_incomplete": True,
+                    },
                 ),
                 Job(
                     kind="daily",
                     status="failed",
                     created_at=datetime(2026, 8, 4, 2, tzinfo=UTC),
                     error="network unavailable",
+                    result_json={"fetch_date": "2026-08-04"},
                 ),
                 Job(
                     kind="sync",
                     status="completed",
                     created_at=datetime(2026, 8, 5, 2, tzinfo=UTC),
+                    result_json={"fetch_date": "2026-08-05"},
                 ),
                 Job(
                     kind="daily",
                     status="completed",
-                    created_at=datetime(2026, 7, 31, 8, tzinfo=UTC),
+                    created_at=datetime(2026, 8, 6, 8, tzinfo=UTC),
+                    result_json={"fetch_date": "2026-07-31"},
                 ),
             ]
         )
@@ -1341,6 +1385,7 @@ def test_job_calendar_uses_latest_daily_job_in_configured_timezone(
     assert response.status_code == 200
     assert response.json() == {
         "month": "2026-08",
+        "latest_available_date": latest_complete_submission_date().isoformat(),
         "days": [
             {
                 "date": "2026-08-01",
@@ -1458,6 +1503,87 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
 
 
 @pytest.mark.asyncio
+async def test_targeted_daily_analysis_does_not_process_other_dates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.schemas import ScreeningResult
+    from app.services import paper_analysis
+    from app.services import provider as provider_module
+
+    target_date = date(2026, 8, 13)
+    other_date = date(2026, 8, 14)
+    queue_ids: dict[date, int] = {}
+    with database.SessionLocal() as session:
+        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        for index, report_date in enumerate((target_date, other_date)):
+            paper = Paper(
+                arxiv_id=f"2608.0710{index}",
+                title=f"Paper for {report_date.isoformat()}",
+                abstract="A robot learning study.",
+                authors_json=["Researcher"],
+                categories_json=["cs.RO"],
+                primary_category="cs.RO",
+                published_at=datetime(
+                    report_date.year,
+                    report_date.month,
+                    report_date.day,
+                    12,
+                    tzinfo=UTC,
+                ),
+                last_seen_at=datetime.now(UTC),
+            )
+            session.add(paper)
+            session.flush()
+            session.add(
+                PaperMatch(
+                    paper_id=paper.id,
+                    profile_id=profile.id,
+                    semantic_score=0.9,
+                    relevance_score=90,
+                )
+            )
+            queue = ScreeningQueueItem(
+                paper_id=paper.id,
+                profile_id=profile.id,
+                report_date=report_date,
+                semantic_score=0.9,
+            )
+            session.add(queue)
+            session.flush()
+            queue_ids[report_date] = queue.id
+        session.commit()
+
+    class FakePaperAnalyzer:
+        def __init__(self, _adapter: object, **_options: object) -> None:
+            pass
+
+        async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
+            return provider_module.GenerationResult(
+                data=ScreeningResult(
+                    relevant=False,
+                    relevance_score=20,
+                    reason="Not relevant",
+                    matched_topics=[],
+                    key_contributions=[],
+                    tags=[],
+                ),
+                transport="mock",
+                provider="test",
+                model="test",
+            )
+
+    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakePaperAnalyzer)
+    result = await paper_analysis.analyze_papers(limit=0, report_date=target_date)
+
+    assert result["screened"] == 1
+    assert result["screening_queue_total"] == 1
+    assert result["screening_report_dates"] == [target_date.isoformat()]
+    with database.SessionLocal() as session:
+        assert session.get(ScreeningQueueItem, queue_ids[target_date]).status == "completed"
+        assert session.get(ScreeningQueueItem, queue_ids[other_date]).status == "queued"
+
+
+@pytest.mark.asyncio
 async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient,
 ) -> None:
@@ -1513,11 +1639,11 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         }
 
     result = await sync_papers(
+        target_date=fetch_date,
         session_factory=database.SessionLocal,
         paper_fetcher=fetch_papers,
         affiliation_fetcher=fetch_paper_affiliations,
         semantic_matcher=semantic_results,
-        date_provider=lambda: fetch_date,
     )
     assert result["fetched"] == 2
     assert result["queued"] == 1
@@ -1612,6 +1738,7 @@ async def test_direct_daily_job_is_persisted_and_rejects_overlap(
     assert result["fetched"] == 3
     pipeline.assert_awaited_once()
     assert pipeline.await_args.kwargs["job_id"]
+    assert pipeline.await_args.kwargs["target_date"] is None
     status_payload = client.get("/api/status").json()
     assert status_payload["latest_job"]["status"] == "completed"
 

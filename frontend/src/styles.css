@@ -433,12 +433,25 @@ select:focus-visible,
   border: 1px solid #e4e9e6;
   color: #67736f;
   background: #fafbfa;
+  cursor: pointer;
+  text-align: left;
 }
 .calendar-day strong { font-size: 11px; font-weight: 600; }
 .calendar-day small { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .calendar-day.completed { border-color: #aad2bd; color: #216a4b; background: #e8f5ed; }
 .calendar-day.partial { border-color: #e2c56f; color: #765816; background: #fff8db; }
 .calendar-day.today { box-shadow: inset 0 0 0 1px #397eb6; }
+.calendar-day.selected { outline: 2px solid #397eb6; outline-offset: 1px; }
+.calendar-day:disabled { cursor: not-allowed; opacity: .42; }
+.calendar-detail { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; margin-top: 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 6px; background: #f8faf9; }
+.calendar-detail > div { min-width: 0; }
+.calendar-detail span, .calendar-detail strong, .calendar-detail small { display: block; }
+.calendar-detail span { color: var(--quiet); font-size: 8px; }
+.calendar-detail strong { margin-top: 2px; color: #26332f; font-size: 11px; }
+.calendar-detail small { margin-top: 3px; overflow-wrap: anywhere; color: var(--muted); font-size: 9px; }
+.calendar-detail.completed { border-color: #aad2bd; background: #f1f8f4; }
+.calendar-detail.partial { border-color: #e2c56f; background: #fffae9; }
+.calendar-detail > .icon-button { width: 30px; height: 30px; }
 .calendar-error { margin: 10px 0 0; color: var(--red); font-size: 9px; }
 
 .metric,
@@ -3186,6 +3199,9 @@ select:focus-visible,
   .calendar-day, .calendar-empty { min-height: 42px; }
   .calendar-day { padding: 6px; }
   .calendar-day small { font-size: 7px; }
+  .calendar-detail { grid-template-columns: minmax(0, 1fr) auto; }
+  .calendar-detail > .button { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .calendar-detail > .icon-button { grid-column: 2; grid-row: 1; }
   .metric { min-height: 68px; padding: 11px 10px; }
   .metric { min-width: 0; overflow: hidden; }
   .metric span { font-size: 8px; }

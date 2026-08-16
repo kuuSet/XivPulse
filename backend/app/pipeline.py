@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_LOCK_PATH = PROJECT_ROOT / "data" / "pipeline.lock"
 PipelineKind = Literal["daily", "sync", "analyze"]
 PipelineResult = dict[str, Any]
-SyncStage = Callable[[], Awaitable[PipelineResult]]
+SyncStage = Callable[..., Awaitable[PipelineResult]]
 AnalyzeStage = Callable[..., Awaitable[PipelineResult]]
 FinalizeDailyStage = Callable[[date, PipelineResult, str | None], Awaitable[PipelineResult]]
 
@@ -105,6 +105,7 @@ class PipelineCoordinator:
         kind: PipelineKind,
         *,
         job_id: str | None = None,
+        target_date: date | None = None,
     ) -> PipelineResult:
         result: PipelineResult = {}
         pipeline_date: date | None = None
@@ -114,7 +115,7 @@ class PipelineCoordinator:
                 progress=10,
                 message="正在抓取并匹配 arXiv 候选",
             )
-            result.update(await self._sync_stage())
+            result.update(await self._sync_stage(target_date=target_date))
             pipeline_date = date.fromisoformat(str(result["fetch_date"]))
         if kind in ("daily", "analyze"):
             update_job_progress(
@@ -131,7 +132,9 @@ class PipelineCoordinator:
             result = await self._finalize_daily_stage(pipeline_date, result, job_id)
         return result
 
-    async def run_daily(self, trigger: str = "manual") -> PipelineResult:
+    async def run_daily(
+        self, trigger: str = "manual", *, target_date: date | None = None
+    ) -> PipelineResult:
         """Run once in the caller process, used by the Docker scheduler."""
 
         self._initialize()
@@ -173,6 +176,9 @@ class PipelineCoordinator:
                         status="running",
                         message=f"计划任务执行中（{trigger}）",
                         progress=5,
+                        result_json=(
+                            {"fetch_date": target_date.isoformat()} if target_date else {}
+                        ),
                         started_at=utcnow(),
                     )
                     db.add(job)
@@ -180,7 +186,9 @@ class PipelineCoordinator:
                     job_id = job.id
             self._active_job_id = job_id
         try:
-            result = await self.execute("daily", job_id=job_id)
+            result = await self.execute(
+                "daily", job_id=job_id, target_date=target_date
+            )
             with session_scope() as db:
                 job = db.get(Job, job_id)
                 if job:
@@ -206,7 +214,9 @@ class PipelineCoordinator:
                     self._active_job_id = None
             _release_pipeline_lock(lock_token)
 
-    async def _run_job(self, job_id: str, kind: PipelineKind) -> None:
+    async def _run_job(
+        self, job_id: str, kind: PipelineKind, target_date: date | None = None
+    ) -> None:
         try:
             with session_scope() as db:
                 job = db.get(Job, job_id)
@@ -216,7 +226,7 @@ class PipelineCoordinator:
                 job.started_at = utcnow()
                 job.message = "任务执行中"
                 job.progress = 5
-            result = await self.execute(kind, job_id=job_id)
+            result = await self.execute(kind, job_id=job_id, target_date=target_date)
             with session_scope() as db:
                 job = db.get(Job, job_id)
                 if job:
@@ -240,7 +250,9 @@ class PipelineCoordinator:
                     self._active_job_id = None
             _release_pipeline_lock(job_id)
 
-    def start_job(self, kind: PipelineKind) -> PipelineResult:
+    def start_job(
+        self, kind: PipelineKind, *, target_date: date | None = None
+    ) -> PipelineResult:
         self._initialize()
         with self._job_lock:
             if self._active_job_id is not None:
@@ -277,8 +289,18 @@ class PipelineCoordinator:
                             kind=kind,
                             status="queued",
                             message="任务已排队",
+                            result_json=(
+                                {"fetch_date": target_date.isoformat()}
+                                if target_date
+                                else {}
+                            ),
                         )
                     )
             self._active_job_id = job_id
-        asyncio.create_task(self._run_job(job_id, kind))
-        return {"job_id": job_id, "status": "queued", "message": "任务已在后台启动"}
+        asyncio.create_task(self._run_job(job_id, kind, target_date))
+        return {
+            "job_id": job_id,
+            "status": "queued",
+            "message": "任务已在后台启动",
+            "date": target_date.isoformat() if target_date else None,
+        }

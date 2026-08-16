@@ -33,8 +33,8 @@ def test_pipeline_lock_is_released_only_when_the_guarded_work_fails(
 async def test_daily_pipeline_runs_stages_in_order_and_merges_results() -> None:
     calls: list[tuple[str, object]] = []
 
-    async def sync_stage() -> dict[str, Any]:
-        calls.append(("sync", None))
+    async def sync_stage(*, target_date: date | None) -> dict[str, Any]:
+        calls.append(("sync", target_date))
         return {"fetch_date": "2026-08-14", "fetched": 3}
 
     async def analyze_stage(
@@ -58,7 +58,9 @@ async def test_daily_pipeline_runs_stages_in_order_and_merges_results() -> None:
         finalize_daily_stage=finalize_daily_stage,
     )
 
-    result = await coordinator.execute("daily", job_id=None)
+    result = await coordinator.execute(
+        "daily", job_id=None, target_date=date(2026, 8, 14)
+    )
 
     assert result == {
         "fetch_date": "2026-08-14",
@@ -67,7 +69,7 @@ async def test_daily_pipeline_runs_stages_in_order_and_merges_results() -> None:
         "report_date": "2026-08-14",
     }
     assert calls == [
-        ("sync", None),
+        ("sync", date(2026, 8, 14)),
         ("analyze", (None, date(2026, 8, 14))),
         (
             "finalize",
@@ -86,7 +88,7 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
 ) -> None:
     monkeypatch.setattr(pipeline_module, "update_job_progress", lambda *args, **kwargs: None)
 
-    async def unexpected_sync() -> dict[str, Any]:
+    async def unexpected_sync(*, target_date: date | None) -> dict[str, Any]:
         raise AssertionError("sync stage should not run")
 
     async def analyze_stage(

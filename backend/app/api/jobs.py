@@ -1,17 +1,17 @@
 """Pipeline job-control and status HTTP routes."""
 
-from datetime import UTC, datetime
+from datetime import date
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Job
-from ..settings import load_runtime_settings
 from ..services.jobs import RUNNING_STATUSES
+from ..services.paper_sync import latest_complete_submission_date
 from ..workflow import daily_pipeline
 from .presenters import _job_wire
 from .system_views import _provider_public_status
@@ -28,19 +28,29 @@ _INCOMPLETE_RESULT_KEYS = (
 )
 
 
+class DailyJobPayload(BaseModel):
+    date: date
+
+
 @router.post("/api/refresh", status_code=status.HTTP_202_ACCEPTED)
 async def refresh() -> dict[str, Any]:
-    return daily_pipeline.start_job("daily")
+    return daily_pipeline.start_job(
+        "daily", target_date=latest_complete_submission_date()
+    )
 
 
 @router.post("/api/run-daily", status_code=status.HTTP_202_ACCEPTED)
-async def start_daily() -> dict[str, Any]:
-    return daily_pipeline.start_job("daily")
+async def start_daily(payload: DailyJobPayload) -> dict[str, Any]:
+    if payload.date > latest_complete_submission_date():
+        raise HTTPException(status_code=422, detail="只能补跑已经完整结束的论文日期")
+    return daily_pipeline.start_job("daily", target_date=payload.date)
 
 
 @router.post("/api/sync", status_code=status.HTTP_202_ACCEPTED)
 async def sync() -> dict[str, Any]:
-    return daily_pipeline.start_job("sync")
+    return daily_pipeline.start_job(
+        "sync", target_date=latest_complete_submission_date()
+    )
 
 
 @router.post("/api/analyze", status_code=status.HTTP_202_ACCEPTED)
@@ -75,31 +85,20 @@ def job_calendar(
     month: str = Query(pattern=r"^\d{4}-(?:0[1-9]|1[0-2])$"),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    year, month_number = map(int, month.split("-"))
+    year = int(month[:4])
     if not 1 <= year < 9999:
         raise HTTPException(status_code=422, detail="Invalid calendar month")
-    next_year, next_month = (
-        (year + 1, 1) if month_number == 12 else (year, month_number + 1)
-    )
-    timezone = ZoneInfo(load_runtime_settings(db).schedule_timezone)
-    month_start = datetime(year, month_number, 1, tzinfo=timezone)
-    month_end = datetime(next_year, next_month, 1, tzinfo=timezone)
     jobs = db.scalars(
         select(Job)
-        .where(
-            Job.kind == "daily",
-            Job.created_at >= month_start.astimezone(UTC),
-            Job.created_at < month_end.astimezone(UTC),
-        )
+        .where(Job.kind == "daily")
         .order_by(desc(Job.created_at))
     ).all()
 
     latest_by_date: dict[str, Job] = {}
     for job in jobs:
-        created_at = job.created_at
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=UTC)
-        latest_by_date.setdefault(created_at.astimezone(timezone).date().isoformat(), job)
+        coverage_date = job.result.get("fetch_date") or job.result.get("report_date")
+        if isinstance(coverage_date, str) and coverage_date.startswith(f"{month}-"):
+            latest_by_date.setdefault(coverage_date, job)
 
     days = []
     for day, job in sorted(latest_by_date.items()):
@@ -125,4 +124,8 @@ def job_calendar(
                 "message": message,
             }
         )
-    return {"month": month, "days": days}
+    return {
+        "month": month,
+        "latest_available_date": latest_complete_submission_date().isoformat(),
+        "days": days,
+    }

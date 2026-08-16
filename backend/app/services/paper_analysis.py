@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import desc, func, select
@@ -42,6 +42,19 @@ async def analyze_papers(
         screening_batch_size = max(1, settings.screening_batch_size)
         selected_recall_mode = recall_mode(settings.semantic_recall_mode)
         today = report_date or current_date_in_timezone(settings.schedule_timezone)
+        paper_date_condition = (
+            PaperMatch.paper.has(
+                (Paper.published_at >= datetime.combine(report_date, time.min, tzinfo=UTC))
+                & (
+                    Paper.published_at
+                    < datetime.combine(report_date + timedelta(days=1), time.min, tzinfo=UTC)
+                )
+            )
+            if report_date
+            else PaperMatch.paper.has(
+                Paper.last_seen_at >= datetime.now(UTC) - timedelta(days=7)
+            )
+        )
         recent_matches = (
             db.scalars(
                 select(PaperMatch)
@@ -52,9 +65,7 @@ async def analyze_papers(
                 .where(
                     PaperMatch.profile_id == profile.id,
                     PaperMatch.screened_at.is_(None),
-                    PaperMatch.paper.has(
-                        Paper.last_seen_at >= datetime.now(UTC) - timedelta(days=7)
-                    ),
+                    paper_date_condition,
                 )
             )
             .unique()
@@ -90,9 +101,12 @@ async def analyze_papers(
                     semantic_topics_json=dict(match.semantic_topics_json or {}),
                 )
             )
-        queue_items = db.scalars(
-            select(ScreeningQueueItem).where(ScreeningQueueItem.profile_id == profile.id)
-        ).all()
+        queue_query = select(ScreeningQueueItem).where(
+            ScreeningQueueItem.profile_id == profile.id
+        )
+        if report_date:
+            queue_query = queue_query.where(ScreeningQueueItem.report_date == report_date)
+        queue_items = db.scalars(queue_query).all()
         for item in queue_items:
             match = db.scalar(
                 select(PaperMatch).where(
@@ -129,14 +143,14 @@ async def analyze_papers(
     screening_report_dates: set[date] = set()
     with SessionLocal() as db:
         profile = active_profile(db)
+        count_query = select(func.count(ScreeningQueueItem.id)).where(
+            ScreeningQueueItem.profile_id == profile.id,
+            ScreeningQueueItem.status.in_(("queued", "processing", "failed")),
+        )
+        if report_date:
+            count_query = count_query.where(ScreeningQueueItem.report_date == report_date)
         screening_queue_total = int(
-            db.scalar(
-                select(func.count(ScreeningQueueItem.id)).where(
-                    ScreeningQueueItem.profile_id == profile.id,
-                    ScreeningQueueItem.status.in_(("queued", "processing", "failed")),
-                )
-            )
-            or 0
+            db.scalar(count_query) or 0
         )
     total_batches = (
         (screening_queue_total + screening_batch_size - 1) // screening_batch_size
@@ -162,18 +176,24 @@ async def analyze_papers(
     while True:
         with session_scope() as db:
             profile = active_profile(db)
+            batch_query = (
+                select(ScreeningQueueItem)
+                .options(
+                    joinedload(ScreeningQueueItem.paper),
+                    joinedload(ScreeningQueueItem.profile).selectinload(Profile.topics),
+                )
+                .where(
+                    ScreeningQueueItem.profile_id == profile.id,
+                    ScreeningQueueItem.status == "queued",
+                )
+            )
+            if report_date:
+                batch_query = batch_query.where(
+                    ScreeningQueueItem.report_date == report_date
+                )
             queue_batch = (
                 db.scalars(
-                    select(ScreeningQueueItem)
-                    .options(
-                        joinedload(ScreeningQueueItem.paper),
-                        joinedload(ScreeningQueueItem.profile).selectinload(Profile.topics),
-                    )
-                    .where(
-                        ScreeningQueueItem.profile_id == profile.id,
-                        ScreeningQueueItem.status == "queued",
-                    )
-                    .order_by(
+                    batch_query.order_by(
                         ScreeningQueueItem.report_date,
                         desc(ScreeningQueueItem.semantic_score),
                         ScreeningQueueItem.id,
@@ -320,9 +340,7 @@ async def analyze_papers(
                     PaperMatch.profile_id == profile.id,
                     PaperMatch.relevance_score >= threshold,
                     PaperMatch.screened_at.is_not(None),
-                    PaperMatch.paper.has(
-                        Paper.last_seen_at >= datetime.now(UTC) - timedelta(days=7)
-                    ),
+                    paper_date_condition,
                     ~PaperMatch.paper.has(
                         Paper.analyses.any(
                             (Analysis.profile_id == profile.id)

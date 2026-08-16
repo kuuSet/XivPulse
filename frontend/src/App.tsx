@@ -311,14 +311,14 @@ function App() {
     [loadProjects, pushToast, updatePaper],
   )
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (targetDate?: string) => {
     setRefreshing(true)
     try {
       if (!isDemo) {
-        const result = await api.refresh()
+        const result = targetDate ? await api.runDaily(targetDate) : await api.refresh()
         setJob({ id: result.job_id, job_id: result.job_id, kind: 'daily', status: result.status, progress: 0, total: 0, message: result.message, created_at: new Date().toISOString() })
         setRefreshing(true)
-        pushToast('success', result.message || '抓取任务已启动')
+        pushToast('success', targetDate ? `${targetDate} 补跑任务已启动` : (result.message || '抓取任务已启动'))
       } else {
         await new Promise((resolve) => window.setTimeout(resolve, 650))
         pushToast('success', '演示数据已刷新')
@@ -488,7 +488,7 @@ interface PaperWorkspaceProps {
   refreshing: boolean
   job: JobInfo | null
   onRetry: () => void
-  onRefresh: () => void
+  onRefresh: (date?: string) => void
   onSelect: (id: Paper['id']) => void
   onCloseDetail: () => void
   onFeedback: (paper: Paper, action: FeedbackAction) => Promise<boolean>
@@ -661,7 +661,7 @@ function PaperWorkspace(props: PaperWorkspaceProps) {
           <h1>{mode === 'today' ? '今日论文' : '论文库'}</h1>
           <p>{mode === 'today' ? '已按你的研究画像筛选并排序今日更新。' : '检索和回看所有已经完成摘要初筛的论文。'}</p>
         </div>
-        <button className="button primary" onClick={onRefresh} disabled={refreshing}>
+        <button className="button primary" onClick={() => onRefresh()} disabled={refreshing}>
           <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
           {refreshing ? '正在启动' : '抓取最新'}
         </button>
@@ -683,7 +683,7 @@ function PaperWorkspace(props: PaperWorkspaceProps) {
         </section>
       )}
 
-      {mode === 'today' && <RunCalendar refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} />}
+      {mode === 'today' && <RunCalendar busy={refreshing} refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} onRun={onRefresh} />}
 
       <section className="paper-workbench">
         <div className={`paper-column ${mode === 'library' ? 'paginated' : ''}`}>
@@ -759,18 +759,21 @@ function JobStatusBanner({ job }: { job: JobInfo }) {
   return <section className={`job-status-banner ${failed ? 'failed' : running ? 'running' : 'completed'}`} aria-live="polite"><div>{running ? <LoaderCircle className="spin" size={17} /> : failed ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}<span><strong>{running ? '每日任务进行中' : failed ? '最近一次任务失败' : '最近一次任务已完成'}</strong><small>{summary}</small></span></div><div className="job-progress"><span style={{ width: `${Math.max(running ? 4 : 0, Math.min(100, job.progress ?? 0))}%` }} /></div></section>
 }
 
-function RunCalendar({ refreshToken }: { refreshToken: string }) {
+function RunCalendar({ busy, refreshToken, onRun }: { busy: boolean; refreshToken: string; onRun: (date: string) => void }) {
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [month, setMonth] = useState(currentMonth)
   const [data, setData] = useState<JobCalendarData | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     let active = true
     setError('')
     if (isDemo) {
-      setData({ month, days: [] })
+      const latest = new Date(now)
+      latest.setDate(latest.getDate() - 1)
+      setData({ month, latest_available_date: `${latest.getFullYear()}-${String(latest.getMonth() + 1).padStart(2, '0')}-${String(latest.getDate()).padStart(2, '0')}`, days: [] })
       return () => { active = false }
     }
     void api.jobCalendar(month)
@@ -786,20 +789,22 @@ function RunCalendar({ refreshToken }: { refreshToken: string }) {
   const firstWeekday = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7
   const dayCount = new Date(year, monthNumber, 0).getDate()
   const daysByDate = new globalThis.Map(data?.days.map((day) => [day.date, day]) ?? [])
+  const selectedRecord = selectedDate ? daysByDate.get(selectedDate) : undefined
   const cells = [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: dayCount }, (_, index) => index + 1)]
   const monthLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(new Date(year, monthNumber - 1, 1))
   const moveMonth = (offset: number) => {
     const target = new Date(year, monthNumber - 1 + offset, 1)
     setMonth(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`)
+    setSelectedDate(null)
   }
 
   return (
-    <section className="run-calendar" aria-label="日更任务日历">
+    <section className="run-calendar" aria-label="论文筛选覆盖日历">
       <header>
-        <div><span>日更记录</span><h2>{monthLabel}</h2></div>
+        <div><span>论文筛选覆盖</span><h2>{monthLabel}</h2></div>
         <div className="calendar-controls">
-          <span><i className="completed" />完整完成</span>
-          <span><i className="partial" />未完整完成</span>
+          <span><i className="completed" />完整筛选</span>
+          <span><i className="partial" />待补充</span>
           <button className="icon-button" onClick={() => moveMonth(-1)} aria-label="上个月"><ChevronLeft size={16} /></button>
           <button className="icon-button" onClick={() => moveMonth(1)} aria-label="下个月"><ChevronRight size={16} /></button>
         </div>
@@ -810,10 +815,16 @@ function RunCalendar({ refreshToken }: { refreshToken: string }) {
           if (day === null) return <span className="calendar-empty" key={`empty-${index}`} />
           const date = `${month}-${String(day).padStart(2, '0')}`
           const record = daysByDate.get(date)
-          const title = record ? `${record.message}；抓取 ${record.fetched}，初筛 ${record.screened}，深读 ${record.analyzed}` : '当天没有运行日更任务'
-          return <div className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''}`} title={title} key={date}><strong>{day}</strong>{record && <small>抓取 {record.fetched}</small>}</div>
+          const unavailable = !data || date > data.latest_available_date
+          const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；抓取 ${record.fetched}，初筛 ${record.screened}，深读 ${record.analyzed}` : '尚未筛选，点击后可以补跑'
+          return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === selectedDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => setSelectedDate(date)} title={title} key={date}><strong>{day}</strong>{record && <small>初筛 {record.screened}</small>}</button>
         })}
       </div>
+      {selectedDate && data && <div className={`calendar-detail ${selectedRecord?.status ?? 'missing'}`}>
+        <div><span>{formatArchiveDate(selectedDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 初筛 ${selectedRecord.screened} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
+        {selectedRecord?.status !== 'completed' && <button className="button primary compact" disabled={busy} onClick={() => onRun(selectedDate)}><RefreshCw className={busy ? 'spin' : ''} size={14} />{busy ? '任务进行中' : selectedRecord ? '继续补跑' : '补跑这一天'}</button>}
+        <button className="icon-button" onClick={() => setSelectedDate(null)} aria-label="关闭日期详情"><X size={15} /></button>
+      </div>}
       {error && <p className="calendar-error">{error}</p>}
     </section>
   )

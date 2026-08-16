@@ -13,6 +13,7 @@ from .settings import load_runtime_settings
 from .database import SessionLocal
 from .models import Job
 from .runtime import initialize_application
+from .services.paper_sync import latest_complete_submission_date
 from .workflow import daily_pipeline
 
 LOG = logging.getLogger("xivpulse.scheduler")
@@ -75,7 +76,10 @@ async def main() -> None:
     while True:
         try:
             if should_run_now():
-                result = await daily_pipeline.run_daily(trigger="docker-scheduler")
+                result = await daily_pipeline.run_daily(
+                    trigger="docker-scheduler",
+                    target_date=latest_complete_submission_date(),
+                )
                 if result.get("accepted"):
                     LOG.info(
                         "Daily update finished: success=%s fetched=%s screened=%s analyzed=%s",
