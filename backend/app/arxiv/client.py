@@ -11,6 +11,8 @@ from datetime import UTC, date, datetime
 from urllib.parse import quote
 
 import httpx
+from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
+from tenacity.wait import wait_exponential
 
 from ..domain.paper import Paper, as_utc, deduplicate_papers
 from .parse.atom import parse_arxiv_feed
@@ -24,6 +26,7 @@ _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRY_DELAY_SECONDS = 30.0
 _PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")
+_EXPONENTIAL_RETRY_WAIT = wait_exponential(max=_MAX_RETRY_DELAY_SECONDS)
 
 
 class ArxivFetchError(RuntimeError):
@@ -57,11 +60,25 @@ async def polite_wait(interval: float = 3.0) -> None:
     await _GLOBAL_LIMITER.wait(interval)
 
 
-def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
-    retry_after = response.headers.get("Retry-After", "").strip() if response else ""
+def _is_retryable(error: BaseException) -> bool:
+    if isinstance(error, (TimeoutError, httpx.TransportError)):
+        return True
+    return (
+        isinstance(error, httpx.HTTPStatusError)
+        and error.response.status_code in _TRANSIENT_STATUS_CODES
+    )
+
+
+def _retry_wait(state: RetryCallState) -> float:
+    error = state.outcome.exception() if state.outcome is not None else None
+    retry_after = (
+        error.response.headers.get("Retry-After", "").strip()
+        if isinstance(error, httpx.HTTPStatusError)
+        else ""
+    )
     if retry_after.isdigit():
         return min(float(retry_after), _MAX_RETRY_DELAY_SECONDS)
-    return min(float(2**attempt), _MAX_RETRY_DELAY_SECONDS)
+    return _EXPONENTIAL_RETRY_WAIT(state)
 
 
 def build_date_query(target_date: date, categories: Sequence[str]) -> str:
@@ -133,44 +150,43 @@ class ArxivClient:
         }
 
         async def request() -> httpx.Response:
+            await polite_wait(self.rate_limit_seconds)
             if self._client is not None:
-                return await self._client.get(
+                response = await self._client.get(
                     url, headers=headers, params=params, timeout=self.timeout
                 )
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                return await client.get(url, headers=headers, params=params, timeout=self.timeout)
+            else:
+                async with httpx.AsyncClient(follow_redirects=True) as client:
+                    response = await client.get(
+                        url, headers=headers, params=params, timeout=self.timeout
+                    )
+            response.raise_for_status()
+            return response
 
-        for attempt in range(_MAX_REQUEST_ATTEMPTS):
-            await polite_wait(self.rate_limit_seconds)
-            try:
-                if request_timeout is None:
-                    response = await request()
-                else:
-                    async with asyncio.timeout(max(1.0, request_timeout)):
-                        response = await request()
-            except (TimeoutError, httpx.TransportError) as exc:
-                if attempt + 1 == _MAX_REQUEST_ATTEMPTS:
-                    raise ArxivFetchError(
-                        f"arXiv request failed after {_MAX_REQUEST_ATTEMPTS} attempts"
-                    ) from exc
-                await asyncio.sleep(_retry_delay(attempt))
-                continue
-            if (
-                response.status_code in _TRANSIENT_STATUS_CODES
-                and attempt + 1 < _MAX_REQUEST_ATTEMPTS
-            ):
-                await asyncio.sleep(_retry_delay(attempt, response))
-                continue
-            try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                raise ArxivFetchError(
-                    f"arXiv request failed with HTTP {response.status_code}"
-                ) from exc
-            if len(response.content) > 20 * 1024 * 1024:
-                raise ArxivFetchError("arXiv response exceeded 20 MiB")
-            return response.content
-        raise AssertionError("unreachable")
+        async def timed_request() -> httpx.Response:
+            if request_timeout is None:
+                return await request()
+            async with asyncio.timeout(max(1.0, request_timeout)):
+                return await request()
+
+        try:
+            response = await AsyncRetrying(
+                stop=stop_after_attempt(_MAX_REQUEST_ATTEMPTS),
+                wait=_retry_wait,
+                retry=retry_if_exception(_is_retryable),
+                reraise=True,
+            )(timed_request)
+        except (TimeoutError, httpx.TransportError) as exc:
+            raise ArxivFetchError(
+                f"arXiv request failed after {_MAX_REQUEST_ATTEMPTS} attempts"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise ArxivFetchError(
+                f"arXiv request failed with HTTP {exc.response.status_code}"
+            ) from exc
+        if len(response.content) > 20 * 1024 * 1024:
+            raise ArxivFetchError("arXiv response exceeded 20 MiB")
+        return response.content
 
     async def _fetch_page(
         self,
