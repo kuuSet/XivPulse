@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import httpx
 from bs4 import BeautifulSoup
 
-from .identifier import clean_text
+from .results import clean_text
 
 if TYPE_CHECKING:
     from .client import ArxivClient

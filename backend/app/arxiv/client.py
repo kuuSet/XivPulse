@@ -19,8 +19,7 @@ from .download import (
     limited_bytes,
     polite_wait,
 )
-from .identifier import parse_arxiv_id
-from .results import to_papers
+from .results import parse_arxiv_id, to_papers
 
 _PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")
