@@ -22,6 +22,8 @@ from ..services.analytics import current_date_in_timezone
 from ..services.daily_reports import persist_daily_report, send_daily_report_email
 from ..services.direction_catalog import direction_catalog_payload
 from ..services.method_catalog import (
+    METHOD_CANDIDATE_MIN_PAPERS,
+    METHOD_CANDIDATE_WINDOW_DAYS,
     clean_custom_methods,
     discover_method_candidates,
     method_catalog_payload,
@@ -271,8 +273,8 @@ def methods_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
 @router.get("/api/methods/candidates")
 def method_candidates(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    window_days = settings.method_candidate_window_days
-    min_papers = settings.method_candidate_min_papers
+    window_days = METHOD_CANDIDATE_WINDOW_DAYS
+    min_papers = METHOD_CANDIDATE_MIN_PAPERS
     custom = clean_custom_methods(list(settings.custom_method_terms))
     dismissed = list(settings.dismissed_method_candidates)
     candidates = discover_method_candidates(

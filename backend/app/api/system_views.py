@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import Integer, desc, func, select
 from sqlalchemy.orm import Session
 
-from ..config import load_runtime_settings, provider_status, setting_value
+from ..config import load_runtime_settings, setting_value
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..services.semantic import RECALL_THRESHOLDS, embedding_status, recall_mode
@@ -34,8 +34,6 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         "base_url": config.base_url,
         "model": config.model,
         "api_key_configured": not config.mock_mode,
-        "config_source": config.config_source,
-        "key_source": config.key_source,
         "schedule_time": settings.schedule_time,
         "timezone": settings.timezone,
         "max_results": settings.max_results,
@@ -198,4 +196,4 @@ def _token_usage_summary(db: Session) -> dict[str, Any]:
 
 
 def _provider_public_status(db: Session) -> dict[str, Any]:
-    return provider_status(load_runtime_settings(db).provider)
+    return load_runtime_settings(db).provider.public_dict()

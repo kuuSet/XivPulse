@@ -7,7 +7,7 @@ from pathlib import Path
 import app.config.process as config_module
 import httpx
 import pytest
-from app.config import ProviderConfig, load_runtime_settings, provider_status, set_setting
+from app.config import ProviderConfig, load_runtime_settings, set_setting
 from app.database import init_db, make_engine
 from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
@@ -61,7 +61,7 @@ def _config(**overrides: object) -> ProviderConfig:
     return ProviderConfig(**values)  # type: ignore[arg-type]
 
 
-def test_seed_is_idempotent_and_provider_status_never_exposes_secret() -> None:
+def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     init_db(engine)
@@ -75,7 +75,7 @@ def test_seed_is_idempotent_and_provider_status_never_exposes_secret() -> None:
         assert settings.deep_analysis_top_n == 5
         assert settings.deep_relevance_threshold == 90
 
-    status = provider_status(_config(api_key="do-not-leak"))
+    status = _config(api_key="do-not-leak").public_dict()
     assert status["api_key_configured"] is True
     assert "do-not-leak" not in json.dumps(status)
     assert "api_key" not in status
@@ -108,8 +108,6 @@ def test_public_config_does_not_read_codex_credentials_without_opt_in(
     monkeypatch.setattr(config_module, "_load_codex_api_key", unexpected_read)
     config = config_module._build_process_config().provider
     assert config.mock_mode is True
-    assert config.config_source == "defaults"
-    assert config.key_source == "none"
 
 
 def test_process_config_imports_codex_only_when_enabled(
@@ -147,7 +145,6 @@ def test_process_config_imports_codex_only_when_enabled(
     assert provider.model == "codex-model"
     assert provider.api_mode == "chat"
     assert provider.api_key == "codex-secret"
-    assert provider.key_source == "codex-auth"
 
 
 def test_environment_key_fallback_and_secrets_are_hidden(
@@ -159,7 +156,6 @@ def test_environment_key_fallback_and_secrets_are_hidden(
     config = config_module._build_process_config()
 
     assert config.provider.api_key == "openai-secret"
-    assert config.provider.key_source == "environment:OPENAI_API_KEY"
     assert "openai-secret" not in repr(config.provider)
     assert "session-secret" not in repr(config)
     assert "openai-secret" not in json.dumps(config.model_dump(), default=str)
@@ -167,11 +163,11 @@ def test_environment_key_fallback_and_secrets_are_hidden(
 
 
 def test_invalid_configuration_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XIVPULSE_PORT", "70000")
-    with pytest.raises(ValidationError, match="port"):
+    monkeypatch.setenv("XIVPULSE_REQUEST_TIMEOUT", "601")
+    with pytest.raises(ValidationError, match="request_timeout"):
         config_module._build_process_config()
 
-    monkeypatch.delenv("XIVPULSE_PORT")
+    monkeypatch.delenv("XIVPULSE_REQUEST_TIMEOUT")
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     with Session(engine) as session:
@@ -221,13 +217,15 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
         )
         process = config_module._build_process_config()
         settings = load_runtime_settings(session, process=process)
+        monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
+        settings_with_environment_key = load_runtime_settings(session, process=process)
 
     assert settings.schedule_time == "09:15"
     assert settings.max_results == 250
     assert settings.provider.base_url == "https://database.test/v1"
     assert settings.provider.model == "environment-model"
     assert settings.provider.api_key == "database-secret"
-    assert settings.provider.key_source == "database"
+    assert settings_with_environment_key.provider.api_key == "environment-secret"
     assert settings.smtp_host == "smtp.environment.test"
     assert settings.email_recipients == (
         "first@example.com",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import tomllib
 from functools import lru_cache
 from pathlib import Path
@@ -23,14 +22,6 @@ _DEFAULT_MODEL_CACHE = (_REPO_ROOT / "data" / "model-cache").resolve()
 _CODEX_DIR = Path.home() / ".codex"
 _CODEX_CONFIG_PATH = _CODEX_DIR / "config.toml"
 _CODEX_AUTH_PATH = _CODEX_DIR / "auth.json"
-
-
-def _nonempty_environment(name: str) -> str | None:
-    value = os.getenv(name)
-    if value is None:
-        return None
-    value = value.strip()
-    return value or None
 
 
 def _load_codex_config() -> dict[str, Any]:
@@ -93,8 +84,6 @@ class ProviderConfig(BaseSettings):
         repr=False,
         exclude=True,
     )
-    config_source: str = "defaults"
-    key_source: str = "none"
     request_timeout: float = Field(default=180.0, ge=5.0, le=600.0)
 
     @classmethod
@@ -135,8 +124,6 @@ class ProcessConfig(BaseSettings):
 
     database_url: str = f"sqlite:///{_DEFAULT_DB_PATH.as_posix()}"
     provider: ProviderConfig = Field(default_factory=ProviderConfig)
-    host: str = "127.0.0.1"
-    port: int = Field(default=8765, ge=1, le=65535)
     trusted_hosts: Annotated[tuple[str, ...], NoDecode] = ()
     model_cache: Path = _DEFAULT_MODEL_CACHE
     embedding_backfill: bool = True
@@ -169,30 +156,6 @@ def _build_provider_config(*, import_codex: bool) -> ProviderConfig:
         if isinstance(candidate, dict):
             codex_provider = candidate
 
-    explicit_key = _nonempty_environment("XIVPULSE_API_KEY")
-    openai_key = _nonempty_environment("OPENAI_API_KEY")
-    codex_key = (
-        _load_codex_api_key()
-        if import_codex and not explicit_key and not openai_key
-        else None
-    )
-    if explicit_key:
-        key_source = "environment:XIVPULSE_API_KEY"
-    elif openai_key:
-        key_source = "environment:OPENAI_API_KEY"
-    elif codex_key:
-        key_source = "codex-auth"
-    else:
-        key_source = "none"
-
-    provider_environment = any(
-        _nonempty_environment(f"XIVPULSE_{name}")
-        for name in ("PROVIDER_NAME", "BASE_URL", "MODEL", "API_KEY")
-    )
-    source = "codex" if import_codex else "defaults"
-    if provider_environment:
-        source = "environment+codex" if import_codex else "environment"
-
     wire_api = (_string_or_none(codex_provider.get("wire_api")) or "responses").lower()
     return ProviderConfig(
         provider_name=codex_provider_name,
@@ -200,9 +163,7 @@ def _build_provider_config(*, import_codex: bool) -> ProviderConfig:
         or "https://api.openai.com/v1",
         model=_string_or_none(codex.get("model")) or "gpt-4o-mini",
         api_mode="chat" if wire_api == "chat" else "responses",
-        api_key=codex_key,
-        config_source=source,
-        key_source=key_source,
+        api_key=_load_codex_api_key() if import_codex else None,
     )
 
 
@@ -220,23 +181,12 @@ def _build_process_config() -> ProcessConfig:
 
 
 @lru_cache(maxsize=1)
-def _cached_process_config() -> ProcessConfig:
+def get_process_config() -> ProcessConfig:
     return _build_process_config()
-
-
-def get_process_config(*, refresh: bool = False) -> ProcessConfig:
-    if refresh:
-        _cached_process_config.cache_clear()
-    return _cached_process_config()
-
-
-def provider_status(config: ProviderConfig | None = None) -> dict[str, Any]:
-    return (config or get_process_config().provider).public_dict()
 
 
 __all__ = [
     "ProcessConfig",
     "ProviderConfig",
     "get_process_config",
-    "provider_status",
 ]

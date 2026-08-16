@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import Field, field_validator
@@ -19,9 +17,6 @@ from .process import ProcessConfig, ProviderConfig, _string_tuple, get_process_c
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
-
-StringTuple = Annotated[tuple[str, ...], NoDecode]
-JsonTuple = Annotated[tuple[Any, ...], NoDecode]
 
 
 class RuntimeSettings(BaseSettings):
@@ -46,11 +41,9 @@ class RuntimeSettings(BaseSettings):
     analysis_prompt_template_id: str = "balanced-review"
     screening_prompt: str | None = None
     deep_prompt: str | None = None
-    custom_method_terms: JsonTuple = ()
-    dismissed_method_candidates: StringTuple = ()
-    method_candidate_window_days: int = Field(default=30, ge=1, le=365)
-    method_candidate_min_papers: int = Field(default=2, ge=2, le=100)
-    author_watchlist: StringTuple = ()
+    custom_method_terms: tuple[Any, ...] = ()
+    dismissed_method_candidates: tuple[str, ...] = ()
+    author_watchlist: tuple[str, ...] = ()
     email_enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -58,7 +51,7 @@ class RuntimeSettings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = Field(default="", repr=False, exclude=True)
     smtp_from: str = ""
-    email_recipients: StringTuple = ()
+    email_recipients: Annotated[tuple[str, ...], NoDecode] = ()
     public_base_url: str = ""
 
     @classmethod
@@ -72,34 +65,10 @@ class RuntimeSettings(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return env_settings, init_settings
 
-    @field_validator(
-        "dismissed_method_candidates",
-        "author_watchlist",
-        "email_recipients",
-        mode="before",
-    )
+    @field_validator("email_recipients", mode="before")
     @classmethod
     def parse_string_tuple(cls, value: Any) -> tuple[str, ...]:
         return _string_tuple(value)
-
-    @field_validator("custom_method_terms", mode="before")
-    @classmethod
-    def parse_custom_method_terms(cls, value: Any) -> tuple[Any, ...]:
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except json.JSONDecodeError as exc:
-                raise ValueError("expected a JSON array") from exc
-        if not isinstance(value, list | tuple):
-            raise ValueError("expected a sequence")
-        return tuple(value)
-
-    @field_validator("screening_prompt", "deep_prompt", mode="before")
-    @classmethod
-    def empty_prompt_is_none(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            return value.strip() or None
-        return value
 
     @field_validator("public_base_url")
     @classmethod
@@ -122,36 +91,12 @@ def _setting_values(db: Session) -> dict[str, Any]:
 
 def _effective_provider(values: dict[str, Any], process: ProcessConfig) -> ProviderConfig:
     configured = process.provider
-    database_provider = any(
-        values.get(key) for key in ("provider_name", "base_url", "model", "api_key")
-    )
-    provider_environment = any(
-        os.getenv(f"XIVPULSE_{name}")
-        for name in ("PROVIDER_NAME", "BASE_URL", "MODEL", "API_KEY")
-    )
-    environment_key = bool(os.getenv("XIVPULSE_API_KEY") or os.getenv("OPENAI_API_KEY"))
     return ProviderConfig(
         provider_name=values.get("provider_name") or configured.provider_name,
         base_url=values.get("base_url") or configured.base_url,
         model=values.get("model") or configured.model,
         api_mode=configured.api_mode,
-        api_key=(
-            configured.api_key
-            if environment_key
-            else values.get("api_key") or configured.api_key
-        ),
-        config_source=(
-            configured.config_source
-            if provider_environment
-            else "database"
-            if database_provider
-            else configured.config_source
-        ),
-        key_source=(
-            configured.key_source
-            if environment_key or not values.get("api_key")
-            else "database"
-        ),
+        api_key=values.get("api_key") or configured.api_key,
         request_timeout=configured.request_timeout,
     )
 

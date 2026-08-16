@@ -654,8 +654,6 @@ export interface Settings {
   public_base_url: string
   api_mode?: string
   mock_mode?: boolean
-  config_source?: string
-  key_source?: string
 }
 
 export interface TokenUsageTotals {
