@@ -4,30 +4,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
-    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
-
-
-def _string_tuple(value: Any) -> tuple[str, ...]:
-    values = value.split(",") if isinstance(value, str) else value
-    if not isinstance(values, list | tuple | set):
-        raise ValueError("expected a comma-separated string or a sequence")
-    result: list[str] = []
-    seen: set[str] = set()
-    for item in values:
-        cleaned = str(item).strip()
-        key = cleaned.casefold()
-        if cleaned and key not in seen:
-            seen.add(key)
-            result.append(cleaned)
-    return tuple(result)
 
 
 class ProviderSettings(BaseSettings):
@@ -100,7 +84,7 @@ class ProcessSettings(BaseSettings):
     provider: ProviderSettings = Field(default_factory=ProviderSettings)
 
     # Server request filtering.
-    server_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = ()
+    server_allowed_hosts: tuple[str, ...] = ()
 
     # Local semantic index initialization.
     semantic_backfill_enabled: bool = True
@@ -112,11 +96,6 @@ class ProcessSettings(BaseSettings):
     auth_session_secret: str = Field(default="", repr=False, exclude=True)
     auth_secure_cookies: bool | None = None
     auth_trust_proxy: bool = False
-
-    @field_validator("server_allowed_hosts", mode="before")
-    @classmethod
-    def parse_server_allowed_hosts(cls, value: Any) -> tuple[str, ...]:
-        return _string_tuple(value)
 
     @field_validator("data_dir")
     @classmethod

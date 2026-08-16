@@ -88,7 +88,13 @@ def test_process_settings_use_only_xivpulse_environment_names(
     monkeypatch.delenv("XIVPULSE_MODEL_NAME", raising=False)
     assert settings_module._build_process_settings().provider.model_name == "gpt-4o-mini"
     monkeypatch.setenv("XIVPULSE_MODEL_NAME", "current-model")
-    assert settings_module._build_process_settings().provider.model_name == "current-model"
+    monkeypatch.setenv(
+        "XIVPULSE_SERVER_ALLOWED_HOSTS",
+        '["localhost", "127.0.0.1"]',
+    )
+    settings = settings_module._build_process_settings()
+    assert settings.provider.model_name == "current-model"
+    assert settings.server_allowed_hosts == ("localhost", "127.0.0.1")
 
 
 def test_process_settings_derive_storage_from_one_data_directory(
@@ -171,7 +177,7 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
         monkeypatch.setenv("XIVPULSE_SMTP_HOST", "smtp.environment.test")
         monkeypatch.setenv(
             "XIVPULSE_EMAIL_RECIPIENTS",
-            "first@example.com, second@example.com, FIRST@example.com",
+            '["first@example.com", "second@example.com"]',
         )
         process = settings_module._build_process_settings()
         settings = load_runtime_settings(session, process=process)

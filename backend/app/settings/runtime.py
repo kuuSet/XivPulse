@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import (
     BaseSettings,
-    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
 from sqlalchemy import select
 
-from .process import ProcessSettings, ProviderSettings, _string_tuple, get_process_settings
+from .process import ProcessSettings, ProviderSettings, get_process_settings
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -64,7 +63,7 @@ class RuntimeSettings(BaseSettings):
 
     # Email delivery controls.
     email_enabled: bool = False
-    email_recipients: Annotated[tuple[str, ...], NoDecode] = ()
+    email_recipients: tuple[str, ...] = ()
 
     # SMTP connection and sender identity.
     smtp_host: str = ""
@@ -87,11 +86,6 @@ class RuntimeSettings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return env_settings, init_settings
-
-    @field_validator("email_recipients", mode="before")
-    @classmethod
-    def parse_string_tuple(cls, value: Any) -> tuple[str, ...]:
-        return _string_tuple(value)
 
     @field_validator("public_url")
     @classmethod

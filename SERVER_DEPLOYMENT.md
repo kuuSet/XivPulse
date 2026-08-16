@@ -29,7 +29,7 @@ XIVPULSE_AUTH_SESSION_SECRET=...
 ```dotenv
 XIVPULSE_PUBLIC_HOST=203.0.113.10
 XIVPULSE_PUBLIC_URL=https://203.0.113.10
-XIVPULSE_SERVER_ALLOWED_HOSTS=203.0.113.10,127.0.0.1,localhost,xivpulse
+XIVPULSE_SERVER_ALLOWED_HOSTS=["203.0.113.10","127.0.0.1","localhost","xivpulse"]
 ```
 
 `XIVPULSE_AUTH_SESSION_SECRET` 至少 32 字节，管理员密码只以 Argon2 哈希保存。SMTP 和模型 API 可通过同一文件注入；SMTP 环境变量优先于 SQLite 设置，浏览器接口只返回授权码“是否已配置”。
