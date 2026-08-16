@@ -24,6 +24,10 @@ _PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")
 
 
+class ArxivFetchError(RuntimeError):
+    """Raised when arXiv cannot provide a complete, trustworthy result."""
+
+
 class _GlobalStartRateLimiter:
     """Reserve globally spaced request start times without holding an async lock."""
 
@@ -62,6 +66,41 @@ def build_date_query(target_date: date, categories: Sequence[str]) -> str:
     compact = target_date.strftime("%Y%m%d")
     category_query = " OR ".join(f"cat:{category}" for category in categories)
     return f"({category_query}) AND submittedDate:[{compact}0000 TO {compact}2359]"
+
+
+def _validate_page_size(
+    papers: Sequence[Paper],
+    *,
+    offset: int,
+    expected_size: int,
+) -> None:
+    if len(papers) != expected_size:
+        raise ArxivFetchError(
+            f"arXiv returned an incomplete page at offset {offset}: "
+            f"expected {expected_size}, received {len(papers)}"
+        )
+
+
+def _prepare_papers(entries: Sequence[Paper], target_date: date) -> list[Paper]:
+    papers = deduplicate_papers(entries)
+    outside_date = [
+        paper.arxiv_id
+        for paper in papers
+        if paper.published_at is None or paper.published_at.date() != target_date
+    ]
+    if outside_date:
+        raise ArxivFetchError(
+            f"arXiv returned papers outside requested date {target_date}: "
+            + ", ".join(outside_date[:3])
+        )
+    papers.sort(
+        key=lambda item: (
+            as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
+            item.arxiv_id,
+            item.version,
+        )
+    )
+    return papers
 
 
 class ArxivClient:
@@ -107,9 +146,11 @@ class ArxivClient:
                 else:
                     async with asyncio.timeout(max(1.0, request_timeout)):
                         response = await request()
-            except (TimeoutError, httpx.TransportError):
+            except (TimeoutError, httpx.TransportError) as exc:
                 if attempt + 1 == _MAX_REQUEST_ATTEMPTS:
-                    raise
+                    raise ArxivFetchError(
+                        f"arXiv request failed after {_MAX_REQUEST_ATTEMPTS} attempts"
+                    ) from exc
                 await asyncio.sleep(_retry_delay(attempt))
                 continue
             if (
@@ -118,11 +159,69 @@ class ArxivClient:
             ):
                 await asyncio.sleep(_retry_delay(attempt, response))
                 continue
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise ArxivFetchError(
+                    f"arXiv request failed with HTTP {response.status_code}"
+                ) from exc
             if len(response.content) > 20 * 1024 * 1024:
-                raise ValueError("arXiv feed response exceeded 20 MiB")
+                raise ArxivFetchError("arXiv response exceeded 20 MiB")
             return response.content
-        raise RuntimeError("arXiv request retry loop ended unexpectedly")
+        raise AssertionError("unreachable")
+
+    async def _fetch_page(
+        self,
+        query: str,
+        *,
+        start: int,
+        size: int,
+    ) -> tuple[int, list[Paper]]:
+        payload = await self._get(
+            ARXIV_API_URL,
+            accept="application/atom+xml,application/xml",
+            params={
+                "search_query": query,
+                "start": start,
+                "max_results": size,
+                "sortBy": "submittedDate",
+                "sortOrder": "ascending",
+            },
+        )
+        try:
+            return parse_arxiv_feed(payload)
+        except ValueError as exc:
+            raise ArxivFetchError("arXiv returned an invalid Atom response") from exc
+
+    async def _fetch_pages(
+        self,
+        query: str,
+        limit: int,
+        target_date: date,
+    ) -> list[Paper]:
+        first_size = min(_PAGE_SIZE, limit)
+        total, entries = await self._fetch_page(query, start=0, size=first_size)
+        if total > limit:
+            raise ArxivFetchError(
+                f"arXiv reports {total} papers for {target_date}, exceeding the configured "
+                f"limit {limit}"
+            )
+        _validate_page_size(
+            entries,
+            offset=0,
+            expected_size=min(total, first_size),
+        )
+
+        for start in range(_PAGE_SIZE, total, _PAGE_SIZE):
+            size = min(_PAGE_SIZE, total - start)
+            page_total, page = await self._fetch_page(query, start=start, size=size)
+            if page_total != total:
+                raise ArxivFetchError(
+                    f"arXiv result count changed during pagination: {total} to {page_total}"
+                )
+            _validate_page_size(page, offset=start, expected_size=size)
+            entries.extend(page)
+        return entries
 
     async def fetch_html_affiliations(self, arxiv_ids: Sequence[str]) -> dict[str, list[str]]:
         """Fetch explicit author affiliations without inspecting paper body text."""
@@ -143,7 +242,7 @@ class ArxivClient:
                     accept="text/html,application/xhtml+xml",
                     request_timeout=10.0,
                 )
-            except (TimeoutError, httpx.HTTPError, ValueError):
+            except ArxivFetchError:
                 return arxiv_id, []
             return arxiv_id, parse_html_affiliations(payload)
 
@@ -172,64 +271,5 @@ class ArxivClient:
         if limit < 1:
             raise ValueError("arXiv result limit must be positive")
         query = build_date_query(target_date, clean)
-
-        async def fetch_page(start: int, size: int) -> tuple[int, list[Paper]]:
-            payload = await self._get(
-                ARXIV_API_URL,
-                accept="application/atom+xml,application/xml",
-                params={
-                    "search_query": query,
-                    "start": start,
-                    "max_results": size,
-                    "sortBy": "submittedDate",
-                    "sortOrder": "ascending",
-                },
-            )
-            return parse_arxiv_feed(payload)
-
-        first_size = min(_PAGE_SIZE, limit)
-        total, entries = await fetch_page(0, first_size)
-        if total > limit:
-            raise ValueError(
-                f"arXiv reports {total} papers for {target_date}, exceeding the configured "
-                f"limit {limit}"
-            )
-        expected = min(total, first_size)
-        if len(entries) != expected:
-            raise ValueError(
-                f"arXiv returned an incomplete page at offset 0: "
-                f"expected {expected}, received {len(entries)}"
-            )
-        for start in range(_PAGE_SIZE, total, _PAGE_SIZE):
-            size = min(_PAGE_SIZE, total - start)
-            page_total, page = await fetch_page(start, size)
-            if page_total != total:
-                raise ValueError(
-                    f"arXiv result count changed during pagination: {total} to {page_total}"
-                )
-            if len(page) != size:
-                raise ValueError(
-                    f"arXiv returned an incomplete page at offset {start}: "
-                    f"expected {size}, received {len(page)}"
-                )
-            entries.extend(page)
-
-        papers = deduplicate_papers(entries)
-        papers.sort(
-            key=lambda item: (
-                as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
-                item.arxiv_id,
-                item.version,
-            )
-        )
-        outside_date = [
-            paper.arxiv_id
-            for paper in papers
-            if paper.published_at is None or paper.published_at.date() != target_date
-        ]
-        if outside_date:
-            raise ValueError(
-                f"arXiv returned papers outside requested date {target_date}: "
-                + ", ".join(outside_date[:3])
-            )
-        return papers
+        entries = await self._fetch_pages(query, limit, target_date)
+        return _prepare_papers(entries, target_date)

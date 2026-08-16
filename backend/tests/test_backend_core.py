@@ -13,7 +13,7 @@ from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
-from app.arxiv.client import ArxivClient, build_date_query
+from app.arxiv.client import ArxivClient, ArxivFetchError, build_date_query
 from app.arxiv.parsing import (
     parse_arxiv_feed,
     parse_arxiv_id,
@@ -336,7 +336,7 @@ async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
         return httpx.Response(400, request=request)
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ArxivFetchError, match="arXiv request failed") as raised:
             await ArxivClient(
                 http_client=http_client,
                 rate_limit_seconds=0,
@@ -347,6 +347,7 @@ async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
             )
 
     assert len(requests) == 1
+    assert isinstance(raised.value.__cause__, httpx.HTTPStatusError)
 
 
 @pytest.mark.asyncio
@@ -366,7 +367,7 @@ async def test_daily_fetch_stops_after_three_transient_failures(
 
     monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", no_wait)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ArxivFetchError, match="arXiv request failed") as raised:
             await ArxivClient(
                 http_client=http_client,
                 rate_limit_seconds=0,
@@ -377,6 +378,7 @@ async def test_daily_fetch_stops_after_three_transient_failures(
             )
 
     assert len(requests) == 3
+    assert isinstance(raised.value.__cause__, httpx.HTTPStatusError)
 
 
 def _atom_page(total: int, entries: list[tuple[str, int, str]]) -> bytes:
@@ -473,7 +475,7 @@ async def test_daily_fetch_rejects_an_incomplete_page() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        with pytest.raises(ValueError, match="incomplete page at offset 200"):
+        with pytest.raises(ArxivFetchError, match="incomplete page at offset 200"):
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
@@ -489,12 +491,29 @@ async def test_daily_fetch_rejects_papers_outside_requested_date() -> None:
     transport = httpx.MockTransport(lambda request: httpx.Response(200, content=payload))
 
     async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(ValueError, match="outside requested date 2026-08-13"):
+        with pytest.raises(ArxivFetchError, match="outside requested date 2026-08-13"):
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
                 max_results=1,
             )
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_wraps_invalid_atom_responses() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, content=b"not xml", request=request)
+    )
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(ArxivFetchError, match="invalid Atom response") as raised:
+            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
+                ["cs.RO"],
+                target_date=date(2026, 8, 13),
+                max_results=1,
+            )
+
+    assert isinstance(raised.value.__cause__, ValueError)
 
 
 def test_atom_parser_preserves_entries_and_reported_total() -> None:
@@ -515,12 +534,33 @@ async def test_daily_fetch_rejects_a_truncated_result_set() -> None:
     transport = httpx.MockTransport(lambda _request: httpx.Response(200, content=payload))
 
     async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(ValueError, match="exceeding the configured limit 2"):
+        with pytest.raises(ArxivFetchError, match="exceeding the configured limit 2"):
             await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
                 ["cs.RO"],
                 target_date=date(2026, 8, 13),
                 max_results=2,
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("categories", "limit", "message"),
+    [
+        ([], 10, "valid arXiv category"),
+        (["cs.RO"], 0, "result limit must be positive"),
+    ],
+)
+async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
+    categories: list[str],
+    limit: int,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        await ArxivClient(rate_limit_seconds=0).fetch_daily(
+            categories,
+            target_date=date(2026, 8, 13),
+            max_results=limit,
+        )
 
 
 def test_html_affiliations_only_reads_explicit_author_roles() -> None:
