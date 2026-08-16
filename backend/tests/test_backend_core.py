@@ -266,7 +266,7 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         records = await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-            ["cs.RO", "cs.AI", "cs.RO"],
+            [" cs.RO ", "cs.AI", "cs.RO"],
             target_date=date(2026, 8, 13),
             max_results=17,
         )
@@ -547,6 +547,7 @@ async def test_daily_fetch_rejects_a_truncated_result_set() -> None:
     ("categories", "limit", "message"),
     [
         ([], 10, "valid arXiv category"),
+        (["cs.RO", "not a category"], 10, "Invalid arXiv categories"),
         (["cs.RO"], 0, "result limit must be positive"),
     ],
 )
@@ -555,12 +556,16 @@ async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
     limit: int,
     message: str,
 ) -> None:
-    with pytest.raises(ValueError, match=message):
-        await ArxivClient(rate_limit_seconds=0).fetch_daily(
-            categories,
-            target_date=date(2026, 8, 13),
-            max_results=limit,
-        )
+    transport = httpx.MockTransport(
+        lambda _request: pytest.fail("invalid input must fail before an HTTP request")
+    )
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        with pytest.raises(ValueError, match=message):
+            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
+                categories,
+                target_date=date(2026, 8, 13),
+                max_results=limit,
+            )
 
 
 def test_html_affiliations_only_reads_explicit_author_roles() -> None:

@@ -258,15 +258,12 @@ class ArxivClient:
         target_date: date,
         max_results: int = 100,
     ) -> list[Paper]:
-        clean = list(
-            dict.fromkeys(
-                value.strip()
-                for value in categories
-                if isinstance(value, str) and _CATEGORY_RE.match(value.strip())
-            )
-        )
+        clean = list(dict.fromkeys(value.strip() for value in categories))
         if not clean:
             raise ValueError("At least one valid arXiv category is required")
+        invalid = [value for value in clean if not _CATEGORY_RE.fullmatch(value)]
+        if invalid:
+            raise ValueError("Invalid arXiv categories: " + ", ".join(invalid))
         limit = int(max_results)
         if limit < 1:
             raise ValueError("arXiv result limit must be positive")
