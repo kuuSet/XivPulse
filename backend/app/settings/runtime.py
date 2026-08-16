@@ -10,9 +10,9 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
-from sqlalchemy import select
 
 from .process import ProcessSettings, ProviderSettings, get_process_settings
+from .store import load_setting_values
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -100,12 +100,6 @@ class RuntimeSettings(BaseSettings):
         }
 
 
-def _setting_values(db: Session) -> dict[str, Any]:
-    from ..models import AppSetting
-
-    return {item.key: item.value_json for item in db.scalars(select(AppSetting)).all()}
-
-
 def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> ProviderSettings:
     configured = process.provider
     return ProviderSettings(
@@ -124,39 +118,11 @@ def load_runtime_settings(
     process: ProcessSettings | None = None,
 ) -> RuntimeSettings:
     process = process or get_process_settings()
-    values = _setting_values(db)
+    values = load_setting_values(db)
     return RuntimeSettings(provider=_effective_provider(values, process), **values)
-
-
-def setting_value(db: Session, key: str, default: Any = None) -> Any:
-    from ..models import AppSetting
-
-    setting = db.get(AppSetting, key)
-    return setting.value_json if setting is not None else default
-
-
-def set_setting(db: Session, key: str, value: Any) -> None:
-    from ..models import AppSetting
-
-    setting = db.get(AppSetting, key)
-    if setting is None:
-        db.add(AppSetting(key=key, value_json=value))
-    else:
-        setting.value_json = value
-
-
-def delete_setting(db: Session, key: str) -> None:
-    from ..models import AppSetting
-
-    setting = db.get(AppSetting, key)
-    if setting is not None:
-        db.delete(setting)
 
 
 __all__ = [
     "RuntimeSettings",
-    "delete_setting",
     "load_runtime_settings",
-    "set_setting",
-    "setting_value",
 ]
