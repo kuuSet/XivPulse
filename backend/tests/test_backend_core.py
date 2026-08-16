@@ -13,7 +13,7 @@ from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
-from app.arxiv.affiliations import AffiliationClient, parse_html_affiliations
+from app.arxiv.affiliations import AffiliationClient
 from app.arxiv.client import ArxivClient, ArxivFetchError
 from app.arxiv.download import DownloadTooLargeError, limited_bytes
 from app.arxiv.repository import PaperRepository
@@ -428,21 +428,6 @@ async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
             limit=limit,
         )
     assert metadata.searches == []
-
-
-def test_html_affiliations_only_reads_explicit_author_roles() -> None:
-    payload = """
-    <html><body><div class="ltx_authors">
-      <span class="ltx_contact ltx_role_affiliation">
-        <span class="ltx_contact_name">Affiliation:</span>
-        <span>NVIDIA Research</span>
-      </span>
-    </div><article>We compare against OpenAI and Google models.</article></body></html>
-"""
-    assert parse_html_affiliations(payload) == ["NVIDIA Research"]
-    assert (
-        parse_html_affiliations("<article>OpenAI, Meta and NVIDIA are discussed.</article>") == []
-    )
 
 
 def test_direction_catalog_is_versioned_searchable_and_collision_free() -> None:

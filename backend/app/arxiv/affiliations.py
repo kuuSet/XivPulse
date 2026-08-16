@@ -140,21 +140,16 @@ class AffiliationClient:
                         payload.extend(chunk)
             except (DownloadTooLargeError, httpx.HTTPError):
                 return arxiv_id, []
-            return arxiv_id, parse_html_affiliations(bytes(payload))
+
+            soup = BeautifulSoup(bytes(payload), "html.parser")
+            affiliations: list[str] = []
+            for element in soup.select(".ltx_authors .ltx_role_affiliation"):
+                for label in element.select(".ltx_contact_name"):
+                    label.decompose()
+                value = clean_text(element.get_text(" ", strip=True)).strip(" ?:;,.")
+                if value and value.casefold() != "affiliation":
+                    affiliations.append(value)
+            return arxiv_id, list(dict.fromkeys(affiliations))
 
         fetched = await asyncio.gather(*(fetch_one(arxiv_id) for arxiv_id in arxiv_ids))
         return {arxiv_id: values for arxiv_id, values in fetched if values}
-
-
-def parse_html_affiliations(payload: str | bytes) -> list[str]:
-    """Extract only explicitly marked affiliations from an arXiv HTML author block."""
-
-    soup = BeautifulSoup(payload, "html.parser")
-    values: list[str] = []
-    for element in soup.select(".ltx_authors .ltx_role_affiliation"):
-        for label in element.select(".ltx_contact_name"):
-            label.decompose()
-        value = clean_text(element.get_text(" ", strip=True)).strip(" ?:;,.")
-        if value and value.casefold() != "affiliation":
-            values.append(value)
-    return list(dict.fromkeys(values))
