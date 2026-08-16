@@ -8,14 +8,10 @@ from collections.abc import Sequence
 from urllib.parse import quote
 
 import httpx
+from aiolimiter import AsyncLimiter
 from bs4 import BeautifulSoup
 
-from .download import (
-    DEFAULT_USER_AGENT,
-    DownloadTooLargeError,
-    limited_bytes,
-    polite_wait,
-)
+from .download import DEFAULT_USER_AGENT, limited_bytes
 from .results import clean_text, parse_arxiv_id
 
 LOG = logging.getLogger("xivpulse")
@@ -46,90 +42,116 @@ async def fetch_affiliations(
         client = httpx.AsyncClient(follow_redirects=True)
     try:
         try:
-            response = await client.post(
-                SEMANTIC_SCHOLAR_BATCH_URL,
-                params={"fields": "externalIds,authors,authors.affiliations"},
-                headers={
-                    "User-Agent": user_agent,
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-                json={"ids": [f"ARXIV:{value}" for value in clean]},
-                timeout=min(timeout, 20.0),
+            affiliations = await _fetch_semantic_scholar(
+                clean, client, timeout, user_agent
             )
-            response.raise_for_status()
-            if len(response.content) > 10 * 1024 * 1024:
-                raise ValueError("Semantic Scholar response exceeded 10 MiB")
-            payload = response.json()
-            if not isinstance(payload, list):
-                raise ValueError("Semantic Scholar returned an invalid response")
-
-            expected = set(clean)
-            affiliations: dict[str, list[str]] = {}
-            for item in payload:
-                if not isinstance(item, dict):
-                    continue
-                external_ids = item.get("externalIds")
-                raw_id = external_ids.get("ArXiv") if isinstance(external_ids, dict) else None
-                try:
-                    arxiv_id, _ = parse_arxiv_id(str(raw_id))
-                except ValueError:
-                    continue
-                if arxiv_id not in expected:
-                    continue
-                values = list(
-                    dict.fromkeys(
-                        clean_text(value)
-                        for author in item.get("authors", [])
-                        if isinstance(author, dict)
-                        for value in author.get("affiliations", [])
-                        if isinstance(value, str) and clean_text(value)
-                    )
-                )
-                if values:
-                    affiliations[arxiv_id] = values
         except (TimeoutError, httpx.HTTPError, ValueError) as exc:
             LOG.warning("Semantic Scholar affiliation enrichment failed: %s", exc)
             affiliations = {}
 
         missing = [arxiv_id for arxiv_id in clean if arxiv_id not in affiliations]
-        if not missing:
-            return affiliations
-
-        headers = {
-            "User-Agent": user_agent,
-            "Accept": "text/html,application/xhtml+xml",
-        }
-
-        async def fetch_one(arxiv_id: str) -> tuple[str, list[str]]:
-            await polite_wait(max(0.0, rate_limit_seconds))
-            url = f"https://arxiv.org/html/{quote(arxiv_id, safe='/.')}"
-            try:
-                async with client.stream(
-                    "GET", url, headers=headers, timeout=min(timeout, 10.0)
-                ) as response:
-                    response.raise_for_status()
-                    body = bytearray()
-                    async for chunk in limited_bytes(response, _MAX_AFFILIATION_HTML_BYTES):
-                        body.extend(chunk)
-            except (DownloadTooLargeError, httpx.HTTPError):
-                return arxiv_id, []
-
-            soup = BeautifulSoup(bytes(body), "html.parser")
-            values: list[str] = []
-            for element in soup.select(".ltx_authors .ltx_role_affiliation"):
-                for label in element.select(".ltx_contact_name"):
-                    label.decompose()
-                value = clean_text(element.get_text(" ", strip=True)).strip(" ?:;,.")
-                if value and value.casefold() != "affiliation":
-                    values.append(value)
-            return arxiv_id, list(dict.fromkeys(values))
-
-        fetched = await asyncio.gather(*(fetch_one(arxiv_id) for arxiv_id in missing[:6]))
-        affiliations.update(
-            {arxiv_id: values for arxiv_id, values in fetched if values}
-        )
+        if missing:
+            limiter = (
+                AsyncLimiter(1, rate_limit_seconds) if rate_limit_seconds > 0 else None
+            )
+            affiliations.update(
+                await _fetch_arxiv_html(
+                    missing[:6], client, timeout, user_agent, limiter
+                )
+            )
         return affiliations
     finally:
         if http_client is None:
             await client.aclose()
+
+
+async def _fetch_semantic_scholar(
+    arxiv_ids: list[str],
+    client: httpx.AsyncClient,
+    timeout: float,
+    user_agent: str,
+) -> dict[str, list[str]]:
+    response = await client.post(
+        SEMANTIC_SCHOLAR_BATCH_URL,
+        params={"fields": "externalIds,authors,authors.affiliations"},
+        headers={
+            "User-Agent": user_agent,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        json={"ids": [f"ARXIV:{value}" for value in arxiv_ids]},
+        timeout=min(timeout, 20.0),
+    )
+    response.raise_for_status()
+    if len(response.content) > 10 * 1024 * 1024:
+        raise ValueError("Semantic Scholar response exceeded 10 MiB")
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise ValueError("Semantic Scholar returned an invalid response")
+
+    expected = set(arxiv_ids)
+    affiliations: dict[str, list[str]] = {}
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        external_ids = item.get("externalIds")
+        raw_id = external_ids.get("ArXiv") if isinstance(external_ids, dict) else None
+        try:
+            arxiv_id, _ = parse_arxiv_id(str(raw_id))
+        except ValueError:
+            continue
+        if arxiv_id not in expected:
+            continue
+        values = list(
+            dict.fromkeys(
+                clean_text(value)
+                for author in item.get("authors", [])
+                if isinstance(author, dict)
+                for value in author.get("affiliations", [])
+                if isinstance(value, str) and clean_text(value)
+            )
+        )
+        if values:
+            affiliations[arxiv_id] = values
+    return affiliations
+
+
+async def _fetch_arxiv_html(
+    arxiv_ids: list[str],
+    client: httpx.AsyncClient,
+    timeout: float,
+    user_agent: str,
+    limiter: AsyncLimiter | None,
+) -> dict[str, list[str]]:
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": "text/html,application/xhtml+xml",
+    }
+
+    async def fetch_one(arxiv_id: str) -> tuple[str, list[str]]:
+        if limiter is not None:
+            await limiter.acquire()
+        url = f"https://arxiv.org/html/{quote(arxiv_id, safe='/.')}"
+        try:
+            async with client.stream(
+                "GET", url, headers=headers, timeout=min(timeout, 10.0)
+            ) as response:
+                response.raise_for_status()
+                body = bytearray()
+                async for chunk in limited_bytes(response, _MAX_AFFILIATION_HTML_BYTES):
+                    body.extend(chunk)
+        except (httpx.HTTPError, ValueError):
+            return arxiv_id, []
+
+        soup = BeautifulSoup(bytes(body), "html.parser")
+        values: list[str] = []
+        for element in soup.select(".ltx_authors .ltx_role_affiliation"):
+            for label in element.select(".ltx_contact_name"):
+                label.decompose()
+            value = clean_text(element.get_text(" ", strip=True)).strip(" ?:;,.")
+            if value and value.casefold() != "affiliation":
+                values.append(value)
+        return arxiv_id, list(dict.fromkeys(values))
+
+    fetched = await asyncio.gather(*(fetch_one(arxiv_id) for arxiv_id in arxiv_ids))
+    return {arxiv_id: values for arxiv_id, values in fetched if values}

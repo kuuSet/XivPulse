@@ -14,7 +14,7 @@ from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.arxiv.affiliations import fetch_affiliations
-from app.arxiv.download import DownloadTooLargeError, limited_bytes
+from app.arxiv.download import limited_bytes
 from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
@@ -1163,7 +1163,7 @@ async def test_limited_download_stops_reading_as_soon_as_it_exceeds_limit() -> N
     stream = _TrackedByteStream([b"aaaa", b"bbbb", b"cccc"])
     response = httpx.Response(200, stream=stream)
 
-    with pytest.raises(DownloadTooLargeError):
+    with pytest.raises(ValueError, match="response exceeded 6 byte limit"):
         _ = [chunk async for chunk in limited_bytes(response, 6)]
 
     assert stream.yielded == 2

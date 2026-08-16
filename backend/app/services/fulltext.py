@@ -12,12 +12,13 @@ from typing import BinaryIO, Literal
 from urllib.parse import quote
 
 import httpx
+from aiolimiter import AsyncLimiter
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 from ..models import Paper
-from ..arxiv.download import DEFAULT_USER_AGENT, limited_bytes, polite_wait
+from ..arxiv.download import DEFAULT_USER_AGENT, limited_bytes
 from ..arxiv.results import parse_arxiv_id
 
 
@@ -46,7 +47,9 @@ class FullTextFetcher:
     ) -> None:
         self._client = http_client
         self.timeout = timeout
-        self.rate_limit_seconds = max(0.0, rate_limit_seconds)
+        self._limiter = (
+            AsyncLimiter(1, rate_limit_seconds) if rate_limit_seconds > 0 else None
+        )
         self.max_chars = max(5_000, max_chars)
         self.max_html_bytes = max(1024 * 1024, max_html_bytes)
         self.max_pdf_bytes = max(1024 * 1024, max_pdf_bytes)
@@ -54,7 +57,8 @@ class FullTextFetcher:
 
     @asynccontextmanager
     async def _stream(self, url: str, accept: str) -> AsyncIterator[httpx.Response]:
-        await polite_wait(self.rate_limit_seconds)
+        if self._limiter is not None:
+            await self._limiter.acquire()
         headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept": accept}
         if self._client is not None:
             async with self._client.stream(
