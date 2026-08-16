@@ -44,8 +44,6 @@ import {
   TrendingUp,
   ThumbsDown,
   Trash2,
-  ToggleLeft,
-  ToggleRight,
   Wifi,
   X,
 } from 'lucide-react'
@@ -1807,8 +1805,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
   const [profile, setProfile] = useState<Profile | null>(null)
   const [catalog, setCatalog] = useState<DirectionCatalog | null>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
-  const [catalogGroup, setCatalogGroup] = useState('全部')
-  const [catalogLevel, setCatalogLevel] = useState<'all' | 'main' | 'specialty'>('all')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [state, setState] = useState<LoadState>('loading')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -1831,23 +1828,82 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
 
   useEffect(() => { void load() }, [load])
 
-  const updateTopic = (index: number, patch: Partial<BackendTopic>) => {
-    if (!profile) return
-    setProfile({
-      ...profile,
-      topics: profile.topics.map((topic, topicIndex) => topicIndex === index ? { ...topic, ...patch } : topic),
+  const topicIdentities = useMemo(
+    () => new Set((profile?.topics ?? []).filter((topic) => topic.enabled !== false).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(directionIdentity)),
+    [profile],
+  )
+  const visibleCatalogItems = useMemo(() => {
+    if (!catalog) return []
+    const query = catalogQuery.normalize('NFKC').trim().toLocaleLowerCase()
+    return catalog.items.filter((item) => {
+      if (!query) return true
+      return [englishDirectionLabel(item), item.name, item.group, item.description, ...item.aliases, ...item.keywords]
+        .join('\n').toLocaleLowerCase().includes(query)
     })
+  }, [catalog, catalogQuery])
+
+  const catalogItemExists = (item: DirectionCatalogItem) =>
+    [item.name, ...item.aliases].some((label) => topicIdentities.has(directionIdentity(label)))
+
+  const addCatalogTopic = (item: DirectionCatalogItem) => {
+    if (!profile) return
+    const identities = new Set([item.name, ...item.aliases].map(directionIdentity))
+    const existingIndex = profile.topics.findIndex((topic) =>
+      [topic.name, ...(topic.aliases ?? [])].some((label) => identities.has(directionIdentity(label))),
+    )
+    if (existingIndex >= 0 && profile.topics[existingIndex].enabled !== false) {
+      onToast('error', '该关注标签已经存在')
+      return
+    }
+    if (existingIndex >= 0) {
+      setProfile({ ...profile, topics: profile.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
+      setCatalogQuery('')
+      return
+    }
+    const { slug: _slug, group: _group, description: _description, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
+    setProfile({ ...profile, topics: [...profile.topics, { ...topic, query: '' }] })
+    setCatalogQuery('')
   }
 
-  const addTopic = () => {
+  const removeTopic = (index: number) => {
     if (!profile) return
+    setProfile({ ...profile, topics: profile.topics.filter((_, topicIndex) => topicIndex !== index) })
+  }
+
+  const addCustomTopic = () => {
+    if (!profile) return
+    const name = catalogQuery.normalize('NFKC').trim()
+    if (!isEnglishDirectionLabel(name)) {
+      onToast('error', '请使用清晰的英文短语，例如 Multimodal robot learning')
+      return
+    }
+    const preset = catalog?.items.find((item) =>
+      [item.name, ...item.aliases].some((label) => directionIdentity(label) === directionIdentity(name)),
+    )
+    if (preset) {
+      addCatalogTopic(preset)
+      return
+    }
+    const existingIndex = profile.topics.findIndex((topic) =>
+      [topic.name, ...(topic.aliases ?? [])].some((label) => directionIdentity(label) === directionIdentity(name)),
+    )
+    if (existingIndex >= 0 && profile.topics[existingIndex].enabled !== false) {
+      onToast('error', '该关注标签已经存在')
+      return
+    }
+    if (existingIndex >= 0) {
+      setProfile({ ...profile, topics: profile.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
+      setCatalogQuery('')
+      return
+    }
+    const categories = Array.from(new Set(profile.topics.filter((topic) => topic.enabled !== false).flatMap((topic) => topic.arxiv_categories)))
     setProfile({
       ...profile,
       topics: [...profile.topics, {
-        name: '新研究方向',
+        name,
         query: '',
-        arxiv_categories: ['cs.RO'],
-        keywords: [],
+        arxiv_categories: categories.length ? categories : ['cs.AI'],
+        keywords: [name],
         context_keywords: [],
         aliases: [],
         negative_keywords: [],
@@ -1855,41 +1911,7 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
         enabled: true,
       }],
     })
-  }
-
-  const topicIdentities = useMemo(
-    () => new Set((profile?.topics ?? []).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(directionIdentity)),
-    [profile],
-  )
-  const visibleCatalogItems = useMemo(() => {
-    if (!catalog) return []
-    const query = catalogQuery.normalize('NFKC').trim().toLocaleLowerCase()
-    return catalog.items.filter((item) => {
-      if (catalogGroup !== '全部' && item.group !== catalogGroup) return false
-      if (catalogLevel !== 'all' && item.level !== catalogLevel) return false
-      if (!query) return true
-      return [item.name, item.group, item.parent_name ?? '', item.description, ...item.aliases, ...item.keywords]
-        .join('\n').toLocaleLowerCase().includes(query)
-    })
-  }, [catalog, catalogGroup, catalogLevel, catalogQuery])
-
-  const catalogItemExists = (item: DirectionCatalogItem) =>
-    [item.name, ...item.aliases].some((label) => topicIdentities.has(directionIdentity(label)))
-
-  const addCatalogTopic = (item: DirectionCatalogItem) => {
-    if (!profile) return
-    if (catalogItemExists(item)) {
-      onToast('error', '该方向或它的同义名称已经存在，请在现有方向中维护')
-      return
-    }
-    const { slug: _slug, group: _group, description: _description, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
-    setProfile({ ...profile, topics: [...profile.topics, { ...topic, query: '' }] })
-    onToast('success', `已加入“${item.name}”，保存后用于后续筛选`)
-  }
-
-  const removeTopic = (index: number) => {
-    if (!profile) return
-    setProfile({ ...profile, topics: profile.topics.filter((_, topicIndex) => topicIndex !== index) })
+    setCatalogQuery('')
   }
 
   const save = async (event: FormEvent) => {
@@ -1926,55 +1948,21 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
   return (
     <div className="standard-page settings-page">
       <section className="page-heading">
-        <div><div className="eyebrow-row"><SlidersHorizontal size={14} /> 个性化筛选</div><h1>关注设置</h1><p>日常只需填写研究方向和匹配词；精细规则按需展开。</p></div>
+        <div><div className="eyebrow-row"><SlidersHorizontal size={14} /> 个性化筛选</div><h1>关注设置</h1><p>用少量英文标签描述长期关注的研究方向。</p></div>
         <button className="button primary" type="submit" form="profile-form" disabled={saving} aria-label={saving ? '正在保存关注设置' : '保存关注设置'} title={saving ? '正在保存' : '保存更改'}><Save size={16} /><span>{saving ? '保存中' : '保存更改'}</span></button>
       </section>
-      <form id="profile-form" className="form-layout" onSubmit={save}>
+      <form id="profile-form" className="form-layout profile-form-layout" onSubmit={save}>
         <div className="form-main">
-          {catalog && <FormSection title="AI 研究方向候选库" description={`目录版本 ${catalog.version}，包含 ${catalog.main_count} 个稳定主干和 ${catalog.specialty_count} 个精确专题。候选不会自动启用，只添加真正长期关注的方向。`}>
-            <div className="direction-catalog-tools">
-              <label className="search-box"><Search size={15} /><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="搜索方向、英文名、缩写或匹配词" />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
-              <label className="catalog-group-select"><span>领域</span><select value={catalogGroup} onChange={(event) => setCatalogGroup(event.target.value)}><option>全部</option>{catalog.groups.map((group) => <option key={group}>{group}</option>)}</select></label>
-              <label className="catalog-group-select"><span>粒度</span><select value={catalogLevel} onChange={(event) => setCatalogLevel(event.target.value as 'all' | 'main' | 'specialty')}><option value="all">全部</option><option value="main">主干</option><option value="specialty">专题</option></select></label>
-            </div>
-            <div className="catalog-summary"><span>显示 {visibleCatalogItems.length} 个方向</span><p>{catalog.scope_note}</p></div>
-            <div className="direction-catalog-list">
-              {visibleCatalogItems.map((item) => { const exists = catalogItemExists(item); return <article key={item.slug} className={exists ? 'exists' : ''}>
-                <div className="catalog-item-main"><span>{item.group} · {item.level === 'specialty' ? `专题 · 隶属 ${item.parent_name ?? '主干方向'}` : '主干方向'}</span><h3>{item.name}</h3><p>{item.description}</p><div>{item.aliases.slice(0, 3).map((alias) => <em key={alias}>{alias}</em>)}</div></div>
-                <div className="catalog-item-actions"><button type="button" className="button secondary" disabled={exists} onClick={() => addCatalogTopic(item)}>{exists ? <><Check size={14} /> 已添加</> : <><Plus size={14} /> 添加</>}</button></div>
-                <details><summary><SlidersHorizontal size={13} /> 查看匹配规则 <ChevronDown size={13} /></summary><div><InfoTags label="匹配词" values={item.keywords} /><InfoTags label="领域限定" values={item.context_keywords} /><InfoTags label="排除词" values={item.negative_keywords} /><InfoTags label="arXiv 分类" values={item.arxiv_categories} /></div></details>
-              </article> })}
-              {!visibleCatalogItems.length && <div className="catalog-empty"><Search size={18} /><span>没有匹配的候选方向</span><small>尝试更短的中文名、英文名或缩写。</small></div>}
-            </div>
-            <footer className="catalog-footer"><CircleAlert size={14} /><span>建议最终启用 3–12 个边界明确的方向。选择过多会扩大抓取范围、削弱日报重点，并增加摘要初筛成本。</span></footer>
-          </FormSection>}
-          <FormSection title="我关注的研究方向" description="一个方向对应趋势和日报中的一个名称。相近概念放在同一方向的匹配词里，不必拆成多个标签。">
-            <p className="direction-language-note">方向名称可以使用中文；别名、匹配词和领域限定词用于英文语义查询，排除词用于后续方向判断，这些内容都请使用英文。</p>
-            <div className="direction-editor-list">
-              {profile.topics.map((topic, index) => <article className={`direction-editor ${topic.enabled === false ? 'disabled' : ''}`} key={topic.id ?? `new-${index}`}>
-                <header>
-                  <label className="field"><span>方向名称</span><input value={topic.name} onChange={(event) => updateTopic(index, { name: event.target.value })} placeholder="例如：世界模型与规划" /></label>
-                  <div className="direction-editor-actions">
-                    <button type="button" className="icon-button" title={topic.enabled === false ? '启用方向' : '停用方向'} onClick={() => updateTopic(index, { enabled: topic.enabled === false })}>{topic.enabled === false ? <ToggleLeft size={20} /> : <ToggleRight size={20} />}</button>
-                    <button type="button" className="icon-button danger" title="删除方向" onClick={() => removeTopic(index)}><Trash2 size={16} /></button>
-                  </div>
-                </header>
-                <TagEditor label="匹配词" tone="positive" tags={topic.keywords ?? []} placeholder="例如 world model、contact-rich manipulation" onChange={(keywords) => updateTopic(index, { keywords })} />
-                <details className="direction-advanced">
-                  <summary><SlidersHorizontal size={14} /><span>高级规则</span><small>别名、误匹配控制与抓取范围</small><ChevronDown size={14} /></summary>
-                  <div>
-                    <TagEditor label="方向别名（名称归并与语义查询）" tags={topic.aliases ?? []} placeholder="例如 VLA、Vision-Language-Action" onChange={(aliases) => updateTopic(index, { aliases })} />
-                    <TagEditor label="领域限定词（至少命中一个）" tags={topic.context_keywords ?? []} placeholder="例如 robot、humanoid；留空则不限制" onChange={(context_keywords) => updateTopic(index, { context_keywords })} />
-                    <TagEditor label="排除词" tone="negative" tags={topic.negative_keywords ?? []} placeholder="输入容易造成误匹配的词" onChange={(negative_keywords) => updateTopic(index, { negative_keywords })} />
-                    <div className="direction-editor-meta">
-                      <label className="field"><span>方向权重</span><input type="number" min="0" max="5" step="0.05" value={topic.weight ?? 1} onChange={(event) => updateTopic(index, { weight: Number(event.target.value) })} /></label>
-                      <small>arXiv 分类只扩大抓取范围，不能独立证明论文属于这个研究方向。</small>
-                    </div>
-                    <CategoryPicker selected={topic.arxiv_categories ?? []} onChange={(arxiv_categories) => updateTopic(index, { arxiv_categories })} />
-                  </div>
-                </details>
-              </article>)}
-              <button className="button secondary direction-add" type="button" onClick={addTopic}><Plus size={15} /> 新建研究方向</button>
+          <FormSection title="关注标签" description="使用简短、自然的英文研究方向；预设标签已经包含合适的语义词和 arXiv 抓取分类。">
+            <div className="interest-tag-editor">
+              <div className="interest-tags">
+                {profile.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag" key={topic.id ?? `new-${index}`}>
+                  {englishDirectionLabel(topic)}
+                  <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
+                </span>)}
+                <button className="interest-add-tag" type="button" onClick={() => setPickerOpen(true)} aria-label="添加关注标签" title="添加关注标签"><Plus size={16} /></button>
+              </div>
+              <p>建议保留 3–12 个边界清晰的方向。删除或添加后，点击页面右上角保存。</p>
             </div>
           </FormSection>
           <details className="form-section optional-section">
@@ -1986,19 +1974,38 @@ function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: stri
             </div>
           </details>
         </div>
-        <aside className="form-aside">
-          <div className="sticky-panel">
-            <h2>设置原则</h2>
-            <ul className="plain-check-list"><li>方向名称保持少而稳定</li><li>相近叫法放进同一方向</li><li>先填匹配词，误报多时再开高级规则</li><li>初筛和深读门槛在系统设置中调整</li></ul>
-          </div>
-        </aside>
       </form>
+      {pickerOpen && <Modal title="添加关注标签" onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
+        <div className="interest-picker">
+          <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }} placeholder="Search presets or type a new interest" />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
+          {catalogQuery.trim() && <button className={`interest-custom-option ${isEnglishDirectionLabel(catalogQuery) ? '' : 'invalid'}`} type="button" onClick={addCustomTopic}>
+            <Plus size={15} />
+            <span><strong>Add “{catalogQuery.trim()}”</strong><small>{isEnglishDirectionLabel(catalogQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语'}</small></span>
+          </button>}
+          <div className="interest-picker-head"><strong>Preset interests</strong><span>{visibleCatalogItems.length} tags</span></div>
+          <div className="interest-options">
+            {visibleCatalogItems.map((item) => { const exists = catalogItemExists(item); return <button className={exists ? 'selected' : ''} type="button" disabled={exists} onClick={() => addCatalogTopic(item)} title={`${item.name}：${item.description}`} key={item.slug}>{exists ? <Check size={13} /> : <Plus size={13} />}<span>{englishDirectionLabel(item)}</span></button> })}
+            {!visibleCatalogItems.length && <p className="interest-empty">没有匹配的预设标签，可以使用上方输入创建自定义标签。</p>}
+          </div>
+        </div>
+      </Modal>}
     </div>
   )
 }
 
 function directionIdentity(value: string) {
   return value.normalize('NFKC').trim().replace(/[\s_-]+/g, '').toLocaleLowerCase()
+}
+
+function englishDirectionLabel(topic: Pick<BackendTopic, 'name' | 'aliases' | 'keywords'>) {
+  const candidates = [...(topic.aliases ?? []), ...(topic.keywords ?? []), topic.name]
+  const english = candidates.filter((value) => /[A-Za-z]/.test(value) && !/[\u3400-\u9fff]/.test(value))
+  return english.find((value) => !/^[A-Z0-9-]{2,10}$/.test(value)) ?? english[0] ?? topic.name
+}
+
+function isEnglishDirectionLabel(value: string) {
+  const normalized = value.normalize('NFKC').trim()
+  return normalized.length >= 3 && /[A-Za-z]/.test(normalized) && !/[\u3400-\u9fff]/.test(normalized)
 }
 
 function demoDirectionCatalog(profile: Profile): DirectionCatalog {
@@ -2327,24 +2334,6 @@ function TagEditor({ label, tags, onChange, placeholder, tone = 'neutral' }: { l
       <button className="tag-add" type="button" onMouseDown={(event) => event.preventDefault()} onClick={add} aria-label="添加"><Plus size={15} /></button>
     </div></div>
   )
-}
-
-const ARXIV_CATEGORIES = [
-  ['cs.RO', '机器人学'], ['cs.AI', '人工智能'], ['cs.LG', '机器学习'], ['cs.CV', '计算机视觉'],
-  ['cs.CL', '计算与语言'], ['cs.IR', '信息检索'], ['cs.MA', '多智能体系统'], ['cs.HC', '人机交互'],
-  ['cs.CR', '密码与安全'], ['cs.CY', '计算机与社会'], ['cs.SD', '声音'], ['cs.GR', '图形学'],
-  ['cs.LO', '逻辑'], ['cs.DC', '分布式计算'], ['cs.PF', '性能'], ['cs.DB', '数据库'],
-  ['cs.SI', '社会与信息网络'], ['cs.NE', '神经与演化计算'], ['cs.ET', '新兴技术'],
-  ['stat.ML', '统计机器学习'], ['stat.ME', '统计方法'], ['math.OC', '优化与控制'],
-  ['eess.SY', '系统与控制'], ['eess.AS', '音频语音'], ['eess.SP', '信号处理'],
-  ['eess.IV', '图像视频处理'], ['q-bio.BM', '生物分子'], ['q-bio.QM', '定量方法'],
-  ['physics.comp-ph', '计算物理'], ['physics.ao-ph', '大气海洋物理'], ['physics.chem-ph', '化学物理'],
-  ['cond-mat.mtrl-sci', '材料科学'], ['quant-ph', '量子物理'], ['econ.EM', '计量经济学'],
-]
-
-function CategoryPicker({ selected, onChange }: { selected: string[]; onChange: (categories: string[]) => void }) {
-  const toggle = (category: string) => onChange(selected.includes(category) ? selected.filter((item) => item !== category) : [...selected, category])
-  return <div className="category-picker">{ARXIV_CATEGORIES.map(([code, name]) => <label key={code} className={selected.includes(code) ? 'selected' : ''}><input type="checkbox" checked={selected.includes(code)} onChange={() => toggle(code)} /><span className="check-box">{selected.includes(code) && <Check size={13} />}</span><strong>{code}</strong><small>{name}</small></label>)}</div>
 }
 
 function WorkspaceSkeleton() {
