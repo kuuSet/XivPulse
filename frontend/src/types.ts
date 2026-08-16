@@ -628,7 +628,6 @@ export interface Settings {
   }
   deep_analysis_top_n: number
   deep_relevance_threshold?: number
-  retention_days: number
   analysis_budget_mode: 'economy' | 'balanced' | 'deep'
   daily_ai_synthesis_enabled: boolean
   analysis_prompt_template_id: string
@@ -637,7 +636,6 @@ export interface Settings {
   analysis_prompt_version: string
   analysis_prompt_customized: boolean
   token_usage: TokenUsageSummary
-  automatic_cleanup_enabled: boolean
   database_path?: string | null
   database_size_bytes?: number | null
   stored_paper_count: number

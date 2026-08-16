@@ -56,7 +56,6 @@ class SettingsPayload(BaseModel):
     deep_relevance_threshold: float | None = Field(default=None, ge=0, le=100)
     screen_batch_size: int | None = Field(default=None, ge=0, le=500)
     semantic_recall_mode: Literal["high", "balanced", "precise"] | None = None
-    retention_days: int | None = Field(default=None, ge=1, le=3650)
     analysis_budget_mode: Literal["economy", "balanced", "deep"] | None = None
     daily_ai_synthesis_enabled: bool | None = None
     analysis_prompt_template_id: str | None = Field(default=None, max_length=80)

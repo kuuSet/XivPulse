@@ -310,7 +310,6 @@ function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_pas
     semantic_recall_mode: settings.semantic_recall_mode,
     deep_analysis_top_n: settings.deep_analysis_top_n,
     deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
-    retention_days: settings.retention_days,
     analysis_budget_mode: settings.analysis_budget_mode,
     daily_ai_synthesis_enabled: settings.daily_ai_synthesis_enabled,
     analysis_prompt_template_id: settings.analysis_prompt_template_id,

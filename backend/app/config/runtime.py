@@ -35,7 +35,6 @@ class RuntimeSettings(BaseSettings):
     semantic_recall_mode: Literal["high", "balanced", "precise"] = "high"
     deep_analysis_top_n: int = Field(default=5, ge=0, le=100)
     deep_relevance_threshold: float = Field(default=90.0, ge=0.0, le=100.0)
-    retention_days: int = Field(default=365, ge=1, le=3650)
     analysis_budget_mode: Literal["economy", "balanced", "deep"] = "balanced"
     daily_ai_synthesis_enabled: bool = True
     analysis_prompt_template_id: str = "balanced-review"

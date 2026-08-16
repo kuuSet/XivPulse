@@ -2206,7 +2206,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
               <div><strong>{settings.stored_analysis_count}</strong><small>份 AI 分析</small></div>
               <div><strong>{settings.stored_report_count}</strong><small>份日报快照</small></div>
             </div>
-            <div className="retention-note"><CircleAlert size={16} /><div><strong>当前永久累积保存，不会自动清理</strong><p>“保留 {settings.retention_days} 天”目前只是预留配置，尚未启用清理。系统不长期保存 PDF、arXiv HTML 正文或模型读取的临时全文。</p></div></div>
+            <div className="retention-note"><CircleAlert size={16} /><div><strong>当前永久累积保存，不会自动清理</strong><p>数据库会持续累积；系统不长期保存 PDF、arXiv HTML 正文或模型读取的临时全文。</p></div></div>
             {settings.database_path && <label className="field"><span>数据库位置</span><input value={settings.database_path} readOnly /></label>}
           </FormSection>
         </div>
