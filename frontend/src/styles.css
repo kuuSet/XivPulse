@@ -21,6 +21,7 @@
   --gold-soft: #f7f0dd;
   --blue: #078dcc;
   --blue-soft: #e7f4fb;
+  --ui-scale: 1;
   --sidebar-width: 224px;
   line-height: 1.5;
   font-weight: 400;
@@ -42,6 +43,7 @@ body {
   margin: 0;
   overflow-x: hidden;
   background: var(--canvas);
+  zoom: var(--ui-scale);
 }
 
 button,
@@ -2648,6 +2650,10 @@ select:focus-visible,
 .plain-check-list li::before { position: absolute; top: 5px; left: 1px; width: 6px; height: 6px; border-radius: 50%; background: var(--green); content: ''; }
 
 .compact-number-field { max-width: 280px; }
+.font-size-field { max-width: 280px; }
+.font-size-field > div { display: flex; align-items: center; gap: 8px; }
+.font-size-field input { max-width: 120px; }
+.font-size-field em { color: var(--quiet); font-size: 10px; font-style: normal; }
 .analysis-thresholds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .analysis-thresholds article { min-width: 0; padding: 13px; border: 1px solid var(--line); border-radius: 6px; background: #fafbfa; }
 .analysis-thresholds article header { display: flex; align-items: baseline; gap: 7px; }

@@ -510,6 +510,14 @@ def test_budget_token_usage_and_method_candidate_review(client: TestClient) -> N
     assert client.get("/api/methods/candidates").json()["count"] == 0
 
 
+def test_ui_font_size_is_persisted_in_points(client: TestClient) -> None:
+    saved = client.put("/api/settings", json={"ui_font_size_pt": 14.5})
+    assert saved.status_code == 200
+    assert saved.json()["ui_font_size_pt"] == 14.5
+    assert client.get("/api/settings").json()["ui_font_size_pt"] == 14.5
+    assert client.put("/api/settings", json={"ui_font_size_pt": 16.5}).status_code == 422
+
+
 def _saved_synthesis_report(report_date: date) -> dict[str, object]:
     return {
         "profile_id": 1,

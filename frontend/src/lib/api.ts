@@ -307,6 +307,7 @@ function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_pas
     provider_name: settings.provider_name,
     model_name: settings.model_name,
     api_base_url: settings.api_base_url,
+    ui_font_size_pt: settings.ui_font_size_pt,
     schedule_time: settings.schedule_time,
     schedule_timezone: settings.schedule_timezone,
     arxiv_fetch_limit: settings.arxiv_fetch_limit,

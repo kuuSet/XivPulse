@@ -30,6 +30,9 @@ class RuntimeSettings(BaseSettings):
     # Effective model provider settings.
     provider: ProviderSettings
 
+    # Interface base font size in points.
+    ui_font_size_pt: float = Field(default=12.0, ge=10.0, le=16.0, multiple_of=0.5)
+
     # Daily job schedule.
     schedule_time: str = Field(default="13:30", pattern=r"(?:[01]\d|2[0-3]):[0-5]\d")
     schedule_timezone: str = "Asia/Shanghai"

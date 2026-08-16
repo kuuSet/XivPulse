@@ -128,6 +128,11 @@ function App() {
   const [job, setJob] = useState<JobInfo | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [projects, setProjects] = useState<ResearchProject[]>([])
+  const [uiFontSizePt, setUiFontSizePt] = useState(12)
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--ui-scale', String(uiFontSizePt / 12))
+  }, [uiFontSizePt])
 
   const pushToast = useCallback((kind: Toast['kind'], message: string) => {
     const id = Date.now() + Math.random()
@@ -141,6 +146,7 @@ function App() {
     try {
       const data = isDemo ? sampleDashboard : await api.dashboard()
       setDashboard(data)
+      setUiFontSizePt(data.settings?.ui_font_size_pt ?? 12)
       setSelectedId((current) => current ?? data.items[0]?.id ?? null)
       setDashboardState('ready')
     } catch (error) {
@@ -396,7 +402,7 @@ function App() {
         {view === 'projects' && <ProjectsView projects={projects} onProjectsChange={syncProjects} onPapersReload={loadDashboard} onOpenPaper={(id) => openPaper(id, 'library')} onToast={pushToast} />}
         {view === 'trends' && <TrendsView onToast={pushToast} />}
         {view === 'profile' && <ProfileView onToast={pushToast} />}
-        {view === 'settings' && <SettingsView onToast={pushToast} />}
+        {view === 'settings' && <SettingsView onToast={pushToast} onFontSizeChange={setUiFontSizePt} />}
       </main>
 
       <MobileTabBar current={view} onNavigate={navigate} onMore={() => setMobileNavOpen(true)} />
@@ -1996,7 +2002,7 @@ function demoDirectionCatalog(profile: Profile): DirectionCatalog {
   return { version: 'demo', updated_at: '', groups, count: items.length, items, sources: [], scope_note: '演示模式仅展示当前画像中的方向。' }
 }
 
-function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: string) => void }) {
+function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: Toast['kind'], message: string) => void; onFontSizeChange: (value: number) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [smtpPassword, setSmtpPassword] = useState('')
@@ -2018,12 +2024,14 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
     try {
       if (isDemo) {
         setSettings(sampleSettings)
+        onFontSizeChange(sampleSettings.ui_font_size_pt)
         setPromptCatalog(samplePromptCatalog)
       } else {
         const [loadedSettings, catalog, candidates, prompts] = await Promise.all([
           api.settings(), api.methodCatalog(), api.methodCandidates(), api.promptCatalog(),
         ])
         setSettings(loadedSettings)
+        onFontSizeChange(loadedSettings.ui_font_size_pt)
         setMethodCatalog(catalog)
         setPromptCatalog(prompts)
         setMethodCandidates(candidates.items)
@@ -2035,7 +2043,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
       setState('error')
       setError(loadError instanceof Error ? loadError.message : '系统设置加载失败')
     }
-  }, [])
+  }, [onFontSizeChange])
 
   useEffect(() => { void load() }, [load])
 
@@ -2046,6 +2054,7 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
     try {
       const saved = isDemo ? { ...settings, api_key_configured: Boolean(apiKey) || settings.api_key_configured, smtp_password_configured: Boolean(smtpPassword) || settings.smtp_password_configured } : await api.saveSettings({ ...settings, ...(apiKey ? { api_key: apiKey } : {}), ...(smtpPassword ? { smtp_password: smtpPassword } : {}) })
       setSettings(saved)
+      onFontSizeChange(saved.ui_font_size_pt)
       setApiKey('')
       setSmtpPassword('')
       onToast('success', '系统设置已保存')
@@ -2162,12 +2171,16 @@ function SettingsView({ onToast }: { onToast: (kind: Toast['kind'], message: str
   return (
     <div className="standard-page settings-page">
       <section className="page-heading">
-        <div><div className="eyebrow-row"><SettingsIcon size={14} /> 本地服务配置</div><h1>系统设置</h1><p>配置模型 API、报告时区和分析规模。</p></div>
+        <div><div className="eyebrow-row"><SettingsIcon size={14} /> 本地服务配置</div><h1>系统设置</h1><p>配置界面字号、模型 API、报告时区和分析规模。</p></div>
         <button className="button primary" type="submit" form="settings-form" disabled={saving} aria-label={saving ? '正在保存系统设置' : '保存系统设置'} title={saving ? '正在保存' : '保存更改'}><Save size={16} /><span>{saving ? '保存中' : '保存更改'}</span></button>
       </section>
 
       <form id="settings-form" className="form-layout" onSubmit={save}>
         <div className="form-main">
+          <FormSection title="界面显示" description="以 12pt 为当前视觉基准，调整时保留标题、正文和辅助文字的层级比例。">
+            <label className="field font-size-field"><span>界面基准字号</span><div><input type="number" min="10" max="16" step="0.5" value={settings.ui_font_size_pt} onChange={(event) => { const value = Math.min(16, Math.max(10, Number(event.target.value) || 10)); setSettings({ ...settings, ui_font_size_pt: value }); onFontSizeChange(value) }} /><em>pt</em></div><small>可设置 10–16pt，修改时立即预览，保存后长期生效。</small></label>
+          </FormSection>
+
           <FormSection title="模型 API" description="支持 OpenAI 兼容接口。密钥仅由本地后端读取和保存。">
             <div className="field-grid two">
               <label className="field"><span>服务商</span><select value={settings.provider_name} onChange={(event) => setSettings({ ...settings, provider_name: event.target.value })}><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>

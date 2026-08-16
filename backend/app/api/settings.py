@@ -50,6 +50,11 @@ class SettingsPayload(BaseModel):
     api_base_url: str | None = Field(default=None, max_length=2000)
     api_key: str | None = Field(default=None, max_length=10000)
 
+    # Interface display preferences.
+    ui_font_size_pt: float | None = Field(
+        default=None, ge=10.0, le=16.0, multiple_of=0.5
+    )
+
     # Daily job schedule.
     schedule_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     schedule_timezone: str | None = Field(default=None, min_length=1, max_length=100)

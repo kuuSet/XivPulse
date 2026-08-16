@@ -627,6 +627,7 @@ export interface Settings {
   api_base_url: string
   api_protocol?: string
   api_key_configured: boolean
+  ui_font_size_pt: number
   schedule_time: string
   schedule_timezone: string
   arxiv_fetch_limit: number
