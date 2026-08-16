@@ -74,7 +74,7 @@ docker compose ps
 docker compose logs -f xivpulse
 ```
 
-首次使用语义召回时会下载本地模型。论文、设置、分析和日报保存在 `xivpulse-data` 卷，模型保存在 `xivpulse-model-cache` 卷；重新构建容器不会清空它们。
+首次使用语义召回时会下载本地模型。论文、设置、分析、日报和模型缓存统一保存在 `xivpulse-data` 卷；重新构建容器不会清空它们。
 
 停止服务但保留数据：
 

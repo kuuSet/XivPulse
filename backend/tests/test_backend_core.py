@@ -91,6 +91,20 @@ def test_process_config_uses_only_xivpulse_environment_names(
     assert config_module._build_process_config().provider.model == "current-model"
 
 
+def test_process_config_derives_storage_from_one_data_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "xivpulse-data"
+    monkeypatch.setenv("XIVPULSE_DATA_DIR", str(data_dir))
+
+    config = config_module._build_process_config()
+
+    assert config.data_dir == data_dir.resolve()
+    assert config.database_url == f"sqlite:///{data_dir.resolve().as_posix()}/xivpulse.db"
+    assert config.model_cache == data_dir.resolve() / "model-cache"
+
+
 def test_environment_key_fallback_and_secrets_are_hidden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

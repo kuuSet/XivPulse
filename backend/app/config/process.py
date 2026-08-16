@@ -14,11 +14,6 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFAULT_DB_PATH = (_REPO_ROOT / "data" / "xivpulse.db").resolve()
-_DEFAULT_MODEL_CACHE = (_REPO_ROOT / "data" / "model-cache").resolve()
-
-
 def _string_tuple(value: Any) -> tuple[str, ...]:
     values = value.split(",") if isinstance(value, str) else value
     if not isinstance(values, list | tuple | set):
@@ -92,10 +87,9 @@ class ProcessConfig(BaseSettings):
         str_strip_whitespace=True,
     )
 
-    database_url: str = f"sqlite:///{_DEFAULT_DB_PATH.as_posix()}"
+    data_dir: Path = Path("data")
     provider: ProviderConfig = Field(default_factory=ProviderConfig)
     trusted_hosts: Annotated[tuple[str, ...], NoDecode] = ()
-    model_cache: Path = _DEFAULT_MODEL_CACHE
     embedding_backfill: bool = True
     auth_enabled: bool = False
     admin_username: str = ""
@@ -109,10 +103,18 @@ class ProcessConfig(BaseSettings):
     def parse_trusted_hosts(cls, value: Any) -> tuple[str, ...]:
         return _string_tuple(value)
 
-    @field_validator("model_cache")
+    @field_validator("data_dir")
     @classmethod
-    def resolve_model_cache(cls, value: Path) -> Path:
+    def resolve_data_dir(cls, value: Path) -> Path:
         return value.expanduser().resolve()
+
+    @property
+    def database_url(self) -> str:
+        return f"sqlite:///{(self.data_dir / 'xivpulse.db').as_posix()}"
+
+    @property
+    def model_cache(self) -> Path:
+        return self.data_dir / "model-cache"
 
 
 def _build_process_config() -> ProcessConfig:

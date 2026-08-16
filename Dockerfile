@@ -12,7 +12,7 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    XIVPULSE_DATABASE_URL=sqlite:////app/data/xivpulse.db \
+    XIVPULSE_DATA_DIR=/app/data \
     XIVPULSE_HOST=0.0.0.0 \
     XIVPULSE_PORT=8765 \
     PYTHONPATH=/app/backend
@@ -22,7 +22,7 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt \
     && addgroup --system xivpulse \
     && adduser --system --ingroup xivpulse --home /app xivpulse \
-    && mkdir -p /app/data /app/model-cache /app/frontend/dist \
+    && mkdir -p /app/data /app/frontend/dist \
     && chown -R xivpulse:xivpulse /app
 
 COPY --chown=xivpulse:xivpulse backend/ /app/backend/
@@ -30,7 +30,7 @@ COPY --from=frontend-build --chown=xivpulse:xivpulse /build/frontend/dist/ /app/
 
 USER xivpulse
 EXPOSE 8765
-VOLUME ["/app/data", "/app/model-cache"]
+VOLUME ["/app/data"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=3)"

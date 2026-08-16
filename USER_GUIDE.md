@@ -267,7 +267,7 @@ data\xivpulse.db
 
 数据库可能包含 API Key，应把备份当作敏感文件，不要上传到公开网盘或代码仓库。恢复数据库也应在服务和每日任务都停止时进行，并先保留当前数据库副本。
 
-默认数据库位于 `data\xivpulse.db`。如果设置了 `XIVPULSE_DATABASE_URL`，实际数据库位置以该变量为准。
+默认数据目录是 `data`，数据库位于 `data\xivpulse.db`，模型缓存位于 `data\model-cache`。可以通过 `XIVPULSE_DATA_DIR` 统一修改数据目录。
 
 ## 9. 常见问题
 
