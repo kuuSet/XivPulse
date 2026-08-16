@@ -7,16 +7,17 @@ import re
 import threading
 import time
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import date
 from urllib.parse import quote
 
 import arxiv
 import httpx
 
-from ..domain.paper import Paper, as_utc, deduplicate_papers
+from ..domain.paper import Paper
 from .affiliations import parse_html_affiliations
 from .download import DownloadTooLargeError, limited_bytes
-from .identifier import clean_text, parse_arxiv_id
+from .identifier import parse_arxiv_id
+from .results import to_papers
 
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
 _PAGE_SIZE = 200
@@ -60,59 +61,6 @@ def build_date_query(target_date: date, categories: Sequence[str]) -> str:
     compact = target_date.strftime("%Y%m%d")
     category_query = " OR ".join(f"cat:{category}" for category in categories)
     return f"({category_query}) AND submittedDate:[{compact}0000 TO {compact}2359]"
-
-
-def _paper_from_result(result: arxiv.Result) -> Paper:
-    normalized = parse_arxiv_id(result.get_short_id())
-    paper = Paper(
-        arxiv_id=normalized.base_id,
-        version=normalized.version,
-        title=clean_text(result.title),
-        abstract=clean_text(result.summary),
-        authors=list(dict.fromkeys(clean_text(author.name) for author in result.authors)),
-        affiliations=list(
-            dict.fromkeys(
-                affiliation
-                for author in result.authors
-                for value in author.affiliation
-                if (affiliation := clean_text(value))
-            )
-        ),
-        categories=list(dict.fromkeys(result.categories)),
-        primary_category=result.primary_category or None,
-        comment=clean_text(result.comment) or None,
-        journal_ref=clean_text(result.journal_ref) or None,
-        doi=clean_text(result.doi) or None,
-        abs_url=result.entry_id,
-        pdf_url=result.pdf_url or "",
-        published_at=as_utc(result.published),
-        updated_at=as_utc(result.updated),
-        source="atom",
-    )
-    paper.canonicalize_urls()
-    return paper
-
-
-def _prepare_papers(entries: Sequence[Paper], target_date: date) -> list[Paper]:
-    papers = deduplicate_papers(entries)
-    outside_date = [
-        paper.arxiv_id
-        for paper in papers
-        if paper.published_at is None or paper.published_at.date() != target_date
-    ]
-    if outside_date:
-        raise ArxivFetchError(
-            f"arXiv returned papers outside requested date {target_date}: "
-            + ", ".join(outside_date[:3])
-        )
-    papers.sort(
-        key=lambda item: (
-            as_utc(item.published_at) or datetime.min.replace(tzinfo=UTC),
-            item.arxiv_id,
-            item.version,
-        )
-    )
-    return papers
 
 
 class ArxivClient:
@@ -211,4 +159,7 @@ class ArxivClient:
             raise ArxivFetchError(
                 f"arXiv results exceed the configured limit {limit} for {target_date}"
             )
-        return _prepare_papers([_paper_from_result(result) for result in results], target_date)
+        try:
+            return to_papers(results, target_date)
+        except ValueError as exc:
+            raise ArxivFetchError(str(exc)) from exc
