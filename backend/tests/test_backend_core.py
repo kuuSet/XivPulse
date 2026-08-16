@@ -4,7 +4,7 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-import app.config as config_module
+import app.config.process as config_module
 import httpx
 import pytest
 from app.config import ProviderConfig, load_runtime_settings, provider_status, set_setting
