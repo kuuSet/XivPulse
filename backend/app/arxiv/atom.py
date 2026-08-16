@@ -1,51 +1,12 @@
-"""Parsing and normalization for arXiv identifiers and metadata payloads."""
+"""Parse arXiv Atom feeds into paper metadata."""
 
 from __future__ import annotations
 
-import html
-import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from bs4 import BeautifulSoup
-
 from ..domain.paper import Paper
-
-_ARXIV_ID_RE = re.compile(
-    r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"
-    r"(?:v(?P<version>\d+))?",
-    re.IGNORECASE,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class NormalizedArxivId:
-    base_id: str
-    version: int = 1
-
-def parse_arxiv_id(value: str) -> NormalizedArxivId:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError("arXiv identifier cannot be empty")
-    cleaned = html.unescape(value).strip()
-    cleaned = cleaned.split("?", 1)[0].split("#", 1)[0]
-    cleaned = re.sub(r"\.pdf$", "", cleaned, flags=re.IGNORECASE).rstrip("/")
-    match = _ARXIV_ID_RE.search(cleaned)
-    if match is None:
-        raise ValueError(f"Invalid arXiv identifier: {value!r}")
-    base_id = match.group("id")
-    # Legacy archive names are case-insensitive; canonical modern IDs are digits.
-    if "/" in base_id:
-        archive, number = base_id.rsplit("/", 1)
-        base_id = f"{archive.lower()}/{number}"
-    version = int(match.group("version") or 1)
-    if version < 1:
-        raise ValueError("arXiv version must be positive")
-    return NormalizedArxivId(base_id=base_id, version=version)
-
-
-def clean_text(value: str | None) -> str:
-    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+from .normalization import clean_text, parse_arxiv_id
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -68,20 +29,6 @@ def _parse_datetime(value: str | None) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def parse_html_affiliations(payload: str | bytes) -> list[str]:
-    """Extract only explicitly marked affiliations from an arXiv HTML author block."""
-
-    soup = BeautifulSoup(payload, "html.parser")
-    values: list[str] = []
-    for element in soup.select(".ltx_authors .ltx_role_affiliation"):
-        for label in element.select(".ltx_contact_name"):
-            label.decompose()
-        value = clean_text(element.get_text(" ", strip=True)).strip(" ?:;,.")
-        if value and value.casefold() != "affiliation":
-            values.append(value)
-    return list(dict.fromkeys(values))
-
-
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
@@ -93,7 +40,7 @@ def _child_text(element: ET.Element, name: str) -> str | None:
     return None
 
 
-def _parse_atom_entry(entry: ET.Element) -> Paper:
+def _parse_entry(entry: ET.Element) -> Paper:
     raw_id = _child_text(entry, "id")
     title = _child_text(entry, "title")
     published = _child_text(entry, "published")
@@ -168,9 +115,5 @@ def parse_arxiv_feed(payload: str | bytes) -> tuple[int, list[Paper]]:
         total = int(total_text)
     except ValueError as exc:
         raise ValueError("arXiv response is missing a valid totalResults") from exc
-    papers = [
-        _parse_atom_entry(element)
-        for element in root
-        if _local_name(element.tag) == "entry"
-    ]
+    papers = [_parse_entry(element) for element in root if _local_name(element.tag) == "entry"]
     return total, papers
