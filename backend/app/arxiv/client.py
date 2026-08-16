@@ -1,4 +1,4 @@
-"""Rate-limited external metadata retrieval for arXiv papers."""
+"""arXiv metadata and affiliation retrieval."""
 
 from __future__ import annotations
 
@@ -10,23 +10,16 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from urllib.parse import quote
 
+import arxiv
 import httpx
-from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
-from tenacity.wait import wait_exponential
 
 from ..domain.paper import Paper, as_utc, deduplicate_papers
-from .parse.atom import parse_arxiv_feed
 from .parse.html import parse_html_affiliations
-from .parse.normalization import parse_arxiv_id
+from .parse.normalization import clean_text, parse_arxiv_id
 
-ARXIV_API_URL = "https://export.arxiv.org/api/query"
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
-_MAX_REQUEST_ATTEMPTS = 3
-_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-_MAX_RETRY_DELAY_SECONDS = 30.0
 _PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")
-_EXPONENTIAL_RETRY_WAIT = wait_exponential(max=_MAX_RETRY_DELAY_SECONDS)
 
 
 class ArxivFetchError(RuntimeError):
@@ -53,32 +46,12 @@ class _GlobalStartRateLimiter:
         if delay > 0:
             await asyncio.sleep(delay)
 
+
 _GLOBAL_LIMITER = _GlobalStartRateLimiter(3.0)
 
 
 async def polite_wait(interval: float = 3.0) -> None:
     await _GLOBAL_LIMITER.wait(interval)
-
-
-def _is_retryable(error: BaseException) -> bool:
-    if isinstance(error, (TimeoutError, httpx.TransportError)):
-        return True
-    return (
-        isinstance(error, httpx.HTTPStatusError)
-        and error.response.status_code in _TRANSIENT_STATUS_CODES
-    )
-
-
-def _retry_wait(state: RetryCallState) -> float:
-    error = state.outcome.exception() if state.outcome is not None else None
-    retry_after = (
-        error.response.headers.get("Retry-After", "").strip()
-        if isinstance(error, httpx.HTTPStatusError)
-        else ""
-    )
-    if retry_after.isdigit():
-        return min(float(retry_after), _MAX_RETRY_DELAY_SECONDS)
-    return _EXPONENTIAL_RETRY_WAIT(state)
 
 
 def build_date_query(target_date: date, categories: Sequence[str]) -> str:
@@ -87,17 +60,35 @@ def build_date_query(target_date: date, categories: Sequence[str]) -> str:
     return f"({category_query}) AND submittedDate:[{compact}0000 TO {compact}2359]"
 
 
-def _validate_page_size(
-    papers: Sequence[Paper],
-    *,
-    offset: int,
-    expected_size: int,
-) -> None:
-    if len(papers) != expected_size:
-        raise ArxivFetchError(
-            f"arXiv returned an incomplete page at offset {offset}: "
-            f"expected {expected_size}, received {len(papers)}"
-        )
+def _paper_from_result(result: arxiv.Result) -> Paper:
+    normalized = parse_arxiv_id(result.get_short_id())
+    paper = Paper(
+        arxiv_id=normalized.base_id,
+        version=normalized.version,
+        title=clean_text(result.title),
+        abstract=clean_text(result.summary),
+        authors=list(dict.fromkeys(clean_text(author.name) for author in result.authors)),
+        affiliations=list(
+            dict.fromkeys(
+                affiliation
+                for author in result.authors
+                for value in author.affiliation
+                if (affiliation := clean_text(value))
+            )
+        ),
+        categories=list(dict.fromkeys(result.categories)),
+        primary_category=result.primary_category or None,
+        comment=clean_text(result.comment) or None,
+        journal_ref=clean_text(result.journal_ref) or None,
+        doi=clean_text(result.doi) or None,
+        abs_url=result.entry_id,
+        pdf_url=result.pdf_url or "",
+        published_at=as_utc(result.published),
+        updated_at=as_utc(result.updated),
+        source="atom",
+    )
+    paper.canonicalize_urls()
+    return paper
 
 
 def _prepare_papers(entries: Sequence[Paper], target_date: date) -> list[Paper]:
@@ -126,120 +117,37 @@ class ArxivClient:
     def __init__(
         self,
         *,
+        metadata_client: arxiv.Client | None = None,
         http_client: httpx.AsyncClient | None = None,
         rate_limit_seconds: float = 3.0,
         timeout: float = 30.0,
         user_agent: str = DEFAULT_USER_AGENT,
     ) -> None:
-        self._client = http_client
         self.rate_limit_seconds = max(0.0, rate_limit_seconds)
         self.timeout = timeout
         self.user_agent = user_agent
+        self._metadata = metadata_client or arxiv.Client(
+            page_size=_PAGE_SIZE,
+            delay_seconds=self.rate_limit_seconds,
+            num_retries=2,
+        )
+        self._http = http_client
 
-    async def _get(
-        self,
-        url: str,
-        *,
-        accept: str,
-        request_timeout: float | None = None,
-        params: dict[str, str | int] | None = None,
-    ) -> bytes:
+    async def _get_html(self, url: str) -> bytes:
+        await polite_wait(self.rate_limit_seconds)
         headers = {
             "User-Agent": self.user_agent,
-            "Accept": accept,
+            "Accept": "text/html,application/xhtml+xml",
         }
-
-        async def request() -> httpx.Response:
-            await polite_wait(self.rate_limit_seconds)
-            if self._client is not None:
-                response = await self._client.get(
-                    url, headers=headers, params=params, timeout=self.timeout
-                )
-            else:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
-                    response = await client.get(
-                        url, headers=headers, params=params, timeout=self.timeout
-                    )
-            response.raise_for_status()
-            return response
-
-        async def timed_request() -> httpx.Response:
-            if request_timeout is None:
-                return await request()
-            async with asyncio.timeout(max(1.0, request_timeout)):
-                return await request()
-
-        try:
-            response = await AsyncRetrying(
-                stop=stop_after_attempt(_MAX_REQUEST_ATTEMPTS),
-                wait=_retry_wait,
-                retry=retry_if_exception(_is_retryable),
-                reraise=True,
-            )(timed_request)
-        except (TimeoutError, httpx.TransportError) as exc:
-            raise ArxivFetchError(
-                f"arXiv request failed after {_MAX_REQUEST_ATTEMPTS} attempts"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            raise ArxivFetchError(
-                f"arXiv request failed with HTTP {exc.response.status_code}"
-            ) from exc
+        if self._http is not None:
+            response = await self._http.get(url, headers=headers, timeout=10.0)
+        else:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
         if len(response.content) > 20 * 1024 * 1024:
-            raise ArxivFetchError("arXiv response exceeded 20 MiB")
+            raise ArxivFetchError("arXiv HTML response exceeded 20 MiB")
         return response.content
-
-    async def _fetch_page(
-        self,
-        query: str,
-        *,
-        start: int,
-        size: int,
-    ) -> tuple[int, list[Paper]]:
-        payload = await self._get(
-            ARXIV_API_URL,
-            accept="application/atom+xml,application/xml",
-            params={
-                "search_query": query,
-                "start": start,
-                "max_results": size,
-                "sortBy": "submittedDate",
-                "sortOrder": "ascending",
-            },
-        )
-        try:
-            return parse_arxiv_feed(payload)
-        except ValueError as exc:
-            raise ArxivFetchError("arXiv returned an invalid Atom response") from exc
-
-    async def _fetch_pages(
-        self,
-        query: str,
-        limit: int,
-        target_date: date,
-    ) -> list[Paper]:
-        first_size = min(_PAGE_SIZE, limit)
-        total, entries = await self._fetch_page(query, start=0, size=first_size)
-        if total > limit:
-            raise ArxivFetchError(
-                f"arXiv reports {total} papers for {target_date}, exceeding the configured "
-                f"limit {limit}"
-            )
-        _validate_page_size(
-            entries,
-            offset=0,
-            expected_size=min(total, first_size),
-        )
-
-        for start in range(_PAGE_SIZE, total, _PAGE_SIZE):
-            size = min(_PAGE_SIZE, total - start)
-            page_total, page = await self._fetch_page(query, start=start, size=size)
-            if page_total != total:
-                raise ArxivFetchError(
-                    f"arXiv result count changed during pagination: {total} to {page_total}"
-                )
-            _validate_page_size(page, offset=start, expected_size=size)
-            entries.extend(page)
-        return entries
 
     async def fetch_html_affiliations(self, arxiv_ids: Sequence[str]) -> dict[str, list[str]]:
         """Fetch explicit author affiliations without inspecting paper body text."""
@@ -255,17 +163,13 @@ class ArxivClient:
 
         async def fetch_one(arxiv_id: str) -> tuple[str, list[str]]:
             try:
-                payload = await self._get(
-                    f"https://arxiv.org/html/{quote(arxiv_id, safe='/.')}",
-                    accept="text/html,application/xhtml+xml",
-                    request_timeout=10.0,
+                payload = await self._get_html(
+                    f"https://arxiv.org/html/{quote(arxiv_id, safe='/.')}"
                 )
-            except ArxivFetchError:
+            except (ArxivFetchError, httpx.HTTPError):
                 return arxiv_id, []
             return arxiv_id, parse_html_affiliations(payload)
 
-        # polite_wait serializes request starts globally at the configured
-        # interval; concurrent tasks avoid adding slow response times in series.
         fetched = await asyncio.gather(*(fetch_one(arxiv_id) for arxiv_id in clean))
         return {arxiv_id: affiliations for arxiv_id, affiliations in fetched if affiliations}
 
@@ -284,6 +188,19 @@ class ArxivClient:
             raise ValueError("Invalid arXiv categories: " + ", ".join(invalid))
         if limit < 1:
             raise ValueError("arXiv result limit must be positive")
-        query = build_date_query(target_date, clean)
-        entries = await self._fetch_pages(query, limit, target_date)
-        return _prepare_papers(entries, target_date)
+
+        search = arxiv.Search(
+            query=build_date_query(target_date, clean),
+            max_results=limit + 1,
+            sort_by=arxiv.SortCriterion.SubmittedDate,
+            sort_order=arxiv.SortOrder.Ascending,
+        )
+        try:
+            results = await asyncio.to_thread(lambda: list(self._metadata.results(search)))
+        except Exception as exc:
+            raise ArxivFetchError("arXiv metadata request failed") from exc
+        if len(results) > limit:
+            raise ArxivFetchError(
+                f"arXiv results exceed the configured limit {limit} for {target_date}"
+            )
+        return _prepare_papers([_paper_from_result(result) for result in results], target_date)

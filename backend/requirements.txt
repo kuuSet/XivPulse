@@ -4,7 +4,7 @@ sqlalchemy==2.0.43
 pydantic==2.11.7
 pydantic-settings==2.10.1
 httpx==0.28.1
-tenacity==9.1.4
+arxiv==4.0.1
 openai==1.99.9
 beautifulsoup4==4.13.4
 fastembed==0.8.0

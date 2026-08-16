@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
-from pathlib import Path
 
 import app.settings.process as settings_module
+import arxiv
 import httpx
 import pytest
 from app.settings import ProviderSettings, load_runtime_settings, set_setting
@@ -14,7 +14,6 @@ from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.arxiv.client import ArxivClient, ArxivFetchError, build_date_query
-from app.arxiv.parse.atom import parse_arxiv_feed
 from app.arxiv.parse.html import parse_html_affiliations
 from app.arxiv.parse.normalization import parse_arxiv_id
 from app.arxiv.repository import PaperRepository
@@ -253,29 +252,73 @@ def test_parse_dedupe_and_version_upsert() -> None:
         assert latest_version.affiliations == ["NVIDIA Research"]
 
 
-@pytest.mark.asyncio
-async def test_daily_fetch_uses_python_atom_date_query() -> None:
-    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
-    requests: list[httpx.Request] = []
+class _FakeArxivMetadataClient:
+    def __init__(
+        self,
+        results: list[arxiv.Result] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.items = results or []
+        self.error = error
+        self.searches: list[arxiv.Search] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(200, content=payload)
+    def results(self, search: arxiv.Search):
+        self.searches.append(search)
+        if self.error is not None:
+            raise self.error
+        return iter(self.items)
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        records = await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-            [" cs.RO ", "cs.AI", "cs.RO"],
-            target_date=date(2026, 8, 13),
-            limit=17,
-        )
 
-    assert len(requests) == 1
-    assert requests[0].url.params["search_query"] == build_date_query(
-        date(2026, 8, 13), ["cs.RO", "cs.AI"]
+def _arxiv_result(
+    arxiv_id: str,
+    *,
+    version: int = 1,
+    title: str = "Test paper",
+    published: datetime = datetime(2026, 8, 13, 1, tzinfo=UTC),
+    updated: datetime = datetime(2026, 8, 13, 2, tzinfo=UTC),
+) -> arxiv.Result:
+    versioned = f"{arxiv_id}v{version}"
+    return arxiv.Result(
+        entry_id=f"https://arxiv.org/abs/{versioned}",
+        updated=updated,
+        published=published,
+        title=title,
+        authors=[arxiv.Result.Author("Test Author", affiliation=["OpenAI"])],
+        summary="Test abstract.",
+        comment="12 pages, 3 figures",
+        journal_ref="Journal of Robots 1 (2026)",
+        doi="10.1000/robot.1",
+        primary_category="cs.RO",
+        categories=["cs.RO", "cs.AI"],
+        links=[
+            arxiv.Result.Link(
+                f"https://arxiv.org/pdf/{versioned}",
+                title="pdf",
+                rel="related",
+                content_type="application/pdf",
+            )
+        ],
     )
-    assert requests[0].url.params["max_results"] == "17"
-    assert requests[0].url.params["sortBy"] == "submittedDate"
-    assert len(records) == 2
+
+
+@pytest.mark.asyncio
+async def test_daily_fetch_uses_arxiv_library_query_and_maps_results() -> None:
+    metadata = _FakeArxivMetadataClient([_arxiv_result("2608.00001", version=2)])
+    records = await ArxivClient(
+        metadata_client=metadata,
+        rate_limit_seconds=0,
+    ).fetch_daily(
+        [" cs.RO ", "cs.AI", "cs.RO"],
+        target_date=date(2026, 8, 13),
+        limit=17,
+    )
+
+    search = metadata.searches[0]
+    assert search.query == build_date_query(date(2026, 8, 13), ["cs.RO", "cs.AI"])
+    assert search.max_results == 18
+    assert search.sort_by is arxiv.SortCriterion.SubmittedDate
+    assert search.sort_order is arxiv.SortOrder.Ascending
+    assert len(records) == 1
     assert isinstance(records[0], PaperDocument)
     assert records[0].arxiv_id == "2608.00001"
     assert records[0].version == 2
@@ -287,257 +330,76 @@ async def test_daily_fetch_uses_python_atom_date_query() -> None:
     assert records[0].source == "atom"
 
 
+def test_default_arxiv_client_delegates_paging_delay_and_retries() -> None:
+    client = ArxivClient(rate_limit_seconds=1.5)
+
+    assert client._metadata.page_size == 200
+    assert client._metadata.delay_seconds == 1.5
+    assert client._metadata.num_retries == 2
+
+
 @pytest.mark.asyncio
-async def test_daily_fetch_retries_transient_network_and_http_failures(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.arxiv import client as arxiv_client_module
+async def test_daily_fetch_wraps_metadata_client_errors() -> None:
+    error = RuntimeError("network failed")
+    metadata = _FakeArxivMetadataClient(error=error)
 
-    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
-    requests: list[httpx.Request] = []
-    delays: list[float] = []
-
-    async def fake_sleep(delay: float) -> None:
-        delays.append(delay)
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        if len(requests) == 1:
-            raise httpx.ConnectError("temporary connection failure", request=request)
-        if len(requests) == 2:
-            return httpx.Response(503, headers={"Retry-After": "0"})
-        return httpx.Response(200, content=payload)
-
-    monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", fake_sleep)
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        records = await ArxivClient(
-            http_client=http_client,
-            rate_limit_seconds=0,
-        ).fetch_daily(
+    with pytest.raises(ArxivFetchError, match="metadata request failed") as raised:
+        await ArxivClient(metadata_client=metadata).fetch_daily(
             ["cs.RO"],
             target_date=date(2026, 8, 13),
             limit=17,
         )
 
-    assert len(requests) == 3
-    assert len(delays) == 2
-    assert delays[-1] == 0
-    assert len(records) == 2
+    assert raised.value.__cause__ is error
 
 
 @pytest.mark.asyncio
-async def test_daily_fetch_does_not_retry_permanent_http_errors() -> None:
-    requests: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(400, request=request)
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        with pytest.raises(ArxivFetchError, match="arXiv request failed") as raised:
-            await ArxivClient(
-                http_client=http_client,
-                rate_limit_seconds=0,
-            ).fetch_daily(
-                ["cs.RO"],
-                target_date=date(2026, 8, 13),
-                limit=17,
-            )
-
-    assert len(requests) == 1
-    assert isinstance(raised.value.__cause__, httpx.HTTPStatusError)
-
-
-@pytest.mark.asyncio
-async def test_daily_fetch_stops_after_three_transient_failures(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.arxiv import client as arxiv_client_module
-
-    requests: list[httpx.Request] = []
-
-    async def no_wait(_delay: float) -> None:
-        pass
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return httpx.Response(503, headers={"Retry-After": "0"}, request=request)
-
-    monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", no_wait)
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        with pytest.raises(ArxivFetchError, match="arXiv request failed") as raised:
-            await ArxivClient(
-                http_client=http_client,
-                rate_limit_seconds=0,
-            ).fetch_daily(
-                ["cs.RO"],
-                target_date=date(2026, 8, 13),
-                limit=17,
-            )
-
-    assert len(requests) == 3
-    assert isinstance(raised.value.__cause__, httpx.HTTPStatusError)
-
-
-def _atom_page(total: int, entries: list[tuple[str, int, str]]) -> bytes:
-    body = "".join(
-        f"""
-  <entry>
-    <id>https://arxiv.org/abs/{arxiv_id}v{version}</id>
-    <updated>2026-08-13T02:00:00Z</updated>
-    <published>2026-08-13T01:00:00Z</published>
-    <title>{title}</title>
-    <summary>Test abstract.</summary>
-    <author><name>Test Author</name></author>
-    <category term="cs.RO" />
-  </entry>"""
-        for arxiv_id, version, title in entries
+async def test_daily_fetch_deduplicates_library_results() -> None:
+    metadata = _FakeArxivMetadataClient(
+        [
+            _arxiv_result("2608.00200", title="Paper 200"),
+            _arxiv_result("2608.00200", version=2, title="Paper 200 revised"),
+            _arxiv_result("2608.00201", title="Paper 201"),
+        ]
     )
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"
-      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
-  <opensearch:totalResults>{total}</opensearch:totalResults>
-  {body}
-</feed>""".encode()
 
+    records = await ArxivClient(metadata_client=metadata).fetch_daily(
+        ["cs.RO"],
+        target_date=date(2026, 8, 13),
+        limit=3,
+    )
 
-@pytest.mark.asyncio
-async def test_daily_fetch_pages_retries_and_deduplicates_across_pages(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.arxiv import client as arxiv_client_module
-
-    first = [(f"2608.{index:05d}", 1, f"Paper {index}") for index in range(1, 201)]
-    second = [("2608.00200", 2, "Paper 200 revised")] + [
-        (f"2608.{index:05d}", 1, f"Paper {index}") for index in range(201, 400)
-    ]
-    third = [(f"2608.{index:05d}", 1, f"Paper {index}") for index in range(400, 450)]
-    pages = {
-        0: _atom_page(450, first),
-        200: _atom_page(450, second),
-        400: _atom_page(450, third),
-    }
-    requests: list[httpx.Request] = []
-    middle_attempts = 0
-
-    async def no_wait(_delay: float) -> None:
-        pass
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal middle_attempts
-        requests.append(request)
-        start = int(request.url.params["start"])
-        if start == 200:
-            middle_attempts += 1
-            if middle_attempts == 1:
-                return httpx.Response(503, headers={"Retry-After": "0"}, request=request)
-        return httpx.Response(200, content=pages[start], request=request)
-
-    monkeypatch.setattr(arxiv_client_module.asyncio, "sleep", no_wait)
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        records = await ArxivClient(
-            http_client=http_client,
-            rate_limit_seconds=0,
-        ).fetch_daily(
-            ["cs.RO"],
-            target_date=date(2026, 8, 13),
-            limit=450,
-        )
-
-    assert [request.url.params["start"] for request in requests] == ["0", "200", "200", "400"]
-    assert [request.url.params["max_results"] for request in requests] == [
-        "200",
-        "200",
-        "200",
-        "50",
-    ]
-    assert len(records) == 449
-    revised = next(record for record in records if record.arxiv_id == "2608.00200")
-    assert revised.version == 2
-    assert revised.title == "Paper 200 revised"
-
-
-@pytest.mark.asyncio
-async def test_daily_fetch_rejects_an_incomplete_page() -> None:
-    first = [(f"2608.{index:05d}", 1, f"Paper {index}") for index in range(1, 201)]
-    pages = {
-        0: _atom_page(201, first),
-        200: _atom_page(201, []),
-    }
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            content=pages[int(request.url.params["start"])],
-            request=request,
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
-        with pytest.raises(ArxivFetchError, match="incomplete page at offset 200"):
-            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-                ["cs.RO"],
-                target_date=date(2026, 8, 13),
-                limit=201,
-            )
+    assert len(records) == 2
+    assert records[0].version == 2
+    assert records[0].title == "Paper 200 revised"
 
 
 @pytest.mark.asyncio
 async def test_daily_fetch_rejects_papers_outside_requested_date() -> None:
-    payload = _atom_page(1, [("2608.00001", 1, "Wrong date")]).replace(
-        b"2026-08-13", b"2026-08-12"
+    metadata = _FakeArxivMetadataClient(
+        [_arxiv_result("2608.00001", published=datetime(2026, 8, 12, 1, tzinfo=UTC))]
     )
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=payload))
 
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(ArxivFetchError, match="outside requested date 2026-08-13"):
-            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-                ["cs.RO"],
-                target_date=date(2026, 8, 13),
-                limit=1,
-            )
+    with pytest.raises(ArxivFetchError, match="outside requested date 2026-08-13"):
+        await ArxivClient(metadata_client=metadata).fetch_daily(
+            ["cs.RO"],
+            target_date=date(2026, 8, 13),
+            limit=1,
+        )
 
 
 @pytest.mark.asyncio
-async def test_daily_fetch_wraps_invalid_atom_responses() -> None:
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, content=b"not xml", request=request)
+async def test_daily_fetch_rejects_results_above_limit() -> None:
+    metadata = _FakeArxivMetadataClient(
+        [_arxiv_result(f"2608.{index:05d}") for index in range(1, 4)]
     )
 
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(ArxivFetchError, match="invalid Atom response") as raised:
-            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-                ["cs.RO"],
-                target_date=date(2026, 8, 13),
-                limit=1,
-            )
-
-    assert isinstance(raised.value.__cause__, ValueError)
-
-
-def test_atom_parser_preserves_entries_and_reported_total() -> None:
-    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
-    total, records = parse_arxiv_feed(payload)
-
-    assert total == 3
-    assert [record.versioned_id for record in records] == [
-        "2608.00002v1",
-        "2608.00001v1",
-        "2608.00001v2",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_daily_fetch_rejects_a_truncated_result_set() -> None:
-    payload = (Path(__file__).parent / "fixtures" / "arxiv_atom.xml").read_bytes()
-    transport = httpx.MockTransport(lambda _request: httpx.Response(200, content=payload))
-
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(ArxivFetchError, match="exceeding the configured limit 2"):
-            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-                ["cs.RO"],
-                target_date=date(2026, 8, 13),
-                limit=2,
-            )
+    with pytest.raises(ArxivFetchError, match="configured limit 2"):
+        await ArxivClient(metadata_client=metadata).fetch_daily(
+            ["cs.RO"],
+            target_date=date(2026, 8, 13),
+            limit=2,
+        )
 
 
 @pytest.mark.asyncio
@@ -554,16 +416,14 @@ async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
     limit: int,
     message: str,
 ) -> None:
-    transport = httpx.MockTransport(
-        lambda _request: pytest.fail("invalid input must fail before an HTTP request")
-    )
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(ValueError, match=message):
-            await ArxivClient(http_client=http_client, rate_limit_seconds=0).fetch_daily(
-                categories,
-                target_date=date(2026, 8, 13),
-                limit=limit,
-            )
+    metadata = _FakeArxivMetadataClient()
+    with pytest.raises(ValueError, match=message):
+        await ArxivClient(metadata_client=metadata).fetch_daily(
+            categories,
+            target_date=date(2026, 8, 13),
+            limit=limit,
+        )
+    assert metadata.searches == []
 
 
 def test_html_affiliations_only_reads_explicit_author_roles() -> None:
