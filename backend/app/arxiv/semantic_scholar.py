@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import httpx
 
-from .client import DEFAULT_USER_AGENT
+from .download import DEFAULT_USER_AGENT
 from .identifier import clean_text, parse_arxiv_id
 
 SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"

@@ -14,7 +14,7 @@ from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.arxiv.affiliations import parse_html_affiliations
-from app.arxiv.client import ArxivClient, ArxivFetchError, build_date_query
+from app.arxiv.client import ArxivClient, ArxivFetchError
 from app.arxiv.download import DownloadTooLargeError, limited_bytes
 from app.arxiv.identifier import parse_arxiv_id
 from app.arxiv.repository import PaperRepository
@@ -315,7 +315,9 @@ async def test_daily_fetch_uses_arxiv_library_query_and_maps_results() -> None:
     )
 
     search = metadata.searches[0]
-    assert search.query == build_date_query(date(2026, 8, 13), ["cs.RO", "cs.AI"])
+    assert search.query == (
+        "(cat:cs.RO OR cat:cs.AI) AND submittedDate:[202608130000 TO 202608132359]"
+    )
     assert search.max_results == 18
     assert search.sort_by is arxiv.SortCriterion.SubmittedDate
     assert search.sort_order is arxiv.SortOrder.Ascending
