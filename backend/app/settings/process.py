@@ -31,6 +31,7 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
 
 
 class ProviderSettings(BaseSettings):
+    # Defines how Pydantic reads environment variables and validates this group.
     model_config = SettingsConfigDict(
         env_prefix="XIVPULSE_",
         env_ignore_empty=True,
@@ -40,17 +41,20 @@ class ProviderSettings(BaseSettings):
         str_strip_whitespace=True,
     )
 
+    # Model provider and model selection.
     provider_name: str = "openai"
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o-mini"
-    api_mode: Literal["responses", "chat"] = "responses"
+    model_name: str = "gpt-4o-mini"
+
+    # Model API connection and authentication.
+    api_base_url: str = "https://api.openai.com/v1"
+    api_protocol: Literal["responses", "chat"] = "responses"
     api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("XIVPULSE_API_KEY", "OPENAI_API_KEY"),
         repr=False,
         exclude=True,
     )
-    request_timeout: float = Field(default=180.0, ge=5.0, le=600.0)
+    api_timeout_seconds: float = Field(default=180.0, ge=5.0, le=600.0)
 
     @classmethod
     def settings_customise_sources(
@@ -63,9 +67,9 @@ class ProviderSettings(BaseSettings):
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return env_settings, init_settings
 
-    @field_validator("base_url")
+    @field_validator("api_base_url")
     @classmethod
-    def normalise_base_url(cls, value: str) -> str:
+    def normalise_api_base_url(cls, value: str) -> str:
         return value.rstrip("/")
 
     @property
@@ -80,6 +84,7 @@ class ProviderSettings(BaseSettings):
 
 
 class ProcessSettings(BaseSettings):
+    # Defines how Pydantic reads environment variables and validates this group.
     model_config = SettingsConfigDict(
         env_prefix="XIVPULSE_",
         env_ignore_empty=True,
@@ -88,20 +93,29 @@ class ProcessSettings(BaseSettings):
         str_strip_whitespace=True,
     )
 
+    # Persistent application data.
     data_dir: Path = Path("data")
-    provider: ProviderSettings = Field(default_factory=ProviderSettings)
-    trusted_hosts: Annotated[tuple[str, ...], NoDecode] = ()
-    embedding_backfill: bool = True
-    auth_enabled: bool = False
-    admin_username: str = ""
-    admin_password_hash: str = Field(default="", repr=False, exclude=True)
-    session_secret: str = Field(default="", repr=False, exclude=True)
-    secure_cookies: bool | None = None
-    trust_proxy: bool = False
 
-    @field_validator("trusted_hosts", mode="before")
+    # Model provider settings applied at process startup.
+    provider: ProviderSettings = Field(default_factory=ProviderSettings)
+
+    # Server request filtering.
+    server_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = ()
+
+    # Local semantic index initialization.
+    semantic_backfill_enabled: bool = True
+
+    # Single-user server authentication.
+    auth_enabled: bool = False
+    auth_username: str = ""
+    auth_password_hash: str = Field(default="", repr=False, exclude=True)
+    auth_session_secret: str = Field(default="", repr=False, exclude=True)
+    auth_secure_cookies: bool | None = None
+    auth_trust_proxy: bool = False
+
+    @field_validator("server_allowed_hosts", mode="before")
     @classmethod
-    def parse_trusted_hosts(cls, value: Any) -> tuple[str, ...]:
+    def parse_server_allowed_hosts(cls, value: Any) -> tuple[str, ...]:
         return _string_tuple(value)
 
     @field_validator("data_dir")
@@ -120,12 +134,14 @@ class ProcessSettings(BaseSettings):
 
 def _build_process_settings() -> ProcessSettings:
     process = ProcessSettings()
-    secure_cookies = (
-        process.auth_enabled if process.secure_cookies is None else process.secure_cookies
+    auth_secure_cookies = (
+        process.auth_enabled
+        if process.auth_secure_cookies is None
+        else process.auth_secure_cookies
     )
     return process.model_copy(
         update={
-            "secure_cookies": secure_cookies,
+            "auth_secure_cookies": auth_secure_cookies,
         }
     )
 

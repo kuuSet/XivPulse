@@ -120,7 +120,7 @@ def _clean_tags(value: Any, *, limit: int = 50) -> list[str]:
 def _profile_wire(
     profile: Profile,
     min_relevance: float = 80.0,
-    author_watchlist: list[str] | None = None,
+    watched_authors: list[str] | None = None,
 ) -> dict[str, Any]:
     enabled = [topic for topic in profile.topics if topic.enabled]
     positive = list(dict.fromkeys(keyword for topic in enabled for keyword in topic.keywords))
@@ -139,7 +139,7 @@ def _profile_wire(
         "positive_keywords": positive,
         "negative_keywords": negative,
         "categories": categories,
-        "author_watchlist": author_watchlist or [],
+        "watched_authors": watched_authors or [],
         "min_relevance": min_relevance,
         "topics": [
             {

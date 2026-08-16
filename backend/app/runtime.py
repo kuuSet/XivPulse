@@ -69,13 +69,13 @@ def _backfill_existing_semantic_embeddings() -> None:
                 processed += len(selected_ids)
                 set_setting(
                     db,
-                    "embedding_backfill",
+                    "semantic_backfill_status",
                     {"status": "running", "processed": processed, "total": total},
                 )
         with session_scope() as db:
             set_setting(
                 db,
-                "embedding_backfill",
+                "semantic_backfill_status",
                 {"status": "completed", "processed": processed, "total": total},
             )
     except Exception as exc:
@@ -84,7 +84,7 @@ def _backfill_existing_semantic_embeddings() -> None:
             with session_scope() as db:
                 set_setting(
                     db,
-                    "embedding_backfill",
+                    "semantic_backfill_status",
                     {"status": "failed", "error": str(exc)[:1000]},
                 )
         except Exception:
@@ -110,7 +110,10 @@ def initialize_application() -> None:
                     job.message = "任务超时"
                     job.completed_at = utcnow()
         _initialized = True
-        if get_process_settings().embedding_backfill and not _embedding_backfill_started:
+        if (
+            get_process_settings().semantic_backfill_enabled
+            and not _embedding_backfill_started
+        ):
             _embedding_backfill_started = True
             threading.Thread(
                 target=_backfill_existing_semantic_embeddings,

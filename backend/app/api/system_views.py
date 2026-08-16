@@ -31,13 +31,15 @@ def _settings_wire(db: Session) -> dict[str, Any]:
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
         "provider_name": provider_settings.provider_name,
-        "base_url": provider_settings.base_url,
-        "model": provider_settings.model,
+        "model_name": provider_settings.model_name,
+        "mock_mode": provider_settings.mock_mode,
+        "api_base_url": provider_settings.api_base_url,
+        "api_protocol": provider_settings.api_protocol,
         "api_key_configured": not provider_settings.mock_mode,
         "schedule_time": settings.schedule_time,
-        "timezone": settings.timezone,
-        "max_results": settings.max_results,
-        "screen_batch_size": settings.screen_batch_size,
+        "schedule_timezone": settings.schedule_timezone,
+        "arxiv_fetch_limit": settings.arxiv_fetch_limit,
+        "screening_batch_size": settings.screening_batch_size,
         "semantic_recall_mode": recall_mode(settings.semantic_recall_mode),
         "semantic_recall_presets": {
             mode: {"semantic_threshold": RECALL_THRESHOLDS[mode]}
@@ -45,12 +47,14 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         },
         "embedding": {
             **embedding_status(),
-            "backfill": setting_value(db, "embedding_backfill", {"status": "pending"}),
+            "backfill": setting_value(
+                db, "semantic_backfill_status", {"status": "pending"}
+            ),
         },
-        "deep_analysis_top_n": settings.deep_analysis_top_n,
-        "deep_relevance_threshold": settings.deep_relevance_threshold,
-        "analysis_budget_mode": settings.analysis_budget_mode,
-        "daily_ai_synthesis_enabled": settings.daily_ai_synthesis_enabled,
+        "deep_analysis_limit": settings.deep_analysis_limit,
+        "deep_analysis_threshold": settings.deep_analysis_threshold,
+        "analysis_budget": settings.analysis_budget,
+        "daily_synthesis_enabled": settings.daily_synthesis_enabled,
         **prompt_settings,
         "database_path": database_path,
         "database_size_bytes": database_size_bytes,
@@ -60,17 +64,15 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             db.scalar(select(func.count()).select_from(DailyResearchReport)) or 0
         ),
         "token_usage": _token_usage_summary(db),
-        "api_mode": provider_settings.api_mode,
-        "mock_mode": provider_settings.mock_mode,
         "email_enabled": settings.email_enabled,
+        "email_recipients": list(settings.email_recipients),
         "smtp_host": settings.smtp_host,
         "smtp_port": settings.smtp_port,
         "smtp_security": settings.smtp_security,
         "smtp_username": settings.smtp_username,
         "smtp_password_configured": bool(settings.smtp_password),
-        "smtp_from": settings.smtp_from,
-        "email_recipients": list(settings.email_recipients),
-        "public_base_url": settings.public_base_url,
+        "smtp_sender": settings.smtp_sender,
+        "public_url": settings.public_url,
     }
 
 

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 
 class RuntimeSettings(BaseSettings):
+    # Defines how Pydantic merges environment, database, and default values.
     model_config = SettingsConfigDict(
         env_prefix="XIVPULSE_",
         extra="ignore",
@@ -27,31 +28,54 @@ class RuntimeSettings(BaseSettings):
         str_strip_whitespace=True,
     )
 
+    # Effective model provider settings.
     provider: ProviderSettings
+
+    # Daily job schedule.
     schedule_time: str = Field(default="13:30", pattern=r"(?:[01]\d|2[0-3]):[0-5]\d")
-    timezone: str = "Asia/Shanghai"
-    max_results: int = Field(default=1000, ge=1, le=1000)
-    screen_batch_size: int = Field(default=30, ge=0, le=500)
+    schedule_timezone: str = "Asia/Shanghai"
+
+    # arXiv synchronization limits.
+    arxiv_fetch_limit: int = Field(default=1000, ge=1, le=1000)
+
+    # Candidate screening and semantic recall.
+    screening_batch_size: int = Field(default=30, ge=0, le=500)
     semantic_recall_mode: Literal["high", "balanced", "precise"] = "high"
-    deep_analysis_top_n: int = Field(default=5, ge=0, le=100)
-    deep_relevance_threshold: float = Field(default=90.0, ge=0.0, le=100.0)
-    analysis_budget_mode: Literal["economy", "balanced", "deep"] = "balanced"
-    daily_ai_synthesis_enabled: bool = True
-    analysis_prompt_template_id: str = "balanced-review"
+
+    # Full-text analysis selection.
+    deep_analysis_limit: int = Field(default=5, ge=0, le=100)
+    deep_analysis_threshold: float = Field(default=90.0, ge=0.0, le=100.0)
+
+    # Model analysis and daily synthesis.
+    analysis_budget: Literal["economy", "balanced", "deep"] = "balanced"
+    daily_synthesis_enabled: bool = True
+
+    # Analysis prompt selection and overrides.
+    prompt_template_id: str = "balanced-review"
     screening_prompt: str | None = None
-    deep_prompt: str | None = None
-    custom_method_terms: tuple[Any, ...] = ()
+    deep_analysis_prompt: str | None = None
+
+    # Method catalog customization.
+    custom_methods: tuple[Any, ...] = ()
     dismissed_method_candidates: tuple[str, ...] = ()
-    author_watchlist: tuple[str, ...] = ()
+
+    # Author-based recall.
+    watched_authors: tuple[str, ...] = ()
+
+    # Email delivery controls.
     email_enabled: bool = False
+    email_recipients: Annotated[tuple[str, ...], NoDecode] = ()
+
+    # SMTP connection and sender identity.
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_security: Literal["starttls", "ssl"] = "starttls"
     smtp_username: str = ""
     smtp_password: str = Field(default="", repr=False, exclude=True)
-    smtp_from: str = ""
-    email_recipients: Annotated[tuple[str, ...], NoDecode] = ()
-    public_base_url: str = ""
+    smtp_sender: str = ""
+
+    # Public application URL included in outbound email.
+    public_url: str = ""
 
     @classmethod
     def settings_customise_sources(
@@ -69,16 +93,16 @@ class RuntimeSettings(BaseSettings):
     def parse_string_tuple(cls, value: Any) -> tuple[str, ...]:
         return _string_tuple(value)
 
-    @field_validator("public_base_url")
+    @field_validator("public_url")
     @classmethod
-    def normalise_public_base_url(cls, value: str) -> str:
+    def normalise_public_url(cls, value: str) -> str:
         return value.rstrip("/")
 
     def prompt_values(self) -> dict[str, Any]:
         return {
-            "analysis_prompt_template_id": self.analysis_prompt_template_id,
+            "prompt_template_id": self.prompt_template_id,
             "screening_prompt": self.screening_prompt,
-            "deep_prompt": self.deep_prompt,
+            "deep_analysis_prompt": self.deep_analysis_prompt,
         }
 
 
@@ -92,11 +116,11 @@ def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> Pro
     configured = process.provider
     return ProviderSettings(
         provider_name=values.get("provider_name") or configured.provider_name,
-        base_url=values.get("base_url") or configured.base_url,
-        model=values.get("model") or configured.model,
-        api_mode=configured.api_mode,
+        model_name=values.get("model_name") or configured.model_name,
+        api_base_url=values.get("api_base_url") or configured.api_base_url,
+        api_protocol=configured.api_protocol,
         api_key=values.get("api_key") or configured.api_key,
-        request_timeout=configured.request_timeout,
+        api_timeout_seconds=configured.api_timeout_seconds,
     )
 
 

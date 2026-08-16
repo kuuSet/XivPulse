@@ -95,7 +95,7 @@ def topic_trends(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    timezone_name = load_runtime_settings(db).timezone
+    timezone_name = load_runtime_settings(db).schedule_timezone
     return build_topic_trends(
         db,
         profile.id,
@@ -113,7 +113,7 @@ def research_roadmap(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    timezone_name = load_runtime_settings(db).timezone
+    timezone_name = load_runtime_settings(db).schedule_timezone
     return build_research_roadmap(
         db,
         profile.id,
@@ -158,7 +158,7 @@ def _get_or_refresh_daily_research_report(
     refresh: bool,
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    timezone_name = load_runtime_settings(db).timezone
+    timezone_name = load_runtime_settings(db).schedule_timezone
     selected_date = report_date
     if selected_date is None:
         selected_date = db.scalar(

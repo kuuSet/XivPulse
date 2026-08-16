@@ -12,9 +12,9 @@ services:
       XIVPULSE_HOST: 0.0.0.0
       XIVPULSE_PORT: 8765
       XIVPULSE_AUTH_ENABLED: "true"
-      XIVPULSE_EMBEDDING_BACKFILL: "true"
-      XIVPULSE_SECURE_COOKIES: "true"
-      XIVPULSE_TRUST_PROXY: "true"
+      XIVPULSE_AUTH_SECURE_COOKIES: "true"
+      XIVPULSE_AUTH_TRUST_PROXY: "true"
+      XIVPULSE_SEMANTIC_BACKFILL_ENABLED: "true"
     expose:
       - "8765"
     volumes:
@@ -38,7 +38,7 @@ services:
     environment:
       XIVPULSE_DATA_DIR: /app/data
       XIVPULSE_AUTH_ENABLED: "true"
-      XIVPULSE_EMBEDDING_BACKFILL: "false"
+      XIVPULSE_SEMANTIC_BACKFILL_ENABLED: "false"
     volumes:
       - xivpulse-data:/app/data
     depends_on:

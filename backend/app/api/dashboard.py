@@ -134,7 +134,7 @@ def dashboard(
         )
         or 0
     )
-    deep_threshold = current_settings.deep_relevance_threshold
+    deep_threshold = current_settings.deep_analysis_threshold
     pending_deep = (
         db.scalar(
             select(func.count(PaperMatch.id)).where(
@@ -173,7 +173,7 @@ def dashboard(
             "latest_deep_analyzed_count": int(latest_result.get("analyzed", 0) or 0),
             "pending_screening_count": pending_screening,
             "pending_deep_count": pending_deep,
-            "screening_limit": current_settings.screen_batch_size,
+            "screening_limit": current_settings.screening_batch_size,
             "screening_semantic_threshold": RECALL_THRESHOLDS[
                 recall_mode(current_settings.semantic_recall_mode)
             ],
@@ -183,15 +183,15 @@ def dashboard(
             "screening_current_batch": int(latest_result.get("screening_batches", 0) or 0),
             "screening_total_batches": int(latest_result.get("screening_total_batches", 0) or 0),
             "report_incomplete": bool(latest_result.get("report_incomplete", False)),
-            "deep_analysis_limit": current_settings.deep_analysis_top_n,
-            "deep_relevance_threshold": deep_threshold,
+            "deep_analysis_limit": current_settings.deep_analysis_limit,
+            "deep_analysis_threshold": deep_threshold,
         },
         "items": items,
         "topic_stats": [{"topic": name, "count": count} for name, count in topics.most_common()],
         "profile": _profile_wire(
             profile,
             deep_threshold,
-            list(current_settings.author_watchlist),
+            list(current_settings.watched_authors),
         ),
         "settings": _settings_wire(db),
         "stats": {

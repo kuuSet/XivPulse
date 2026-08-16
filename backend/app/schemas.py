@@ -74,7 +74,7 @@ class ProfileUpdate(BaseModel):
     language: str | None = Field(default=None, min_length=2, max_length=20)
     active: bool | None = None
     topics: list[TopicWrite] | None = None
-    author_watchlist: list[str] | None = None
+    watched_authors: list[str] | None = None
 
     @model_validator(mode="after")
     def validate_topic_directions(self) -> ProfileUpdate:

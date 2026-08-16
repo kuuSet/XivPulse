@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-from dataclasses import replace
 from datetime import timedelta
 from typing import Any, Literal
 from uuid import uuid4
@@ -45,44 +44,63 @@ router = APIRouter()
 class SettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Model provider and API connection.
     provider_name: str | None = None
-    base_url: str | None = Field(default=None, max_length=2000)
-    model: str | None = Field(default=None, max_length=200)
+    model_name: str | None = Field(default=None, max_length=200)
+    api_base_url: str | None = Field(default=None, max_length=2000)
     api_key: str | None = Field(default=None, max_length=10000)
+
+    # Daily job schedule.
     schedule_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
-    timezone: str | None = Field(default=None, min_length=1, max_length=100)
-    max_results: int | None = Field(default=None, ge=1, le=1000)
-    deep_analysis_top_n: int | None = Field(default=None, ge=0, le=100)
-    deep_relevance_threshold: float | None = Field(default=None, ge=0, le=100)
-    screen_batch_size: int | None = Field(default=None, ge=0, le=500)
+    schedule_timezone: str | None = Field(default=None, min_length=1, max_length=100)
+
+    # arXiv synchronization limits.
+    arxiv_fetch_limit: int | None = Field(default=None, ge=1, le=1000)
+
+    # Candidate screening and semantic recall.
+    screening_batch_size: int | None = Field(default=None, ge=0, le=500)
     semantic_recall_mode: Literal["high", "balanced", "precise"] | None = None
-    analysis_budget_mode: Literal["economy", "balanced", "deep"] | None = None
-    daily_ai_synthesis_enabled: bool | None = None
-    analysis_prompt_template_id: str | None = Field(default=None, max_length=80)
+
+    # Full-text analysis selection.
+    deep_analysis_limit: int | None = Field(default=None, ge=0, le=100)
+    deep_analysis_threshold: float | None = Field(default=None, ge=0, le=100)
+
+    # Model analysis and daily synthesis.
+    analysis_budget: Literal["economy", "balanced", "deep"] | None = None
+    daily_synthesis_enabled: bool | None = None
+
+    # Analysis prompt selection and overrides.
+    prompt_template_id: str | None = Field(default=None, max_length=80)
     screening_prompt: str | None = Field(
         default=None, min_length=20, max_length=MAX_EDITABLE_PROMPT_CHARS
     )
-    deep_prompt: str | None = Field(
+    deep_analysis_prompt: str | None = Field(
         default=None, min_length=20, max_length=MAX_EDITABLE_PROMPT_CHARS
     )
+
+    # Email delivery controls.
     email_enabled: bool | None = None
+    email_recipients: list[str] | None = Field(default=None, max_length=50)
+
+    # SMTP connection and sender identity.
     smtp_host: str | None = Field(default=None, max_length=500)
     smtp_port: int | None = Field(default=None, ge=1, le=65535)
     smtp_security: Literal["starttls", "ssl"] | None = None
     smtp_username: str | None = Field(default=None, max_length=500)
     smtp_password: str | None = Field(default=None, max_length=10000)
-    smtp_from: str | None = Field(default=None, max_length=500)
-    email_recipients: list[str] | None = Field(default=None, max_length=50)
-    public_base_url: str | None = Field(default=None, max_length=2000)
+    smtp_sender: str | None = Field(default=None, max_length=500)
 
-    @field_validator("analysis_prompt_template_id")
+    # Public application URL included in outbound email.
+    public_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("prompt_template_id")
     @classmethod
     def validate_prompt_template(cls, value: str | None) -> str | None:
         if value is not None and value not in PROMPT_TEMPLATE_IDS:
             raise ValueError("未知的论文分析提示词模板")
         return value
 
-    @field_validator("screening_prompt", "deep_prompt")
+    @field_validator("screening_prompt", "deep_analysis_prompt")
     @classmethod
     def normalize_editable_prompt(cls, value: str | None) -> str | None:
         if value is None:
@@ -110,9 +128,10 @@ class SettingsPayload(BaseModel):
 class ProviderTestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Model provider and API connection to test.
     provider_name: str | None = None
-    base_url: str | None = None
-    model: str | None = None
+    model_name: str | None = None
+    api_base_url: str | None = None
     api_key: str | None = None
 
 
@@ -136,8 +155,8 @@ def get_profile(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
     return _profile_wire(
         active_profile(db),
-        settings.deep_relevance_threshold,
-        list(settings.author_watchlist),
+        settings.deep_analysis_threshold,
+        list(settings.watched_authors),
     )
 
 
@@ -174,12 +193,12 @@ def update_profile(
         threshold = float(payload["min_relevance"])
         if not 0 <= threshold <= 100:
             raise HTTPException(status_code=422, detail="最低相关度必须在 0 到 100 之间")
-        set_setting(db, "deep_relevance_threshold", threshold)
-    if validated.author_watchlist is not None:
+        set_setting(db, "deep_analysis_threshold", threshold)
+    if validated.watched_authors is not None:
         set_setting(
             db,
-            "author_watchlist",
-            clean_string_list(validated.author_watchlist),
+            "watched_authors",
+            clean_string_list(validated.watched_authors),
         )
     for field in ("name", "description", "language", "active"):
         value = getattr(validated, field)
@@ -205,8 +224,8 @@ def update_profile(
     settings = load_runtime_settings(db)
     return _profile_wire(
         active_profile(db),
-        settings.deep_relevance_threshold,
-        list(settings.author_watchlist),
+        settings.deep_analysis_threshold,
+        list(settings.watched_authors),
     )
 
 
@@ -266,7 +285,7 @@ def _method_candidate_records(db: Session, window_days: int) -> list[dict[str, A
 @router.get("/api/methods/catalog")
 def methods_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    return method_catalog_payload(clean_custom_methods(list(settings.custom_method_terms)))
+    return method_catalog_payload(clean_custom_methods(list(settings.custom_methods)))
 
 
 @router.get("/api/methods/candidates")
@@ -274,7 +293,7 @@ def method_candidates(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
     window_days = METHOD_CANDIDATE_WINDOW_DAYS
     min_papers = METHOD_CANDIDATE_MIN_PAPERS
-    custom = clean_custom_methods(list(settings.custom_method_terms))
+    custom = clean_custom_methods(list(settings.custom_methods))
     dismissed = list(settings.dismissed_method_candidates)
     candidates = discover_method_candidates(
         _method_candidate_records(db, window_days),
@@ -306,7 +325,7 @@ def accept_method_candidate(
     if candidate is None:
         raise HTTPException(status_code=404, detail="该候选已不存在或不再满足重复门槛")
     name = str(payload.name or candidate["name"]).strip()
-    custom = clean_custom_methods(list(settings.custom_method_terms))
+    custom = clean_custom_methods(list(settings.custom_methods))
     if normalize_method_key(name) in {normalize_method_key(item["name"]) for item in custom}:
         raise HTTPException(status_code=409, detail="自定义方法中已经存在同名标签")
     aliases = clean_string_list(
@@ -314,7 +333,7 @@ def accept_method_candidate(
         limit=20,
     )
     custom.append({"name": name, "aliases": aliases})
-    set_setting(db, "custom_method_terms", custom)
+    set_setting(db, "custom_methods", custom)
     db.commit()
     return method_catalog_payload(custom)
 
@@ -340,7 +359,7 @@ def replace_custom_methods(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     custom = clean_custom_methods([item.model_dump() for item in payload.items])
-    set_setting(db, "custom_method_terms", custom)
+    set_setting(db, "custom_methods", custom)
     db.commit()
     return method_catalog_payload(custom)
 
@@ -351,8 +370,8 @@ async def test_provider(
 ) -> dict[str, Any]:
     settings = load_runtime_settings(db)
     key = payload.api_key or settings.provider.api_key
-    base_url = (payload.base_url or settings.provider.base_url).rstrip("/")
-    model = payload.model or settings.provider.model
+    api_base_url = (payload.api_base_url or settings.provider.api_base_url).rstrip("/")
+    model_name = payload.model_name or settings.provider.model_name
     if not key:
         return {
             "ok": True,
@@ -364,14 +383,15 @@ async def test_provider(
     try:
         from ..services.provider import OpenAICompatibleAdapter
 
-        provider_settings = replace(
-            settings.provider,
-            provider_name=payload.provider_name
-            or settings.provider.provider_name
-            or "openai-compatible",
-            base_url=base_url,
-            model=model,
-            api_key=key,
+        provider_settings = settings.provider.model_copy(
+            update={
+                "provider_name": payload.provider_name
+                or settings.provider.provider_name
+                or "openai-compatible",
+                "api_base_url": api_base_url,
+                "model_name": model_name,
+                "api_key": key,
+            }
         )
         result = await OpenAICompatibleAdapter(provider_settings).test_connection()
         return result.model_dump()
@@ -380,7 +400,7 @@ async def test_provider(
             "ok": False,
             "message": f"连接失败：{exc}",
             "provider_name": payload.provider_name or "openai-compatible",
-            "model": model,
+            "model": model_name,
             "transport": "http",
         }
 
@@ -398,12 +418,12 @@ async def test_embedding_model() -> dict[str, Any]:
 async def test_email_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
     profile = active_profile(db)
     settings = load_runtime_settings(db)
-    selected_date = current_date_in_timezone(settings.timezone)
+    selected_date = current_date_in_timezone(settings.schedule_timezone)
     snapshot = persist_daily_report(
         db,
         profile.id,
         report_date=selected_date,
-        timezone_name=settings.timezone,
+        timezone_name=settings.schedule_timezone,
         refresh=False,
     )
     db.commit()

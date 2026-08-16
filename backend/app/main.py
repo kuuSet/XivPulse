@@ -38,9 +38,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-trusted_hosts = list(get_process_settings().trusted_hosts)
-if trusted_hosts:
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+allowed_hosts = list(get_process_settings().server_allowed_hosts)
+if allowed_hosts:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 app.middleware("http")(require_server_auth)
 app.include_router(auth_router)

@@ -72,7 +72,7 @@ export interface BackendProfile {
   positive_keywords?: string[]
   negative_keywords?: string[]
   categories?: string[]
-  author_watchlist?: string[]
+  watched_authors?: string[]
   min_relevance?: number
 }
 
@@ -559,7 +559,7 @@ export interface DashboardData {
     screening_total_batches?: number
     report_incomplete?: boolean
     deep_analysis_limit: number
-    deep_relevance_threshold: number
+    deep_analysis_threshold: number
   }
   items: Paper[]
   topic_stats: TopicStat[]
@@ -583,7 +583,7 @@ export interface Profile {
   positive_keywords: string[]
   negative_keywords: string[]
   categories: string[]
-  author_watchlist: string[]
+  watched_authors: string[]
   min_relevance: number
 }
 
@@ -592,7 +592,7 @@ export interface AnalysisPromptTemplate {
   name: string
   description: string
   screening_prompt: string
-  deep_prompt: string
+  deep_analysis_prompt: string
 }
 
 export interface AnalysisPromptCatalog {
@@ -608,13 +608,15 @@ export interface AnalysisPromptCatalog {
 
 export interface Settings {
   provider_name: string
-  base_url: string
-  model: string
+  model_name: string
+  mock_mode?: boolean
+  api_base_url: string
+  api_protocol?: string
   api_key_configured: boolean
   schedule_time: string
-  timezone: string
-  max_results: number
-  screen_batch_size: number
+  schedule_timezone: string
+  arxiv_fetch_limit: number
+  screening_batch_size: number
   semantic_recall_mode: 'high' | 'balanced' | 'precise'
   semantic_recall_presets: Record<string, { semantic_threshold: number }>
   embedding: {
@@ -626,15 +628,15 @@ export interface Settings {
     message?: string
     backfill?: { status: string; processed?: number; total?: number; error?: string }
   }
-  deep_analysis_top_n: number
-  deep_relevance_threshold?: number
-  analysis_budget_mode: 'economy' | 'balanced' | 'deep'
-  daily_ai_synthesis_enabled: boolean
-  analysis_prompt_template_id: string
+  deep_analysis_limit: number
+  deep_analysis_threshold?: number
+  analysis_budget: 'economy' | 'balanced' | 'deep'
+  daily_synthesis_enabled: boolean
+  prompt_template_id: string
   screening_prompt: string
-  deep_prompt: string
-  analysis_prompt_version: string
-  analysis_prompt_customized: boolean
+  deep_analysis_prompt: string
+  prompt_version: string
+  prompt_customized: boolean
   token_usage: TokenUsageSummary
   database_path?: string | null
   database_size_bytes?: number | null
@@ -642,16 +644,14 @@ export interface Settings {
   stored_analysis_count: number
   stored_report_count: number
   email_enabled: boolean
+  email_recipients: string[]
   smtp_host: string
   smtp_port: number
   smtp_security: 'starttls' | 'ssl'
   smtp_username: string
   smtp_password_configured: boolean
-  smtp_from: string
-  email_recipients: string[]
-  public_base_url: string
-  api_mode?: string
-  mock_mode?: boolean
+  smtp_sender: string
+  public_url: string
 }
 
 export interface TokenUsageTotals {

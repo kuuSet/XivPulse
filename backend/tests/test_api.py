@@ -174,7 +174,7 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
     from app.services import paper_analysis
     from app.services import provider as provider_module
 
-    assert client.put("/api/settings", json={"screen_batch_size": 30}).status_code == 200
+    assert client.put("/api/settings", json={"screening_batch_size": 30}).status_code == 200
     with database.SessionLocal() as session:
         profile = session.query(Profile).filter(Profile.active.is_(True)).one()
         direction = profile.topics[0].name
@@ -381,9 +381,9 @@ async def test_email_delivery_is_idempotent_for_automatic_report(
             "smtp_security": "starttls",
             "smtp_username": "user",
             "smtp_password": "secret",
-            "smtp_from": "radar@example.com",
+            "smtp_sender": "radar@example.com",
             "email_recipients": ["reader@example.com"],
-            "public_base_url": "https://203.0.113.10",
+            "public_url": "https://203.0.113.10",
         },
     )
     assert saved.status_code == 200
@@ -413,7 +413,7 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert profile.json()["topics"]
     profile_payload = profile.json()
     profile_payload["min_relevance"] = 75
-    profile_payload["author_watchlist"] = ["A. Author"]
+    profile_payload["watched_authors"] = ["A. Author"]
     saved_profile = client.put("/api/profile", json=profile_payload)
     assert saved_profile.status_code == 200
     assert saved_profile.json()["min_relevance"] == 75
@@ -423,12 +423,12 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert catalog.json()["count"] >= 30
     assert catalog.json()["version"]
     assert all(item["keywords"] for item in catalog.json()["items"])
-    assert saved_profile.json()["author_watchlist"] == ["A. Author"]
-    assert client.get("/api/profile").json()["author_watchlist"] == ["A. Author"]
+    assert saved_profile.json()["watched_authors"] == ["A. Author"]
+    assert client.get("/api/profile").json()["watched_authors"] == ["A. Author"]
 
     settings = client.put(
         "/api/settings",
-        json={"model": "local-test-model", "api_key": "never-return-this"},
+        json={"model_name": "local-test-model", "api_key": "never-return-this"},
     )
     assert settings.status_code == 200
     assert settings.json()["api_key_configured"] is True
@@ -482,9 +482,9 @@ def test_budget_token_usage_and_method_candidate_review(client: TestClient) -> N
             )
         session.commit()
 
-    saved = client.put("/api/settings", json={"analysis_budget_mode": "deep"})
+    saved = client.put("/api/settings", json={"analysis_budget": "deep"})
     assert saved.status_code == 200
-    assert saved.json()["analysis_budget_mode"] == "deep"
+    assert saved.json()["analysis_budget"] == "deep"
     assert saved.json()["token_usage"]["total_tokens"] == 260
     assert saved.json()["token_usage"]["cached_input_tokens"] == 40
     assert saved.json()["token_usage"]["usage_available_count"] == 2
@@ -665,28 +665,28 @@ def test_analysis_prompt_catalog_and_editable_settings(client: TestClient) -> No
     assert "JSON Schema" in catalog["fixed_prompts"]["deep"]
 
     settings = client.get("/api/settings").json()
-    assert settings["analysis_prompt_template_id"] == "balanced-review"
-    assert settings["analysis_prompt_customized"] is False
+    assert settings["prompt_template_id"] == "balanced-review"
+    assert settings["prompt_customized"] is False
     custom_screening = "重点检查摘要是否给出了可核查的量化证据，并在证据不足时明确降低相关度。"
     custom_deep = "重点审计实验设计、基线公平性、统计可信度和结论边界，并区分事实、主张与推断。"
     saved = client.put(
         "/api/settings",
         json={
-            "analysis_prompt_template_id": "evidence-audit",
+            "prompt_template_id": "evidence-audit",
             "screening_prompt": custom_screening,
-            "deep_prompt": custom_deep,
+            "deep_analysis_prompt": custom_deep,
         },
     )
     assert saved.status_code == 200
-    assert saved.json()["analysis_prompt_template_id"] == "evidence-audit"
+    assert saved.json()["prompt_template_id"] == "evidence-audit"
     assert saved.json()["screening_prompt"] == custom_screening
-    assert saved.json()["deep_prompt"] == custom_deep
-    assert saved.json()["analysis_prompt_customized"] is True
-    assert client.get("/api/settings").json()["deep_prompt"] == custom_deep
+    assert saved.json()["deep_analysis_prompt"] == custom_deep
+    assert saved.json()["prompt_customized"] is True
+    assert client.get("/api/settings").json()["deep_analysis_prompt"] == custom_deep
 
     assert (
         client.put(
-            "/api/settings", json={"analysis_prompt_template_id": "unknown-template"}
+            "/api/settings", json={"prompt_template_id": "unknown-template"}
         ).status_code
         == 422
     )
@@ -819,7 +819,7 @@ def test_profile_rejects_legacy_payload_that_would_collapse_directions(
             "positive_keywords": ["robot learning"],
             "negative_keywords": [],
             "categories": ["cs.RO"],
-            "author_watchlist": [],
+            "watched_authors": [],
             "min_relevance": 80,
         },
     )
@@ -1481,7 +1481,7 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         raise SemanticEmbeddingError("model download unavailable")
 
     with database.SessionLocal() as session:
-        set_setting(session, "author_watchlist", ["Researcher"])
+        set_setting(session, "watched_authors", ["Researcher"])
         session.commit()
 
     result = await sync_papers(

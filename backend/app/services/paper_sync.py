@@ -43,9 +43,9 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
         return _SyncOptions(
             profile_id=profile.id,
             topics=list(profile.topics),
-            author_watchlist=list(settings.author_watchlist),
-            max_results=settings.max_results,
-            batch_size=settings.screen_batch_size,
+            author_watchlist=list(settings.watched_authors),
+            max_results=settings.arxiv_fetch_limit,
+            batch_size=settings.screening_batch_size,
             recall_mode=recall_mode(settings.semantic_recall_mode),
         )
 

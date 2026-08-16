@@ -21,7 +21,7 @@ LOG = logging.getLogger("xivpulse.scheduler")
 def _settings() -> tuple[str, str]:
     with SessionLocal() as session:
         settings = load_runtime_settings(session)
-    return settings.schedule_time, settings.timezone
+    return settings.schedule_time, settings.schedule_timezone
 
 
 def _timezone(value: str) -> ZoneInfo | timezone:

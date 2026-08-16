@@ -116,8 +116,8 @@ cp .env.example .env
 然后只在本机 `.env` 中填写：
 
 ```dotenv
-XIVPULSE_BASE_URL=https://api.openai.com/v1
-XIVPULSE_MODEL=your-model
+XIVPULSE_API_BASE_URL=https://api.openai.com/v1
+XIVPULSE_MODEL_NAME=your-model
 XIVPULSE_API_KEY=your-key
 ```
 

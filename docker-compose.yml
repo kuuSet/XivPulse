@@ -14,7 +14,7 @@ services:
       XIVPULSE_DATA_DIR: /app/data
       XIVPULSE_HOST: 0.0.0.0
       XIVPULSE_PORT: 8765
-      XIVPULSE_EMBEDDING_BACKFILL: "true"
+      XIVPULSE_SEMANTIC_BACKFILL_ENABLED: "true"
     volumes:
       - xivpulse-data:/app/data
     healthcheck:
@@ -36,7 +36,7 @@ services:
         required: false
     environment:
       XIVPULSE_DATA_DIR: /app/data
-      XIVPULSE_EMBEDDING_BACKFILL: "false"
+      XIVPULSE_SEMANTIC_BACKFILL_ENABLED: "false"
     volumes:
       - xivpulse-data:/app/data
     depends_on:

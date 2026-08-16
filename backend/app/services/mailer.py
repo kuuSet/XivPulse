@@ -16,14 +16,17 @@ from ..settings import RuntimeSettings
 
 @dataclass(frozen=True)
 class SmtpSettings:
+    # SMTP connection and authentication.
     host: str
     port: int
     security: str
     username: str
     password: str
+
+    # Outbound email addresses and links.
     sender: str
     recipients: tuple[str, ...]
-    public_base_url: str
+    public_url: str
 
     @property
     def ready(self) -> bool:
@@ -37,9 +40,9 @@ def smtp_settings(runtime_settings: RuntimeSettings) -> SmtpSettings:
         security=runtime_settings.smtp_security,
         username=runtime_settings.smtp_username,
         password=runtime_settings.smtp_password,
-        sender=runtime_settings.smtp_from,
+        sender=runtime_settings.smtp_sender,
         recipients=runtime_settings.email_recipients,
-        public_base_url=runtime_settings.public_base_url,
+        public_url=runtime_settings.public_url,
     )
 
 
@@ -48,16 +51,16 @@ def email_enabled(settings: RuntimeSettings) -> bool:
 
 
 def _report_url(settings: SmtpSettings, report_date: str) -> str:
-    if not settings.public_base_url:
+    if not settings.public_url:
         return ""
-    return f"{settings.public_base_url}/?{urlencode({'view': 'digest', 'date': report_date})}"
+    return f"{settings.public_url}/?{urlencode({'view': 'digest', 'date': report_date})}"
 
 
 def _paper_url(settings: SmtpSettings, paper_id: Any) -> str:
-    if not settings.public_base_url:
+    if not settings.public_url:
         return ""
     query = urlencode({"view": "library", "paper": str(paper_id)})
-    return f"{settings.public_base_url}/?{query}"
+    return f"{settings.public_url}/?{query}"
 
 
 def build_daily_message(

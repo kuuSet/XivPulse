@@ -244,7 +244,7 @@ class OpenAICompatibleAdapter:
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.settings = settings or get_process_settings().provider
-        self.base_url = _safe_base_url(self.settings.base_url)
+        self.base_url = _safe_base_url(self.settings.api_base_url)
         self._client = http_client
         self.last_transport: Literal["responses", "chat", "mock"] = "mock"
 
@@ -300,7 +300,7 @@ class OpenAICompatibleAdapter:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        if self.settings.api_mode == "chat":
+        if self.settings.api_protocol == "chat":
             data, usage = await self._call_chat(
                 common_input, response_model, schema_name, schema, max_output_tokens
             )
@@ -322,7 +322,7 @@ class OpenAICompatibleAdapter:
             data=data,
             transport=transport,
             provider=self.settings.provider_name,
-            model=self.settings.model,
+            model=self.settings.model_name,
             usage=usage,
         )
 
@@ -336,12 +336,18 @@ class OpenAICompatibleAdapter:
         try:
             if self._client is not None:
                 response = await self._client.post(
-                    url, headers=headers, json=payload, timeout=self.settings.request_timeout
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=self.settings.api_timeout_seconds,
                 )
             else:
                 async with httpx.AsyncClient(follow_redirects=False) as client:
                     response = await client.post(
-                        url, headers=headers, json=payload, timeout=self.settings.request_timeout
+                        url,
+                        headers=headers,
+                        json=payload,
+                        timeout=self.settings.api_timeout_seconds,
                     )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise ProviderError("Could not reach the configured model provider") from exc
@@ -368,7 +374,7 @@ class OpenAICompatibleAdapter:
         max_output_tokens: int,
     ) -> tuple[TModel, TokenUsage]:
         payload = {
-            "model": self.settings.model,
+            "model": self.settings.model_name,
             "input": messages,
             "text": {
                 "format": {
@@ -405,7 +411,7 @@ class OpenAICompatibleAdapter:
         max_output_tokens: int,
     ) -> tuple[TModel, TokenUsage]:
         payload = {
-            "model": self.settings.model,
+            "model": self.settings.model_name,
             "messages": messages,
             "response_format": {
                 "type": "json_schema",
@@ -461,7 +467,7 @@ class OpenAICompatibleAdapter:
             return ProviderTestResult(
                 ok=False,
                 provider_name=self.settings.provider_name,
-                model=self.settings.model,
+                model=self.settings.model_name,
                 transport=self.last_transport,
                 message=str(exc),
             )

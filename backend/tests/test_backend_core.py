@@ -52,9 +52,9 @@ from sqlalchemy.orm import Session
 def _provider_settings(**overrides: object) -> ProviderSettings:
     values: dict[str, object] = {
         "provider_name": "test-provider",
-        "base_url": "https://provider.test/v1",
-        "model": "test-model",
-        "api_mode": "responses",
+        "api_base_url": "https://provider.test/v1",
+        "model_name": "test-model",
+        "api_protocol": "responses",
         "api_key": "test-secret",
     }
     values.update(overrides)
@@ -71,9 +71,9 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
         assert profiles[0].name == "具身智能研究"
         assert len(profiles[0].topics) == 6
         settings = load_runtime_settings(session)
-        assert settings.screen_batch_size == 30
-        assert settings.deep_analysis_top_n == 5
-        assert settings.deep_relevance_threshold == 90
+        assert settings.screening_batch_size == 30
+        assert settings.deep_analysis_limit == 5
+        assert settings.deep_analysis_threshold == 90
 
     status = _provider_settings(api_key="do-not-leak").public_dict()
     assert status["api_key_configured"] is True
@@ -85,10 +85,10 @@ def test_process_settings_use_only_xivpulse_environment_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ARXIV_DAILY_MODEL", "legacy-model")
-    monkeypatch.delenv("XIVPULSE_MODEL", raising=False)
-    assert settings_module._build_process_settings().provider.model == "gpt-4o-mini"
-    monkeypatch.setenv("XIVPULSE_MODEL", "current-model")
-    assert settings_module._build_process_settings().provider.model == "current-model"
+    monkeypatch.delenv("XIVPULSE_MODEL_NAME", raising=False)
+    assert settings_module._build_process_settings().provider.model_name == "gpt-4o-mini"
+    monkeypatch.setenv("XIVPULSE_MODEL_NAME", "current-model")
+    assert settings_module._build_process_settings().provider.model_name == "current-model"
 
 
 def test_process_settings_derive_storage_from_one_data_directory(
@@ -110,7 +110,7 @@ def test_environment_key_fallback_and_secrets_are_hidden(
 ) -> None:
     monkeypatch.delenv("XIVPULSE_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
-    monkeypatch.setenv("XIVPULSE_SESSION_SECRET", "session-secret")
+    monkeypatch.setenv("XIVPULSE_AUTH_SESSION_SECRET", "session-secret")
     settings = settings_module._build_process_settings()
 
     assert settings.provider.api_key == "openai-secret"
@@ -121,20 +121,20 @@ def test_environment_key_fallback_and_secrets_are_hidden(
 
 
 def test_invalid_settings_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XIVPULSE_REQUEST_TIMEOUT", "601")
-    with pytest.raises(ValidationError, match="request_timeout"):
+    monkeypatch.setenv("XIVPULSE_API_TIMEOUT_SECONDS", "601")
+    with pytest.raises(ValidationError, match="api_timeout_seconds"):
         settings_module._build_process_settings()
 
-    monkeypatch.delenv("XIVPULSE_REQUEST_TIMEOUT")
+    monkeypatch.delenv("XIVPULSE_API_TIMEOUT_SECONDS")
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     with Session(engine) as session:
-        set_setting(session, "max_results", 1001)
+        set_setting(session, "arxiv_fetch_limit", 1001)
         session.commit()
-        with pytest.raises(ValidationError, match="max_results"):
+        with pytest.raises(ValidationError, match="arxiv_fetch_limit"):
             load_runtime_settings(session)
 
-        set_setting(session, "max_results", 1000)
+        set_setting(session, "arxiv_fetch_limit", 1000)
         set_setting(session, "semantic_recall_mode", "wide")
         session.commit()
         with pytest.raises(ValidationError, match="semantic_recall_mode"):
@@ -160,14 +160,14 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
     init_db(engine)
     with Session(engine) as session:
         set_setting(session, "schedule_time", "08:00")
-        set_setting(session, "max_results", 250)
-        set_setting(session, "base_url", "https://database.test/v1")
-        set_setting(session, "model", "database-model")
+        set_setting(session, "arxiv_fetch_limit", 250)
+        set_setting(session, "api_base_url", "https://database.test/v1")
+        set_setting(session, "model_name", "database-model")
         set_setting(session, "api_key", "database-secret")
         session.commit()
 
         monkeypatch.setenv("XIVPULSE_SCHEDULE_TIME", "09:15")
-        monkeypatch.setenv("XIVPULSE_MODEL", "environment-model")
+        monkeypatch.setenv("XIVPULSE_MODEL_NAME", "environment-model")
         monkeypatch.setenv("XIVPULSE_SMTP_HOST", "smtp.environment.test")
         monkeypatch.setenv(
             "XIVPULSE_EMAIL_RECIPIENTS",
@@ -179,9 +179,9 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
         settings_with_environment_key = load_runtime_settings(session, process=process)
 
     assert settings.schedule_time == "09:15"
-    assert settings.max_results == 250
-    assert settings.provider.base_url == "https://database.test/v1"
-    assert settings.provider.model == "environment-model"
+    assert settings.arxiv_fetch_limit == 250
+    assert settings.provider.api_base_url == "https://database.test/v1"
+    assert settings.provider.model_name == "environment-model"
     assert settings.provider.api_key == "database-secret"
     assert settings_with_environment_key.provider.api_key == "environment-secret"
     assert settings.smtp_host == "smtp.environment.test"
@@ -829,7 +829,7 @@ async def test_adapter_records_responses_and_chat_token_usage() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(chat_handler)) as client:
         result = await OpenAICompatibleAdapter(
-            _provider_settings(api_mode="chat"), http_client=client
+            _provider_settings(api_protocol="chat"), http_client=client
         ).generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen",
@@ -860,7 +860,7 @@ async def test_adapter_records_responses_and_chat_token_usage() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(legacy_chat_handler)) as client:
         result = await OpenAICompatibleAdapter(
-            _provider_settings(api_mode="chat"), http_client=client
+            _provider_settings(api_protocol="chat"), http_client=client
         ).generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen",

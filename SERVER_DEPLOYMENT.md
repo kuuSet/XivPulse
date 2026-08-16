@@ -20,19 +20,19 @@ python scripts/generate_server_secrets.py
 脚本会交互读取密码，只输出以下两行，不保存明文密码。把输出写入 `.env.server`，Argon2 哈希必须保留单引号，防止 Compose 解释其中的 `$`：
 
 ```dotenv
-XIVPULSE_ADMIN_PASSWORD_HASH='$argon2id$...'
-XIVPULSE_SESSION_SECRET=...
+XIVPULSE_AUTH_PASSWORD_HASH='$argon2id$...'
+XIVPULSE_AUTH_SESSION_SECRET=...
 ```
 
 再设置服务器真实公网 IP：
 
 ```dotenv
 XIVPULSE_PUBLIC_HOST=203.0.113.10
-XIVPULSE_PUBLIC_BASE_URL=https://203.0.113.10
-XIVPULSE_TRUSTED_HOSTS=203.0.113.10,127.0.0.1,localhost,xivpulse
+XIVPULSE_PUBLIC_URL=https://203.0.113.10
+XIVPULSE_SERVER_ALLOWED_HOSTS=203.0.113.10,127.0.0.1,localhost,xivpulse
 ```
 
-`XIVPULSE_SESSION_SECRET` 至少 32 字节，管理员密码只以 Argon2 哈希保存。SMTP 和模型 API 可通过同一文件注入；SMTP 环境变量优先于 SQLite 设置，浏览器接口只返回授权码“是否已配置”。
+`XIVPULSE_AUTH_SESSION_SECRET` 至少 32 字节，管理员密码只以 Argon2 哈希保存。SMTP 和模型 API 可通过同一文件注入；SMTP 环境变量优先于 SQLite 设置，浏览器接口只返回授权码“是否已配置”。
 
 ## 2. 首次启动
 
@@ -111,6 +111,6 @@ docker compose -f docker-compose.server.yml logs --tail=200 caddy
 - 应用启动失败并提示凭据：检查管理员用户名、单引号包裹的 Argon2 哈希和至少 32 字节会话密钥。
 - 浏览器仍提示证书：确认访问的是 `.env.server` 中的同一个 IP，并重新导入当前 Caddy 数据卷导出的根证书。
 - 登录后仍返回 401：确认始终使用 HTTPS；服务器模式的会话 Cookie 强制 `Secure`，通过 HTTP 不会发送。
-- 邮件中的链接错误：把 `XIVPULSE_PUBLIC_BASE_URL` 设为客户端实际访问的 `https://公网IP`。
+- 邮件中的链接错误：把 `XIVPULSE_PUBLIC_URL` 设为客户端实际访问的 `https://公网IP`。
 - 模型反复下载：确认应用和调度器都挂载同一个 `xivpulse-data` 卷。
 - 模型下载源不可达：任务会明确标记语义降级，并只保留关注作者召回，不会中断整条日更；恢复外网后在设置页执行“下载并预热”。

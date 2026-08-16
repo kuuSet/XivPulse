@@ -121,7 +121,7 @@ export const api = {
   }),
   saveSettings: (settings: Settings & { api_key?: string; smtp_password?: string }) =>
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
-  testConnection: (settings: { provider_name: string; base_url: string; model: string; api_key?: string }) =>
+  testConnection: (settings: { provider_name: string; model_name: string; api_base_url: string; api_key?: string }) =>
     request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
   testEmbedding: () => request<Settings['embedding'] & { ok: boolean; message?: string }>('/settings/embedding/test', { method: 'POST' }),
   testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
@@ -270,7 +270,7 @@ function toProfile(profile: BackendProfile | Profile): Profile {
     positive_keywords: profile.positive_keywords ?? unique(enabled.flatMap((topic) => topic.keywords ?? [])),
     negative_keywords: profile.negative_keywords ?? unique(enabled.flatMap((topic) => topic.negative_keywords ?? [])),
     categories: profile.categories ?? unique(enabled.flatMap((topic) => topic.arxiv_categories ?? [])),
-    author_watchlist: profile.author_watchlist ?? [],
+    watched_authors: profile.watched_authors ?? [],
     min_relevance: profile.min_relevance ?? 80,
   }
 }
@@ -295,7 +295,7 @@ function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: n
       weight: topic.weight ?? 1,
       enabled: topic.enabled !== false,
     })),
-    author_watchlist: unique(profile.author_watchlist),
+    watched_authors: unique(profile.watched_authors),
     min_relevance: profile.min_relevance,
   }
 }
@@ -303,28 +303,28 @@ function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: n
 function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_password?: string }) {
   return {
     provider_name: settings.provider_name,
+    model_name: settings.model_name,
+    api_base_url: settings.api_base_url,
     schedule_time: settings.schedule_time,
-    timezone: settings.timezone,
-    max_results: settings.max_results,
-    screen_batch_size: Math.min(settings.max_results, settings.screen_batch_size),
+    schedule_timezone: settings.schedule_timezone,
+    arxiv_fetch_limit: settings.arxiv_fetch_limit,
+    screening_batch_size: Math.min(settings.arxiv_fetch_limit, settings.screening_batch_size),
     semantic_recall_mode: settings.semantic_recall_mode,
-    deep_analysis_top_n: settings.deep_analysis_top_n,
-    deep_relevance_threshold: settings.deep_relevance_threshold ?? 90,
-    analysis_budget_mode: settings.analysis_budget_mode,
-    daily_ai_synthesis_enabled: settings.daily_ai_synthesis_enabled,
-    analysis_prompt_template_id: settings.analysis_prompt_template_id,
+    deep_analysis_limit: settings.deep_analysis_limit,
+    deep_analysis_threshold: settings.deep_analysis_threshold ?? 90,
+    analysis_budget: settings.analysis_budget,
+    daily_synthesis_enabled: settings.daily_synthesis_enabled,
+    prompt_template_id: settings.prompt_template_id,
     screening_prompt: settings.screening_prompt,
-    deep_prompt: settings.deep_prompt,
-    base_url: settings.base_url,
-    model: settings.model,
+    deep_analysis_prompt: settings.deep_analysis_prompt,
     email_enabled: settings.email_enabled,
+    email_recipients: settings.email_recipients,
     smtp_host: settings.smtp_host,
     smtp_port: settings.smtp_port,
     smtp_security: settings.smtp_security,
     smtp_username: settings.smtp_username,
-    smtp_from: settings.smtp_from,
-    email_recipients: settings.email_recipients,
-    public_base_url: settings.public_base_url,
+    smtp_sender: settings.smtp_sender,
+    public_url: settings.public_url,
     ...(settings.api_key ? { api_key: settings.api_key } : {}),
     ...(settings.smtp_password ? { smtp_password: settings.smtp_password } : {}),
   }

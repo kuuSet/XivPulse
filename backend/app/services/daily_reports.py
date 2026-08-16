@@ -52,7 +52,7 @@ def create_digest(digest_date: date | None = None) -> dict[str, Any]:
             .order_by(desc(PaperMatch.relevance_score))
             .limit(20)
         ).all()
-        timezone_name = load_runtime_settings(db).timezone
+        timezone_name = load_runtime_settings(db).schedule_timezone
         today = digest_date or current_date_in_timezone(timezone_name)
         digest = db.scalar(
             select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == today)
@@ -111,7 +111,7 @@ def persist_daily_report(
         highlight_limit=min(max_papers, 10),
         reading_queue_limit=max_papers,
         custom_method_terms=clean_custom_methods(
-            list(load_runtime_settings(db).custom_method_terms)
+            list(load_runtime_settings(db).custom_methods)
         ),
     )
     encoded = jsonable_encoder(report)
@@ -147,7 +147,7 @@ def create_daily_report(
 
     with session_scope() as db:
         profile = active_profile(db)
-        timezone_name = load_runtime_settings(db).timezone
+        timezone_name = load_runtime_settings(db).schedule_timezone
         selected_date = report_date or current_date_in_timezone(timezone_name)
         snapshot = persist_daily_report(
             db,
@@ -230,7 +230,7 @@ async def synthesize_daily_report(
         previous_value = report.get("ai_synthesis")
         previous = dict(previous_value) if isinstance(previous_value, dict) else None
         source_hash = report_source_hash(report)
-        if respect_enabled and not settings.daily_ai_synthesis_enabled:
+        if respect_enabled and not settings.daily_synthesis_enabled:
             if previous is None:
                 report["ai_synthesis"] = _synthesis_state(
                     None, status_name="disabled", source_hash=source_hash
@@ -265,7 +265,7 @@ async def synthesize_daily_report(
                 "report_synthesis_status": "not_configured",
                 "report_date": report_date.isoformat(),
             }
-        budget_mode = settings.analysis_budget_mode
+        budget_mode = settings.analysis_budget
         run = ReportSynthesisRun(
             profile_id=profile.id,
             report_id=snapshot.id,
@@ -273,8 +273,8 @@ async def synthesize_daily_report(
             status="running",
             source_hash=source_hash,
             provider=provider_settings.provider_name,
-            model=provider_settings.model,
-            transport=provider_settings.api_mode,
+            model=provider_settings.model_name,
+            transport=provider_settings.api_protocol,
             budget_mode=budget_mode,
         )
         db.add(run)

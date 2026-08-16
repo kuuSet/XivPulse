@@ -117,14 +117,16 @@ class PaperAnalyzer:
         budget_mode: str = "balanced",
         prompt_template_id: str = DEFAULT_PROMPT_TEMPLATE_ID,
         screening_prompt: str | None = None,
-        deep_prompt: str | None = None,
+        deep_analysis_prompt: str | None = None,
     ) -> None:
         self.adapter = adapter or OpenAICompatibleAdapter()
         self.budget = analysis_budget(budget_mode)
         selected_prompt = prompt_template(prompt_template_id)
         self.prompt_template_id = selected_prompt.id
         self.screening_prompt = str(screening_prompt or selected_prompt.screening_prompt).strip()
-        self.deep_prompt = str(deep_prompt or selected_prompt.deep_prompt).strip()
+        self.deep_analysis_prompt = str(
+            deep_analysis_prompt or selected_prompt.deep_analysis_prompt
+        ).strip()
         self.fulltext_fetcher = fulltext_fetcher or FullTextFetcher(
             max_chars=self.budget.max_fulltext_chars,
             max_pdf_pages=self.budget.max_pdf_pages,
@@ -209,7 +211,7 @@ class PaperAnalyzer:
         source_label = fulltext.source if fulltext.content else "abstract"
         source_text = fulltext.content or str(_paper_value(paper, "abstract"))
         prompt = (
-            f"<analysis_preferences>\n{_xml_text(self.deep_prompt)}\n"
+            f"<analysis_preferences>\n{_xml_text(self.deep_analysis_prompt)}\n"
             f"</analysis_preferences>\n\n"
             f"<research_profile>\n研究画像："
             f"{_xml_text(_profile_value(profile, 'description'))}\n"
@@ -237,7 +239,7 @@ class PaperAnalyzer:
         return analysis_prompt_metadata(
             self.prompt_template_id,
             self.screening_prompt,
-            self.deep_prompt,
+            self.deep_analysis_prompt,
             stage,
         )
 

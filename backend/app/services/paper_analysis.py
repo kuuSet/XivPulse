@@ -37,11 +37,11 @@ async def analyze_papers(
     with SessionLocal() as db:
         profile = active_profile(db)
         settings = load_runtime_settings(db)
-        limit = int(limit if limit is not None else settings.deep_analysis_top_n)
-        threshold = settings.deep_relevance_threshold
-        screen_batch_size = max(1, settings.screen_batch_size)
+        limit = int(limit if limit is not None else settings.deep_analysis_limit)
+        threshold = settings.deep_analysis_threshold
+        screening_batch_size = max(1, settings.screening_batch_size)
         selected_recall_mode = recall_mode(settings.semantic_recall_mode)
-        today = report_date or current_date_in_timezone(settings.timezone)
+        today = report_date or current_date_in_timezone(settings.schedule_timezone)
         recent_matches = (
             db.scalars(
                 select(PaperMatch)
@@ -60,7 +60,7 @@ async def analyze_papers(
             .unique()
             .all()
         )
-        watched_authors = {value.casefold() for value in settings.author_watchlist}
+        watched_authors = {value.casefold() for value in settings.watched_authors}
         existing_queue_keys = set(
             db.scalars(
                 select(ScreeningQueueItem.paper_id).where(
@@ -112,14 +112,14 @@ async def analyze_papers(
         db.commit()
     provider_settings = settings.provider
     adapter = OpenAICompatibleAdapter(settings=provider_settings)
-    budget_mode = settings.analysis_budget_mode
+    budget_mode = settings.analysis_budget
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
         adapter,
         budget_mode=budget_mode,
-        prompt_template_id=prompt_settings["analysis_prompt_template_id"],
+        prompt_template_id=prompt_settings["prompt_template_id"],
         screening_prompt=prompt_settings["screening_prompt"],
-        deep_prompt=prompt_settings["deep_prompt"],
+        deep_analysis_prompt=prompt_settings["deep_analysis_prompt"],
     )
 
     screened = 0
@@ -139,7 +139,7 @@ async def analyze_papers(
             or 0
         )
     total_batches = (
-        (screening_queue_total + screen_batch_size - 1) // screen_batch_size
+        (screening_queue_total + screening_batch_size - 1) // screening_batch_size
         if screening_queue_total
         else 0
     )
@@ -178,7 +178,7 @@ async def analyze_papers(
                         desc(ScreeningQueueItem.semantic_score),
                         ScreeningQueueItem.id,
                     )
-                    .limit(screen_batch_size)
+                    .limit(screening_batch_size)
                 )
                 .unique()
                 .all()
@@ -258,7 +258,7 @@ async def analyze_papers(
                         kind="screening",
                         status="completed",
                         provider=provider_settings.provider_name,
-                        model=provider_settings.model,
+                        model=provider_settings.model_name,
                         transport=generated.transport,
                         content_source="abstract",
                         summary=result.reason,
@@ -359,7 +359,7 @@ async def analyze_papers(
                     kind="deep",
                     status="completed",
                     provider=provider_settings.provider_name,
-                    model=provider_settings.model,
+                    model=provider_settings.model_name,
                     transport=generated.transport,
                     content_source=fulltext.source if fulltext.content else "abstract",
                     summary=payload.get("summary", ""),

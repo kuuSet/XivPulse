@@ -22,6 +22,7 @@ LOCK_DURATION = timedelta(minutes=15)
 
 @dataclass(frozen=True)
 class AuthSettings:
+    # Single-user authentication and session security.
     enabled: bool
     username: str
     password_hash: str
@@ -33,22 +34,22 @@ class AuthSettings:
         if not self.enabled:
             return
         if not self.username:
-            raise RuntimeError("服务器认证已启用，但未配置 XIVPULSE_ADMIN_USERNAME")
+            raise RuntimeError("服务器认证已启用，但未配置 XIVPULSE_AUTH_USERNAME")
         if not self.password_hash.startswith("$argon2"):
-            raise RuntimeError("XIVPULSE_ADMIN_PASSWORD_HASH 必须是 Argon2 哈希")
+            raise RuntimeError("XIVPULSE_AUTH_PASSWORD_HASH 必须是 Argon2 哈希")
         if len(self.session_secret.encode("utf-8")) < 32:
-            raise RuntimeError("XIVPULSE_SESSION_SECRET 至少需要 32 字节")
+            raise RuntimeError("XIVPULSE_AUTH_SESSION_SECRET 至少需要 32 字节")
 
 
 def auth_settings() -> AuthSettings:
     process = get_process_settings()
     settings = AuthSettings(
         enabled=process.auth_enabled,
-        username=process.admin_username,
-        password_hash=process.admin_password_hash,
-        session_secret=process.session_secret,
-        secure_cookies=process.secure_cookies,
-        trust_proxy=process.trust_proxy,
+        username=process.auth_username,
+        password_hash=process.auth_password_hash,
+        session_secret=process.auth_session_secret,
+        secure_cookies=process.auth_secure_cookies,
+        trust_proxy=process.auth_trust_proxy,
     )
     settings.validate()
     return settings
