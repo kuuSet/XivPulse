@@ -14,12 +14,14 @@ import arxiv
 import httpx
 
 from ..domain.paper import Paper, as_utc, deduplicate_papers
+from .download import DownloadTooLargeError, limited_bytes
 from .parse.html import parse_html_affiliations
 from .parse.normalization import clean_text, parse_arxiv_id
 
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
 _PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")
+_MAX_AFFILIATION_HTML_BYTES = 64 * 1024 * 1024
 
 
 class ArxivFetchError(RuntimeError):
@@ -139,15 +141,21 @@ class ArxivClient:
             "User-Agent": self.user_agent,
             "Accept": "text/html,application/xhtml+xml",
         }
+
+        async def read(client: httpx.AsyncClient) -> bytes:
+            async with client.stream(
+                "GET", url, headers=headers, timeout=10.0
+            ) as response:
+                response.raise_for_status()
+                payload = bytearray()
+                async for chunk in limited_bytes(response, _MAX_AFFILIATION_HTML_BYTES):
+                    payload.extend(chunk)
+                return bytes(payload)
+
         if self._http is not None:
-            response = await self._http.get(url, headers=headers, timeout=10.0)
-        else:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url, headers=headers, timeout=10.0)
-        response.raise_for_status()
-        if len(response.content) > 20 * 1024 * 1024:
-            raise ArxivFetchError("arXiv HTML response exceeded 20 MiB")
-        return response.content
+            return await read(self._http)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            return await read(client)
 
     async def fetch_html_affiliations(self, arxiv_ids: Sequence[str]) -> dict[str, list[str]]:
         """Fetch explicit author affiliations without inspecting paper body text."""
@@ -166,7 +174,7 @@ class ArxivClient:
                 payload = await self._get_html(
                     f"https://arxiv.org/html/{quote(arxiv_id, safe='/.')}"
                 )
-            except (ArxivFetchError, httpx.HTTPError):
+            except (DownloadTooLargeError, httpx.HTTPError):
                 return arxiv_id, []
             return arxiv_id, parse_html_affiliations(payload)
 

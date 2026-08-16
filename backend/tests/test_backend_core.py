@@ -14,6 +14,7 @@ from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.arxiv.client import ArxivClient, ArxivFetchError, build_date_query
+from app.arxiv.download import DownloadTooLargeError, limited_bytes
 from app.arxiv.parse.html import parse_html_affiliations
 from app.arxiv.parse.normalization import parse_arxiv_id
 from app.arxiv.repository import PaperRepository
@@ -494,6 +495,24 @@ async def test_fetch_html_affiliations_reads_author_header_only() -> None:
         ).fetch_html_affiliations(["2608.01234v2"])
 
     assert values == {"2608.01234": ["Meta AI"]}
+
+
+@pytest.mark.asyncio
+async def test_affiliation_html_has_an_independent_streaming_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.arxiv import client as arxiv_client_module
+
+    monkeypatch.setattr(arxiv_client_module, "_MAX_AFFILIATION_HTML_BYTES", 8)
+    transport = httpx.MockTransport(lambda _request: httpx.Response(200, content=b"x" * 9))
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        values = await ArxivClient(
+            http_client=client,
+            rate_limit_seconds=0,
+        ).fetch_html_affiliations(["2608.01234"])
+
+    assert values == {}
 
 
 @pytest.mark.asyncio
@@ -1115,3 +1134,56 @@ async def test_fulltext_prefers_html_and_skips_pdf() -> None:
     assert result.source == "html"
     assert paths == ["/html/2608.01234v2"]
     assert "evidence" in result.content
+
+
+class _TrackedByteStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.yielded = 0
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.yielded += 1
+            yield chunk
+
+
+@pytest.mark.asyncio
+async def test_limited_download_stops_reading_as_soon_as_it_exceeds_limit() -> None:
+    stream = _TrackedByteStream([b"aaaa", b"bbbb", b"cccc"])
+    response = httpx.Response(200, stream=stream)
+
+    with pytest.raises(DownloadTooLargeError):
+        _ = [chunk async for chunk in limited_bytes(response, 6)]
+
+    assert stream.yielded == 2
+
+
+@pytest.mark.asyncio
+async def test_fulltext_streams_larger_pdfs_to_a_temporary_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.fulltext import FullTextFetcher
+
+    paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path.startswith("/html/"):
+            return httpx.Response(404)
+        return httpx.Response(200, content=b"fake pdf payload")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fetcher = FullTextFetcher(http_client=client, rate_limit_seconds=0)
+
+        def extract_pdf(payload) -> str:
+            assert not isinstance(payload, bytes | bytearray)
+            assert payload.read() == b"fake pdf payload"
+            return "evidence " * 100
+
+        monkeypatch.setattr(fetcher, "_extract_pdf", extract_pdf)
+        result = await fetcher.fetch("2608.01234v2")
+
+    assert fetcher.max_html_bytes == 64 * 1024 * 1024
+    assert fetcher.max_pdf_bytes == 100 * 1024 * 1024
+    assert result.source == "pdf"
+    assert paths == ["/html/2608.01234v2", "/pdf/2608.01234v2"]
