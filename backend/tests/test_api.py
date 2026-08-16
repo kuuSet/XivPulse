@@ -321,10 +321,10 @@ def test_server_auth_login_cookie_and_logout(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.api import auth as auth_api
-    from app.services.auth import AuthConfig
+    from app.services.auth import AuthSettings
     from argon2 import PasswordHasher
 
-    config = AuthConfig(
+    settings = AuthSettings(
         enabled=True,
         username="researcher",
         password_hash=PasswordHasher().hash("test-secret"),
@@ -332,7 +332,7 @@ def test_server_auth_login_cookie_and_logout(
         secure_cookies=False,
         trust_proxy=False,
     )
-    monkeypatch.setattr(auth_api, "auth_config", lambda: config)
+    monkeypatch.setattr(auth_api, "auth_settings", lambda: settings)
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/settings").status_code == 401
     login = client.post(
@@ -369,7 +369,7 @@ async def test_email_delivery_is_idempotent_for_automatic_report(
 
     sent_subjects: list[str] = []
 
-    def fake_deliver(_config: object, message: object) -> None:
+    def fake_deliver(_settings: object, message: object) -> None:
         sent_subjects.append(str(message["Subject"]))  # type: ignore[index]
 
     monkeypatch.setattr(daily_reports, "deliver_message", fake_deliver)
@@ -1451,7 +1451,7 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient,
 ) -> None:
-    from app.config import set_setting
+    from app.settings import set_setting
     from app.services.paper_sync import sync_papers
     from app.services.semantic import SemanticEmbeddingError
 

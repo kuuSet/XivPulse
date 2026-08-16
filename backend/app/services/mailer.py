@@ -11,11 +11,11 @@ from html import escape
 from typing import Any
 from urllib.parse import urlencode
 
-from ..config import RuntimeSettings
+from ..settings import RuntimeSettings
 
 
 @dataclass(frozen=True)
-class SmtpConfig:
+class SmtpSettings:
     host: str
     port: int
     security: str
@@ -30,16 +30,16 @@ class SmtpConfig:
         return bool(self.host and self.sender and self.recipients)
 
 
-def smtp_config(settings: RuntimeSettings) -> SmtpConfig:
-    return SmtpConfig(
-        host=settings.smtp_host,
-        port=settings.smtp_port,
-        security=settings.smtp_security,
-        username=settings.smtp_username,
-        password=settings.smtp_password,
-        sender=settings.smtp_from,
-        recipients=settings.email_recipients,
-        public_base_url=settings.public_base_url,
+def smtp_settings(runtime_settings: RuntimeSettings) -> SmtpSettings:
+    return SmtpSettings(
+        host=runtime_settings.smtp_host,
+        port=runtime_settings.smtp_port,
+        security=runtime_settings.smtp_security,
+        username=runtime_settings.smtp_username,
+        password=runtime_settings.smtp_password,
+        sender=runtime_settings.smtp_from,
+        recipients=runtime_settings.email_recipients,
+        public_base_url=runtime_settings.public_base_url,
     )
 
 
@@ -47,21 +47,21 @@ def email_enabled(settings: RuntimeSettings) -> bool:
     return settings.email_enabled
 
 
-def _report_url(config: SmtpConfig, report_date: str) -> str:
-    if not config.public_base_url:
+def _report_url(settings: SmtpSettings, report_date: str) -> str:
+    if not settings.public_base_url:
         return ""
-    return f"{config.public_base_url}/?{urlencode({'view': 'digest', 'date': report_date})}"
+    return f"{settings.public_base_url}/?{urlencode({'view': 'digest', 'date': report_date})}"
 
 
-def _paper_url(config: SmtpConfig, paper_id: Any) -> str:
-    if not config.public_base_url:
+def _paper_url(settings: SmtpSettings, paper_id: Any) -> str:
+    if not settings.public_base_url:
         return ""
     query = urlencode({"view": "library", "paper": str(paper_id)})
-    return f"{config.public_base_url}/?{query}"
+    return f"{settings.public_base_url}/?{query}"
 
 
 def build_daily_message(
-    config: SmtpConfig,
+    settings: SmtpSettings,
     report: Mapping[str, Any],
     recipient: str,
     *,
@@ -83,7 +83,7 @@ def build_daily_message(
     )
     if len(synthesis) > 1_600:
         synthesis = f"{synthesis[:1599]}…"
-    report_url = _report_url(config, report_date)
+    report_url = _report_url(settings, report_date)
     coverage_text = (
         f"候选 {coverage.get('candidate_paper_count', 0)} 篇，"
         f"正式方向相关 {coverage.get('paper_count', 0)} 篇，"
@@ -97,7 +97,7 @@ def build_daily_message(
     )
     text_lines = [subject, "", warning, synthesis, "", coverage_text, "", "重点论文"]
     for index, paper in enumerate(highlights, start=1):
-        url = _paper_url(config, paper.get("paper_id"))
+        url = _paper_url(settings, paper.get("paper_id"))
         text_lines.extend(
             [
                 f"{index}. {paper.get('title', '未命名论文')}",
@@ -124,8 +124,8 @@ def build_daily_message(
             f"arXiv {escape(str(paper.get('arxiv_id') or ''))}</p>"
             f"<p>{escape(str(paper.get('summary') or paper.get('why_it_matters') or ''))}</p>"
             + (
-                f'<a href="{escape(_paper_url(config, paper.get("paper_id")))}">打开论文详情</a>'
-                if _paper_url(config, paper.get("paper_id"))
+                f'<a href="{escape(_paper_url(settings, paper.get("paper_id")))}">打开论文详情</a>'
+                if _paper_url(settings, paper.get("paper_id"))
                 else ""
             )
             + "</div></article>"
@@ -158,27 +158,29 @@ a{{color:#1261a0}}.report-link{{display:inline-block;margin-top:20px;font-weight
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = config.sender
+    message["From"] = settings.sender
     message["To"] = recipient
     message.set_content("\n".join(line for line in text_lines if line is not None), charset="utf-8")
     message.add_alternative(html, subtype="html", charset="utf-8")
     return message
 
 
-def deliver_message(config: SmtpConfig, message: EmailMessage) -> None:
+def deliver_message(settings: SmtpSettings, message: EmailMessage) -> None:
     context = ssl.create_default_context()
-    if config.security == "ssl":
-        client_context = smtplib.SMTP_SSL(config.host, config.port, timeout=30, context=context)
+    if settings.security == "ssl":
+        client_context = smtplib.SMTP_SSL(
+            settings.host, settings.port, timeout=30, context=context
+        )
     else:
-        client_context = smtplib.SMTP(config.host, config.port, timeout=30)
+        client_context = smtplib.SMTP(settings.host, settings.port, timeout=30)
     with client_context as client:
-        if config.security == "starttls":
+        if settings.security == "starttls":
             client.ehlo()
             client.starttls(context=context)
             client.ehlo()
-        if config.username:
-            client.login(config.username, config.password)
+        if settings.username:
+            client.login(settings.username, settings.password)
         client.send_message(message)
 
 
-__all__ = ["SmtpConfig", "build_daily_message", "deliver_message", "smtp_config"]
+__all__ = ["SmtpSettings", "build_daily_message", "deliver_message", "smtp_settings"]

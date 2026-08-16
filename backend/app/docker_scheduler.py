@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import desc, select
 
-from .config import load_runtime_settings
+from .settings import load_runtime_settings
 from .database import SessionLocal
 from .models import Job
 from .runtime import initialize_application

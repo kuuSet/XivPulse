@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import Integer, desc, func, select
 from sqlalchemy.orm import Session
 
-from ..config import load_runtime_settings, setting_value
+from ..settings import load_runtime_settings, setting_value
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..services.semantic import RECALL_THRESHOLDS, embedding_status, recall_mode
@@ -17,7 +17,7 @@ from .presenters import _as_utc
 
 def _settings_wire(db: Session) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    config = settings.provider
+    provider_settings = settings.provider
     bind = db.get_bind()
     database_path: str | None = None
     database_size_bytes: int | None = None
@@ -30,10 +30,10 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             pass
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
-        "provider_name": config.provider_name,
-        "base_url": config.base_url,
-        "model": config.model,
-        "api_key_configured": not config.mock_mode,
+        "provider_name": provider_settings.provider_name,
+        "base_url": provider_settings.base_url,
+        "model": provider_settings.model,
+        "api_key_configured": not provider_settings.mock_mode,
         "schedule_time": settings.schedule_time,
         "timezone": settings.timezone,
         "max_results": settings.max_results,
@@ -60,8 +60,8 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             db.scalar(select(func.count()).select_from(DailyResearchReport)) or 0
         ),
         "token_usage": _token_usage_summary(db),
-        "api_mode": config.api_mode,
-        "mock_mode": config.mock_mode,
+        "api_mode": provider_settings.api_mode,
+        "mock_mode": provider_settings.mock_mode,
         "email_enabled": settings.email_enabled,
         "smtp_host": settings.smtp_host,
         "smtp_port": settings.smtp_port,

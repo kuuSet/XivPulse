@@ -4,10 +4,10 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-import app.config.process as config_module
+import app.settings.process as settings_module
 import httpx
 import pytest
-from app.config import ProviderConfig, load_runtime_settings, set_setting
+from app.settings import ProviderSettings, load_runtime_settings, set_setting
 from app.database import init_db, make_engine
 from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
@@ -49,7 +49,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 
-def _config(**overrides: object) -> ProviderConfig:
+def _provider_settings(**overrides: object) -> ProviderSettings:
     values: dict[str, object] = {
         "provider_name": "test-provider",
         "base_url": "https://provider.test/v1",
@@ -58,7 +58,7 @@ def _config(**overrides: object) -> ProviderConfig:
         "api_key": "test-secret",
     }
     values.update(overrides)
-    return ProviderConfig(**values)  # type: ignore[arg-type]
+    return ProviderSettings(**values)  # type: ignore[arg-type]
 
 
 def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> None:
@@ -75,34 +75,34 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
         assert settings.deep_analysis_top_n == 5
         assert settings.deep_relevance_threshold == 90
 
-    status = _config(api_key="do-not-leak").public_dict()
+    status = _provider_settings(api_key="do-not-leak").public_dict()
     assert status["api_key_configured"] is True
     assert "do-not-leak" not in json.dumps(status)
     assert "api_key" not in status
 
 
-def test_process_config_uses_only_xivpulse_environment_names(
+def test_process_settings_use_only_xivpulse_environment_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ARXIV_DAILY_MODEL", "legacy-model")
     monkeypatch.delenv("XIVPULSE_MODEL", raising=False)
-    assert config_module._build_process_config().provider.model == "gpt-4o-mini"
+    assert settings_module._build_process_settings().provider.model == "gpt-4o-mini"
     monkeypatch.setenv("XIVPULSE_MODEL", "current-model")
-    assert config_module._build_process_config().provider.model == "current-model"
+    assert settings_module._build_process_settings().provider.model == "current-model"
 
 
-def test_process_config_derives_storage_from_one_data_directory(
+def test_process_settings_derive_storage_from_one_data_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "xivpulse-data"
     monkeypatch.setenv("XIVPULSE_DATA_DIR", str(data_dir))
 
-    config = config_module._build_process_config()
+    settings = settings_module._build_process_settings()
 
-    assert config.data_dir == data_dir.resolve()
-    assert config.database_url == f"sqlite:///{data_dir.resolve().as_posix()}/xivpulse.db"
-    assert config.model_cache == data_dir.resolve() / "model-cache"
+    assert settings.data_dir == data_dir.resolve()
+    assert settings.database_url == f"sqlite:///{data_dir.resolve().as_posix()}/xivpulse.db"
+    assert settings.model_cache == data_dir.resolve() / "model-cache"
 
 
 def test_environment_key_fallback_and_secrets_are_hidden(
@@ -111,19 +111,19 @@ def test_environment_key_fallback_and_secrets_are_hidden(
     monkeypatch.delenv("XIVPULSE_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
     monkeypatch.setenv("XIVPULSE_SESSION_SECRET", "session-secret")
-    config = config_module._build_process_config()
+    settings = settings_module._build_process_settings()
 
-    assert config.provider.api_key == "openai-secret"
-    assert "openai-secret" not in repr(config.provider)
-    assert "session-secret" not in repr(config)
-    assert "openai-secret" not in json.dumps(config.model_dump(), default=str)
-    assert "session-secret" not in json.dumps(config.model_dump(), default=str)
+    assert settings.provider.api_key == "openai-secret"
+    assert "openai-secret" not in repr(settings.provider)
+    assert "session-secret" not in repr(settings)
+    assert "openai-secret" not in json.dumps(settings.model_dump(), default=str)
+    assert "session-secret" not in json.dumps(settings.model_dump(), default=str)
 
 
-def test_invalid_configuration_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_invalid_settings_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XIVPULSE_REQUEST_TIMEOUT", "601")
     with pytest.raises(ValidationError, match="request_timeout"):
-        config_module._build_process_config()
+        settings_module._build_process_settings()
 
     monkeypatch.delenv("XIVPULSE_REQUEST_TIMEOUT")
     engine = make_engine("sqlite:///:memory:")
@@ -173,7 +173,7 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
             "XIVPULSE_EMAIL_RECIPIENTS",
             "first@example.com, second@example.com, FIRST@example.com",
         )
-        process = config_module._build_process_config()
+        process = settings_module._build_process_settings()
         settings = load_runtime_settings(session, process=process)
         monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
         settings_with_environment_key = load_runtime_settings(session, process=process)
@@ -654,17 +654,17 @@ async def test_responses_adapter_uses_strict_schema() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        adapter = OpenAICompatibleAdapter(_config(), http_client=client)
+        adapter = OpenAICompatibleAdapter(_provider_settings(), http_client=client)
         output = await adapter.generate_json(
             system_prompt="Return JSON.",
             user_prompt="screen it",
             response_model=ScreeningResult,
         )
     assert output.relevance_score == 91
-    format_config = captured[0]["text"]["format"]  # type: ignore[index]
-    assert format_config["type"] == "json_schema"
-    assert format_config["strict"] is True
-    schema = format_config["schema"]
+    format_spec = captured[0]["text"]["format"]  # type: ignore[index]
+    assert format_spec["type"] == "json_schema"
+    assert format_spec["strict"] is True
+    schema = format_spec["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(schema["properties"])
 
@@ -705,7 +705,7 @@ async def test_editable_prompt_is_bounded_and_stamped_in_analysis_metadata() -> 
 
     custom = "优先检查证据链是否完整，并把关键缺口写进初筛理由，不能只复述作者主张。"
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        adapter = OpenAICompatibleAdapter(_config(), http_client=client)
+        adapter = OpenAICompatibleAdapter(_provider_settings(), http_client=client)
         result = await PaperAnalyzer(
             adapter,
             prompt_template_id="evidence-audit",
@@ -795,7 +795,7 @@ async def test_adapter_records_responses_and_chat_token_usage() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(responses_handler)) as client:
         result = await OpenAICompatibleAdapter(
-            _config(), http_client=client
+            _provider_settings(), http_client=client
         ).generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen",
@@ -829,7 +829,7 @@ async def test_adapter_records_responses_and_chat_token_usage() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(chat_handler)) as client:
         result = await OpenAICompatibleAdapter(
-            _config(api_mode="chat"), http_client=client
+            _provider_settings(api_mode="chat"), http_client=client
         ).generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen",
@@ -860,7 +860,7 @@ async def test_adapter_records_responses_and_chat_token_usage() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(legacy_chat_handler)) as client:
         result = await OpenAICompatibleAdapter(
-            _config(api_mode="chat"), http_client=client
+            _provider_settings(api_mode="chat"), http_client=client
         ).generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen",
@@ -973,7 +973,7 @@ async def test_responses_falls_back_to_chat_and_mock_never_calls_http() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        adapter = OpenAICompatibleAdapter(_config(), http_client=client)
+        adapter = OpenAICompatibleAdapter(_provider_settings(), http_client=client)
         output = await adapter.generate_json(
             system_prompt="Return JSON.", user_prompt="screen", response_model=ScreeningResult
         )
@@ -985,7 +985,9 @@ async def test_responses_falls_back_to_chat_and_mock_never_calls_http() -> None:
         raise AssertionError("mock mode must remain offline")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(must_not_call)) as client:
-        mock_adapter = OpenAICompatibleAdapter(_config(api_key=None), http_client=client)
+        mock_adapter = OpenAICompatibleAdapter(
+            _provider_settings(api_key=None), http_client=client
+        )
         analyzer = PaperAnalyzer(mock_adapter)
         result = await analyzer.deep_analyze(
             {
@@ -1054,7 +1056,7 @@ async def test_responses_protocol_fallback_adds_usage_from_both_requests() -> No
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         result = await OpenAICompatibleAdapter(
-            _config(), http_client=client
+            _provider_settings(), http_client=client
         ).generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen",

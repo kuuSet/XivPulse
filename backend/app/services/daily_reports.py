@@ -11,7 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from ..config import load_runtime_settings
+from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import (
     DailyResearchReport,
@@ -24,7 +24,7 @@ from ..models import (
 )
 from .analytics import build_daily_research_report, current_date_in_timezone
 from .jobs import update_job_progress
-from .mailer import build_daily_message, deliver_message, email_enabled, smtp_config
+from .mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from .method_catalog import clean_custom_methods
 from .provider import OpenAICompatibleAdapter, ProviderError
 from .report_synthesis import (
@@ -254,8 +254,8 @@ async def synthesize_daily_report(
             and previous.get("source_hash") == source_hash
         ):
             return {"report_synthesis_status": "ready", "report_date": report_date.isoformat()}
-        config = settings.provider
-        if config.mock_mode:
+        provider_settings = settings.provider
+        if provider_settings.mock_mode:
             report["ai_synthesis"] = _synthesis_state(
                 previous, status_name="not_configured", source_hash=source_hash
             )
@@ -272,9 +272,9 @@ async def synthesize_daily_report(
             report_date=report_date,
             status="running",
             source_hash=source_hash,
-            provider=config.provider_name,
-            model=config.model,
-            transport=config.api_mode,
+            provider=provider_settings.provider_name,
+            model=provider_settings.model,
+            transport=provider_settings.api_mode,
             budget_mode=budget_mode,
         )
         db.add(run)
@@ -283,7 +283,7 @@ async def synthesize_daily_report(
 
     try:
         generated = await generate_daily_report_synthesis(
-            OpenAICompatibleAdapter(config),
+            OpenAICompatibleAdapter(provider_settings),
             report,
             budget_mode=budget_mode,
         )
@@ -366,8 +366,8 @@ async def send_daily_report_email(
         settings = load_runtime_settings(db)
         if require_enabled and not email_enabled(settings):
             return {"email_status": "disabled", "email_sent": 0, "email_failed": 0}
-        config = smtp_config(settings)
-        if not config.ready:
+        mail_settings = smtp_settings(settings)
+        if not mail_settings.ready:
             return {
                 "email_status": "not_configured",
                 "email_sent": 0,
@@ -383,7 +383,7 @@ async def send_daily_report_email(
             raise ValueError(f"没有找到 {report_date.isoformat()} 的研究日报")
         report = snapshot.payload
         profile_id = profile.id
-        recipients = config.recipients
+        recipients = mail_settings.recipients
 
     sent = 0
     failed = 0
@@ -415,13 +415,13 @@ async def send_daily_report_email(
         try:
             failure_count = int(dict(report.get("coverage") or {}).get("screening_failed", 0) or 0)
             message = build_daily_message(
-                config,
+                mail_settings,
                 report,
                 recipient,
                 incomplete=bool(report.get("incomplete", False)),
                 failure_count=failure_count,
             )
-            await asyncio.to_thread(deliver_message, config, message)
+            await asyncio.to_thread(deliver_message, mail_settings, message)
             with session_scope() as db:
                 delivery = db.get(EmailDelivery, delivery_id)
                 if delivery is not None:

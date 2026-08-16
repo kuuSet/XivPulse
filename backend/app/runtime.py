@@ -8,10 +8,10 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from .config import get_process_config, set_setting
+from .settings import get_process_settings, set_setting
 from .database import init_db, session_scope
 from .models import Job, Paper, PaperMatch, utcnow
-from .services.auth import auth_config
+from .services.auth import auth_settings
 from .services.direction_matching import canonical_requested_direction_names
 from .services.jobs import RUNNING_STATUSES
 from .services.semantic import MODEL_ID as SEMANTIC_MODEL_ID
@@ -98,7 +98,7 @@ def initialize_application() -> None:
     with _initialization_lock:
         if _initialized:
             return
-        auth_config()
+        auth_settings()
         init_db()
         with session_scope() as db:
             stale_before = utcnow() - timedelta(hours=2)
@@ -110,7 +110,7 @@ def initialize_application() -> None:
                     job.message = "任务超时"
                     job.completed_at = utcnow()
         _initialized = True
-        if get_process_config().embedding_backfill and not _embedding_backfill_started:
+        if get_process_settings().embedding_backfill and not _embedding_backfill_started:
             _embedding_backfill_started = True
             threading.Thread(
                 target=_backfill_existing_semantic_embeddings,

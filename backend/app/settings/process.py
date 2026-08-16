@@ -1,4 +1,4 @@
-"""Immutable configuration read once from the process environment."""
+"""Immutable settings read once from the process environment."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
+
 
 def _string_tuple(value: Any) -> tuple[str, ...]:
     values = value.split(",") if isinstance(value, str) else value
@@ -29,7 +30,7 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
     return tuple(result)
 
 
-class ProviderConfig(BaseSettings):
+class ProviderSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="XIVPULSE_",
         env_ignore_empty=True,
@@ -78,7 +79,7 @@ class ProviderConfig(BaseSettings):
         return payload
 
 
-class ProcessConfig(BaseSettings):
+class ProcessSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="XIVPULSE_",
         env_ignore_empty=True,
@@ -88,7 +89,7 @@ class ProcessConfig(BaseSettings):
     )
 
     data_dir: Path = Path("data")
-    provider: ProviderConfig = Field(default_factory=ProviderConfig)
+    provider: ProviderSettings = Field(default_factory=ProviderSettings)
     trusted_hosts: Annotated[tuple[str, ...], NoDecode] = ()
     embedding_backfill: bool = True
     auth_enabled: bool = False
@@ -117,8 +118,8 @@ class ProcessConfig(BaseSettings):
         return self.data_dir / "model-cache"
 
 
-def _build_process_config() -> ProcessConfig:
-    process = ProcessConfig()
+def _build_process_settings() -> ProcessSettings:
+    process = ProcessSettings()
     secure_cookies = (
         process.auth_enabled if process.secure_cookies is None else process.secure_cookies
     )
@@ -130,12 +131,12 @@ def _build_process_config() -> ProcessConfig:
 
 
 @lru_cache(maxsize=1)
-def get_process_config() -> ProcessConfig:
-    return _build_process_config()
+def get_process_settings() -> ProcessSettings:
+    return _build_process_settings()
 
 
 __all__ = [
-    "ProcessConfig",
-    "ProviderConfig",
-    "get_process_config",
+    "ProcessSettings",
+    "ProviderSettings",
+    "get_process_settings",
 ]

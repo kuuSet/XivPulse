@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..config import load_runtime_settings
+from ..settings import load_runtime_settings
 from ..database import SessionLocal, get_db
 from ..models import DailyResearchReport, Digest, Paper, PaperMatch
 from ..services.analytics import build_research_roadmap, build_topic_trends

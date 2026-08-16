@@ -13,7 +13,7 @@ from pydantic_settings import (
 )
 from sqlalchemy import select
 
-from .process import ProcessConfig, ProviderConfig, _string_tuple, get_process_config
+from .process import ProcessSettings, ProviderSettings, _string_tuple, get_process_settings
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ class RuntimeSettings(BaseSettings):
         str_strip_whitespace=True,
     )
 
-    provider: ProviderConfig
+    provider: ProviderSettings
     schedule_time: str = Field(default="13:30", pattern=r"(?:[01]\d|2[0-3]):[0-5]\d")
     timezone: str = "Asia/Shanghai"
     max_results: int = Field(default=1000, ge=1, le=1000)
@@ -88,9 +88,9 @@ def _setting_values(db: Session) -> dict[str, Any]:
     return {item.key: item.value for item in db.scalars(select(AppSetting)).all()}
 
 
-def _effective_provider(values: dict[str, Any], process: ProcessConfig) -> ProviderConfig:
+def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> ProviderSettings:
     configured = process.provider
-    return ProviderConfig(
+    return ProviderSettings(
         provider_name=values.get("provider_name") or configured.provider_name,
         base_url=values.get("base_url") or configured.base_url,
         model=values.get("model") or configured.model,
@@ -103,9 +103,9 @@ def _effective_provider(values: dict[str, Any], process: ProcessConfig) -> Provi
 def load_runtime_settings(
     db: Session,
     *,
-    process: ProcessConfig | None = None,
+    process: ProcessSettings | None = None,
 ) -> RuntimeSettings:
-    process = process or get_process_config()
+    process = process or get_process_settings()
     values = _setting_values(db)
     return RuntimeSettings(provider=_effective_provider(values, process), **values)
 

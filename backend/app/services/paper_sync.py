@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..config import load_runtime_settings
+from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Topic
 from .arxiv.affiliations import enrich_affiliations

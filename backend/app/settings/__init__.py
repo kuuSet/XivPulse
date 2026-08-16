@@ -1,6 +1,6 @@
-"""Public configuration boundary for the application."""
+"""Public settings boundary for the application."""
 
-from .process import ProcessConfig, ProviderConfig, get_process_config
+from .process import ProcessSettings, ProviderSettings, get_process_settings
 from .runtime import (
     RuntimeSettings,
     delete_setting,
@@ -10,11 +10,11 @@ from .runtime import (
 )
 
 __all__ = [
-    "ProcessConfig",
-    "ProviderConfig",
+    "ProcessSettings",
+    "ProviderSettings",
     "RuntimeSettings",
     "delete_setting",
-    "get_process_config",
+    "get_process_settings",
     "load_runtime_settings",
     "set_setting",
     "setting_value",

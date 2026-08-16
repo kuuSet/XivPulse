@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from ..config import load_runtime_settings
+from ..settings import load_runtime_settings
 from ..database import get_db
 from ..models import (
     Analysis,

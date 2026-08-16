@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from ..config import ProviderConfig, get_process_config
+from ..settings import ProviderSettings, get_process_settings
 from ..schemas import ProviderTestResult
 
 TModel = TypeVar("TModel", bound=BaseModel)
@@ -239,18 +239,18 @@ class OpenAICompatibleAdapter:
 
     def __init__(
         self,
-        config: ProviderConfig | None = None,
+        settings: ProviderSettings | None = None,
         *,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.config = config or get_process_config().provider
-        self.base_url = _safe_base_url(self.config.base_url)
+        self.settings = settings or get_process_settings().provider
+        self.base_url = _safe_base_url(self.settings.base_url)
         self._client = http_client
         self.last_transport: Literal["responses", "chat", "mock"] = "mock"
 
     @property
     def mock_mode(self) -> bool:
-        return self.config.mock_mode
+        return self.settings.mock_mode
 
     async def generate_json(
         self,
@@ -300,7 +300,7 @@ class OpenAICompatibleAdapter:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        if self.config.api_mode == "chat":
+        if self.settings.api_mode == "chat":
             data, usage = await self._call_chat(
                 common_input, response_model, schema_name, schema, max_output_tokens
             )
@@ -321,14 +321,14 @@ class OpenAICompatibleAdapter:
         return GenerationResult(
             data=data,
             transport=transport,
-            provider=self.config.provider_name,
-            model=self.config.model,
+            provider=self.settings.provider_name,
+            model=self.settings.model,
             usage=usage,
         )
 
     async def _request(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {
-            "Authorization": f"Bearer {self.config.api_key}",
+            "Authorization": f"Bearer {self.settings.api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -336,12 +336,12 @@ class OpenAICompatibleAdapter:
         try:
             if self._client is not None:
                 response = await self._client.post(
-                    url, headers=headers, json=payload, timeout=self.config.request_timeout
+                    url, headers=headers, json=payload, timeout=self.settings.request_timeout
                 )
             else:
                 async with httpx.AsyncClient(follow_redirects=False) as client:
                     response = await client.post(
-                        url, headers=headers, json=payload, timeout=self.config.request_timeout
+                        url, headers=headers, json=payload, timeout=self.settings.request_timeout
                     )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise ProviderError("Could not reach the configured model provider") from exc
@@ -368,7 +368,7 @@ class OpenAICompatibleAdapter:
         max_output_tokens: int,
     ) -> tuple[TModel, TokenUsage]:
         payload = {
-            "model": self.config.model,
+            "model": self.settings.model,
             "input": messages,
             "text": {
                 "format": {
@@ -405,7 +405,7 @@ class OpenAICompatibleAdapter:
         max_output_tokens: int,
     ) -> tuple[TModel, TokenUsage]:
         payload = {
-            "model": self.config.model,
+            "model": self.settings.model,
             "messages": messages,
             "response_format": {
                 "type": "json_schema",
@@ -460,8 +460,8 @@ class OpenAICompatibleAdapter:
         except ProviderError as exc:
             return ProviderTestResult(
                 ok=False,
-                provider_name=self.config.provider_name,
-                model=self.config.model,
+                provider_name=self.settings.provider_name,
+                model=self.settings.model,
                 transport=self.last_transport,
                 message=str(exc),
             )

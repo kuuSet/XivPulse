@@ -18,7 +18,7 @@ from .api.papers import router as papers_router
 from .api.projects import router as projects_router
 from .api.reports import router as reports_router
 from .api.settings import router as settings_router
-from .config import get_process_config
+from .settings import get_process_settings
 from .runtime import initialize_application
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +38,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-trusted_hosts = list(get_process_config().trusted_hosts)
+trusted_hosts = list(get_process_settings().trusted_hosts)
 if trusted_hosts:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 

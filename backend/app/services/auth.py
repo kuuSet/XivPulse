@@ -11,7 +11,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from ..config import get_process_config
+from ..settings import get_process_settings
 
 SESSION_COOKIE = "xivpulse_session"
 SESSION_MAX_AGE = 7 * 24 * 60 * 60
@@ -21,7 +21,7 @@ LOCK_DURATION = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
-class AuthConfig:
+class AuthSettings:
     enabled: bool
     username: str
     password_hash: str
@@ -40,9 +40,9 @@ class AuthConfig:
             raise RuntimeError("XIVPULSE_SESSION_SECRET 至少需要 32 字节")
 
 
-def auth_config() -> AuthConfig:
-    process = get_process_config()
-    config = AuthConfig(
+def auth_settings() -> AuthSettings:
+    process = get_process_settings()
+    settings = AuthSettings(
         enabled=process.auth_enabled,
         username=process.admin_username,
         password_hash=process.admin_password_hash,
@@ -50,40 +50,40 @@ def auth_config() -> AuthConfig:
         secure_cookies=process.secure_cookies,
         trust_proxy=process.trust_proxy,
     )
-    config.validate()
-    return config
+    settings.validate()
+    return settings
 
 
-def _serializer(config: AuthConfig) -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(config.session_secret, salt="xivpulse-session-v1")
+def _serializer(settings: AuthSettings) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(settings.session_secret, salt="xivpulse-session-v1")
 
 
-def issue_session(config: AuthConfig) -> str:
-    return _serializer(config).dumps(
-        {"username": config.username, "issued_at": datetime.now(UTC).isoformat()}
+def issue_session(settings: AuthSettings) -> str:
+    return _serializer(settings).dumps(
+        {"username": settings.username, "issued_at": datetime.now(UTC).isoformat()}
     )
 
 
-def session_username(config: AuthConfig, token: str | None) -> str | None:
-    if not config.enabled:
-        return config.username or "local"
+def session_username(settings: AuthSettings, token: str | None) -> str | None:
+    if not settings.enabled:
+        return settings.username or "local"
     if not token:
         return None
     try:
-        payload = _serializer(config).loads(token, max_age=SESSION_MAX_AGE)
+        payload = _serializer(settings).loads(token, max_age=SESSION_MAX_AGE)
     except (BadSignature, SignatureExpired):
         return None
     username = str(payload.get("username") or "") if isinstance(payload, dict) else ""
-    return username if username == config.username else None
+    return username if username == settings.username else None
 
 
-def verify_password(config: AuthConfig, username: str, password: str) -> bool:
-    if not config.enabled:
+def verify_password(settings: AuthSettings, username: str, password: str) -> bool:
+    if not settings.enabled:
         return True
-    if username != config.username:
+    if username != settings.username:
         return False
     try:
-        return PasswordHasher().verify(config.password_hash, password)
+        return PasswordHasher().verify(settings.password_hash, password)
     except (VerifyMismatchError, InvalidHashError):
         return False
 
@@ -127,8 +127,8 @@ def clear_login_failures(source_ip: str) -> None:
 __all__ = [
     "SESSION_COOKIE",
     "SESSION_MAX_AGE",
-    "AuthConfig",
-    "auth_config",
+    "AuthSettings",
+    "auth_settings",
     "clear_login_failures",
     "issue_session",
     "login_retry_after",

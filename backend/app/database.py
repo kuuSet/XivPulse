@@ -10,7 +10,7 @@ from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from .config import get_process_config
+from .settings import get_process_settings
 
 
 class Base(DeclarativeBase):
@@ -18,7 +18,7 @@ class Base(DeclarativeBase):
 
 
 def make_engine(database_url: str | None = None) -> Engine:
-    url = database_url or get_process_config().database_url
+    url = database_url or get_process_settings().database_url
     options: dict[str, object] = {"future": True}
     if url.startswith("sqlite"):
         options["connect_args"] = {"check_same_thread": False}

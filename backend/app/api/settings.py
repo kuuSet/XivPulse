@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..config import delete_setting, load_runtime_settings, set_setting
+from ..settings import delete_setting, load_runtime_settings, set_setting
 from ..database import get_db
 from ..models import Analysis, Paper, Topic, utcnow
 from ..schemas import ProfileUpdate
@@ -364,7 +364,7 @@ async def test_provider(
     try:
         from ..services.provider import OpenAICompatibleAdapter
 
-        config = replace(
+        provider_settings = replace(
             settings.provider,
             provider_name=payload.provider_name
             or settings.provider.provider_name
@@ -373,7 +373,7 @@ async def test_provider(
             model=model,
             api_key=key,
         )
-        result = await OpenAICompatibleAdapter(config).test_connection()
+        result = await OpenAICompatibleAdapter(provider_settings).test_connection()
         return result.model_dump()
     except Exception as exc:
         return {

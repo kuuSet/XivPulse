@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import joinedload
 
-from ..config import load_runtime_settings
+from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Analysis, Paper, PaperMatch, Profile, ScreeningQueueItem, utcnow
 from .analytics import current_date_in_timezone
@@ -110,8 +110,8 @@ async def analyze_papers(
                 item.last_error = None
                 item.completed_at = None
         db.commit()
-    config = settings.provider
-    adapter = OpenAICompatibleAdapter(config=config)
+    provider_settings = settings.provider
+    adapter = OpenAICompatibleAdapter(settings=provider_settings)
     budget_mode = settings.analysis_budget_mode
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
@@ -257,8 +257,8 @@ async def analyze_papers(
                         profile_id=match.profile_id,
                         kind="screening",
                         status="completed",
-                        provider=config.provider_name,
-                        model=config.model,
+                        provider=provider_settings.provider_name,
+                        model=provider_settings.model,
                         transport=generated.transport,
                         content_source="abstract",
                         summary=result.reason,
@@ -358,8 +358,8 @@ async def analyze_papers(
                     profile_id=match.profile_id,
                     kind="deep",
                     status="completed",
-                    provider=config.provider_name,
-                    model=config.model,
+                    provider=provider_settings.provider_name,
+                    model=provider_settings.model,
                     transport=generated.transport,
                     content_source=fulltext.source if fulltext.content else "abstract",
                     summary=payload.get("summary", ""),
