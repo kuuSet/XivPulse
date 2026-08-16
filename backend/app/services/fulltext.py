@@ -19,7 +19,7 @@ from pypdf.errors import PyPdfError
 from ..models import Paper
 from ..arxiv.client import DEFAULT_USER_AGENT, polite_wait
 from ..arxiv.download import limited_bytes
-from ..arxiv.parse.normalization import parse_arxiv_id
+from ..arxiv.identifier import parse_arxiv_id
 
 
 @dataclass(slots=True)

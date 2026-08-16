@@ -1,4 +1,4 @@
-"""Normalization for external text and arXiv identifiers."""
+"""Normalize arXiv identifiers and external metadata text."""
 
 from __future__ import annotations
 

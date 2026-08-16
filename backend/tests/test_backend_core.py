@@ -13,10 +13,10 @@ from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
+from app.arxiv.affiliations import parse_html_affiliations
 from app.arxiv.client import ArxivClient, ArxivFetchError, build_date_query
 from app.arxiv.download import DownloadTooLargeError, limited_bytes
-from app.arxiv.parse.html import parse_html_affiliations
-from app.arxiv.parse.normalization import parse_arxiv_id
+from app.arxiv.identifier import parse_arxiv_id
 from app.arxiv.repository import PaperRepository
 from app.arxiv.semantic_scholar import SemanticScholarClient
 from app.services.direction_catalog import (

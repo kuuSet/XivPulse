@@ -14,9 +14,9 @@ import arxiv
 import httpx
 
 from ..domain.paper import Paper, as_utc, deduplicate_papers
+from .affiliations import parse_html_affiliations
 from .download import DownloadTooLargeError, limited_bytes
-from .parse.html import parse_html_affiliations
-from .parse.normalization import clean_text, parse_arxiv_id
+from .identifier import clean_text, parse_arxiv_id
 
 DEFAULT_USER_AGENT = "XivPulse/0.1 (self-hosted research reader)"
 _PAGE_SIZE = 200
