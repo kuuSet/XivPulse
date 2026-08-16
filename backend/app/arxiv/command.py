@@ -13,7 +13,10 @@ from .client import ArxivClient
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m app.arxiv", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="python -m app.arxiv.command",
+        description=__doc__,
+    )
     parser.add_argument("--date", required=True, type=date.fromisoformat)
     parser.add_argument("--category", required=True, action="append", dest="categories")
     parser.add_argument("--limit", type=int, default=1000)
@@ -30,3 +33,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(paper.as_dict(), ensure_ascii=False))
     print(f"Fetched {len(papers)} papers for {args.date.isoformat()}", file=sys.stderr)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
