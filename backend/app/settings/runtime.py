@@ -103,7 +103,7 @@ class RuntimeSettings(BaseSettings):
 def _setting_values(db: Session) -> dict[str, Any]:
     from ..models import AppSetting
 
-    return {item.key: item.value for item in db.scalars(select(AppSetting)).all()}
+    return {item.key: item.value_json for item in db.scalars(select(AppSetting)).all()}
 
 
 def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> ProviderSettings:
@@ -132,7 +132,7 @@ def setting_value(db: Session, key: str, default: Any = None) -> Any:
     from ..models import AppSetting
 
     setting = db.get(AppSetting, key)
-    return setting.value if setting is not None else default
+    return setting.value_json if setting is not None else default
 
 
 def set_setting(db: Session, key: str, value: Any) -> None:
@@ -142,7 +142,7 @@ def set_setting(db: Session, key: str, value: Any) -> None:
     if setting is None:
         db.add(AppSetting(key=key, value_json=value))
     else:
-        setting.value = value
+        setting.value_json = value
 
 
 def delete_setting(db: Session, key: str) -> None:

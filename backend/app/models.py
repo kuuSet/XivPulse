@@ -646,14 +646,6 @@ class AppSetting(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
-    @property
-    def value(self) -> Any:
-        return self.value_json
-
-    @value.setter
-    def value(self, new_value: Any) -> None:
-        self.value_json = new_value
-
 __all__ = [
     "Analysis",
     "AppSetting",
