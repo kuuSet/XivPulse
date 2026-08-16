@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import joinedload
 
+from ..config import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Analysis, Paper, PaperMatch, Profile, ScreeningQueueItem, utcnow
 from .analytics import current_date_in_timezone
@@ -21,12 +22,7 @@ from .prompt_catalog import resolve_prompt_settings
 from .provider import OpenAICompatibleAdapter, ProviderError
 from .semantic import is_candidate as is_semantic_candidate
 from .semantic import recall_mode
-from .state import (
-    active_profile,
-    clean_string_list,
-    configured_provider_config,
-    setting_map,
-)
+from .state import active_profile
 
 LOG = logging.getLogger("xivpulse")
 SCREENING_RETRY_DELAYS = (5.0, 30.0)
@@ -40,17 +36,12 @@ async def analyze_papers(
 ) -> dict[str, Any]:
     with SessionLocal() as db:
         profile = active_profile(db)
-        settings = setting_map(db)
-        limit = int(limit if limit is not None else settings.get("deep_analysis_top_n", 5))
-        threshold = float(settings.get("deep_relevance_threshold", 90))
-        screen_batch_size = max(
-            1,
-            int(settings.get("screen_batch_size", settings.get("screen_top_n", 30)) or 30),
-        )
-        selected_recall_mode = recall_mode(settings.get("semantic_recall_mode"))
-        today = report_date or current_date_in_timezone(
-            str(settings.get("timezone", "Asia/Shanghai"))
-        )
+        settings = load_runtime_settings(db)
+        limit = int(limit if limit is not None else settings.deep_analysis_top_n)
+        threshold = settings.deep_relevance_threshold
+        screen_batch_size = max(1, settings.screen_batch_size)
+        selected_recall_mode = recall_mode(settings.semantic_recall_mode)
+        today = report_date or current_date_in_timezone(settings.timezone)
         recent_matches = (
             db.scalars(
                 select(PaperMatch)
@@ -69,9 +60,7 @@ async def analyze_papers(
             .unique()
             .all()
         )
-        watched_authors = {
-            value.casefold() for value in clean_string_list(settings.get("author_watchlist", []))
-        }
+        watched_authors = {value.casefold() for value in settings.author_watchlist}
         existing_queue_keys = set(
             db.scalars(
                 select(ScreeningQueueItem.paper_id).where(
@@ -121,10 +110,10 @@ async def analyze_papers(
                 item.last_error = None
                 item.completed_at = None
         db.commit()
-    config = configured_provider_config(settings)
+    config = settings.provider
     adapter = OpenAICompatibleAdapter(config=config)
-    budget_mode = str(settings.get("analysis_budget_mode") or "balanced")
-    prompt_settings = resolve_prompt_settings(settings)
+    budget_mode = settings.analysis_budget_mode
+    prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
         adapter,
         budget_mode=budget_mode,

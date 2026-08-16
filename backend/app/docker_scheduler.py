@@ -9,8 +9,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import desc, select
 
+from .config import load_runtime_settings
 from .database import SessionLocal
-from .models import AppSetting, Job
+from .models import Job
 from .runtime import initialize_application
 from .workflow import daily_pipeline
 
@@ -19,10 +20,8 @@ LOG = logging.getLogger("xivpulse.scheduler")
 
 def _settings() -> tuple[str, str]:
     with SessionLocal() as session:
-        values = {item.key: item.value for item in session.scalars(select(AppSetting)).all()}
-    return str(values.get("schedule_time") or "13:30"), str(
-        values.get("timezone") or "Asia/Shanghai"
-    )
+        settings = load_runtime_settings(session)
+    return settings.schedule_time, settings.timezone
 
 
 def _timezone(value: str) -> ZoneInfo | timezone:

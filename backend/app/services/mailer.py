@@ -11,7 +11,7 @@ from html import escape
 from typing import Any
 from urllib.parse import urlencode
 
-from ..env import env_value
+from ..config import RuntimeSettings
 
 
 @dataclass(frozen=True)
@@ -30,50 +30,21 @@ class SmtpConfig:
         return bool(self.host and self.sender and self.recipients)
 
 
-def _env_or_setting(env_name: str, settings: Mapping[str, Any], key: str, default: Any) -> Any:
-    suffix = env_name.removeprefix("XIVPULSE_").removeprefix("ARXIV_DAILY_")
-    value = env_value(f"XIVPULSE_{suffix}", f"ARXIV_DAILY_{suffix}")
-    if value is not None:
-        return value
-    return settings.get(key, default)
-
-
-def smtp_config(settings: Mapping[str, Any]) -> SmtpConfig:
-    raw_recipients = _env_or_setting(
-        "XIVPULSE_EMAIL_RECIPIENTS", settings, "email_recipients", []
-    )
-    if isinstance(raw_recipients, str):
-        recipients = tuple(value.strip() for value in raw_recipients.split(",") if value.strip())
-    else:
-        recipients = tuple(
-            str(value).strip() for value in raw_recipients or [] if str(value).strip()
-        )
-    security = str(
-        _env_or_setting("XIVPULSE_SMTP_SECURITY", settings, "smtp_security", "starttls")
-    ).casefold()
-    if security not in {"starttls", "ssl"}:
-        raise ValueError("SMTP security must be starttls or ssl")
+def smtp_config(settings: RuntimeSettings) -> SmtpConfig:
     return SmtpConfig(
-        host=str(_env_or_setting("XIVPULSE_SMTP_HOST", settings, "smtp_host", "")).strip(),
-        port=int(_env_or_setting("XIVPULSE_SMTP_PORT", settings, "smtp_port", 587)),
-        security=security,
-        username=str(
-            _env_or_setting("XIVPULSE_SMTP_USERNAME", settings, "smtp_username", "")
-        ).strip(),
-        password=str(_env_or_setting("XIVPULSE_SMTP_PASSWORD", settings, "smtp_password", "")),
-        sender=str(_env_or_setting("XIVPULSE_SMTP_FROM", settings, "smtp_from", "")).strip(),
-        recipients=recipients,
-        public_base_url=str(
-            _env_or_setting("XIVPULSE_PUBLIC_BASE_URL", settings, "public_base_url", "")
-        ).rstrip("/"),
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        security=settings.smtp_security,
+        username=settings.smtp_username,
+        password=settings.smtp_password,
+        sender=settings.smtp_from,
+        recipients=settings.email_recipients,
+        public_base_url=settings.public_base_url,
     )
 
 
-def email_enabled(settings: Mapping[str, Any]) -> bool:
-    environment = env_value("XIVPULSE_EMAIL_ENABLED", "ARXIV_DAILY_EMAIL_ENABLED")
-    if environment is not None:
-        return environment.strip().casefold() in {"1", "true", "yes", "on"}
-    return bool(settings.get("email_enabled", False))
+def email_enabled(settings: RuntimeSettings) -> bool:
+    return settings.email_enabled
 
 
 def _report_url(config: SmtpConfig, report_date: str) -> str:

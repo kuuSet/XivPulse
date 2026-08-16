@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..config import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Topic
 from .arxiv.affiliations import enrich_affiliations
@@ -18,7 +19,7 @@ from .arxiv.semantic_scholar import SemanticScholarClient
 from .paper_recall import SemanticMatcher, recall_papers
 from .semantic import match_papers as semantic_match_papers
 from .semantic import recall_mode
-from .state import active_profile, clean_string_list, setting_map
+from .state import active_profile
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,16 +39,14 @@ def latest_complete_submission_date(now: datetime | None = None) -> date:
 def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
     with factory() as db:
         profile = active_profile(db)
-        settings = setting_map(db)
+        settings = load_runtime_settings(db)
         return _SyncOptions(
             profile_id=profile.id,
             topics=list(profile.topics),
-            author_watchlist=clean_string_list(settings.get("author_watchlist", [])),
-            max_results=int(settings.get("max_results", 1000)),
-            batch_size=int(
-                settings.get("screen_batch_size", settings.get("screen_top_n", 30)) or 0
-            ),
-            recall_mode=recall_mode(settings.get("semantic_recall_mode")),
+            author_watchlist=list(settings.author_watchlist),
+            max_results=settings.max_results,
+            batch_size=settings.screen_batch_size,
+            recall_mode=recall_mode(settings.semantic_recall_mode),
         )
 
 

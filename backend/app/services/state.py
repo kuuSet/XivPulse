@@ -1,47 +1,14 @@
-"""Shared access to persisted application settings and the active profile."""
+"""Shared access to the active research profile and normalized string lists."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..config import ProviderConfig, get_process_config
-from ..models import AppSetting, Profile
-
-
-def setting_map(db: Session) -> dict[str, Any]:
-    return {item.key: item.value for item in db.scalars(select(AppSetting)).all()}
-
-
-def set_setting(db: Session, key: str, value: Any) -> None:
-    setting = db.get(AppSetting, key)
-    if setting is None:
-        db.add(AppSetting(key=key, value_json=value))
-    else:
-        setting.value = value
-
-
-def configured_provider_config(settings: dict[str, Any]) -> ProviderConfig:
-    """Overlay database provider settings without exposing stored credentials."""
-
-    config = get_process_config().provider
-    return replace(
-        config,
-        provider_name=str(settings.get("provider_name") or config.provider_name),
-        base_url=str(settings.get("base_url") or config.base_url),
-        model=str(settings.get("model") or config.model),
-        api_key=settings.get("api_key") or config.api_key,
-        config_source=(
-            "database"
-            if any(key in settings for key in ("base_url", "model", "api_key"))
-            else config.config_source
-        ),
-        key_source="database" if settings.get("api_key") else config.key_source,
-    )
+from ..models import Profile
 
 
 def active_profile(db: Session) -> Profile:

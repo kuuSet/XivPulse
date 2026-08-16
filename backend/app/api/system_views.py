@@ -8,23 +8,16 @@ from typing import Any
 from sqlalchemy import Integer, desc, func, select
 from sqlalchemy.orm import Session
 
-from ..config import get_process_config, provider_status
-from ..env import xivpulse_env
+from ..config import load_runtime_settings, provider_status, setting_value
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
-from ..services.mailer import email_enabled
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..services.semantic import RECALL_THRESHOLDS, embedding_status, recall_mode
-from ..services.state import clean_string_list, setting_map
 from .presenters import _as_utc
 
 
 def _settings_wire(db: Session) -> dict[str, Any]:
-    values = setting_map(db)
-    config = get_process_config().provider
-    saved_key = values.get("api_key")
-    base_url = values.get("base_url") or config.base_url
-    model = values.get("model") or config.model
-    analysis_budget_mode = str(values.get("analysis_budget_mode") or "balanced")
+    settings = load_runtime_settings(db)
+    config = settings.provider
     bind = db.get_bind()
     database_path: str | None = None
     database_size_bytes: int | None = None
@@ -35,42 +28,38 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             database_size_bytes = path.stat().st_size if path.exists() else 0
         except (OSError, ValueError):
             pass
-    prompt_settings = resolve_prompt_settings(values)
-    screen_batch_size = int(values.get("screen_batch_size", values.get("screen_top_n", 30)) or 0)
-    smtp_password = str(xivpulse_env("SMTP_PASSWORD") or values.get("smtp_password") or "")
+    prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
-        "provider": values.get("provider_name") or config.provider_name,
-        "provider_name": values.get("provider_name") or config.provider_name,
-        "base_url": base_url,
-        "model": model,
-        "api_key_configured": bool(saved_key or config.api_key),
-        "source": "database"
-        if any(key in values for key in ("base_url", "model", "api_key"))
-        else config.config_source,
+        "provider": config.provider_name,
+        "provider_name": config.provider_name,
+        "base_url": config.base_url,
+        "model": config.model,
+        "api_key_configured": not config.mock_mode,
+        "source": config.config_source,
         "config_source": config.config_source,
-        "key_source": "database" if saved_key else config.key_source,
-        "refresh_time": values.get("schedule_time", "13:30"),
-        "schedule_time": values.get("schedule_time", "13:30"),
-        "timezone": values.get("timezone", "Asia/Shanghai"),
-        "max_candidates": values.get("max_results", 1000),
-        "max_results": values.get("max_results", 1000),
-        "screen_top_n": screen_batch_size,
-        "screen_batch_size": screen_batch_size,
-        "semantic_recall_mode": recall_mode(values.get("semantic_recall_mode")),
+        "key_source": config.key_source,
+        "refresh_time": settings.schedule_time,
+        "schedule_time": settings.schedule_time,
+        "timezone": settings.timezone,
+        "max_candidates": settings.max_results,
+        "max_results": settings.max_results,
+        "screen_top_n": settings.screen_batch_size,
+        "screen_batch_size": settings.screen_batch_size,
+        "semantic_recall_mode": recall_mode(settings.semantic_recall_mode),
         "semantic_recall_presets": {
             mode: {"semantic_threshold": RECALL_THRESHOLDS[mode]}
             for mode in ("high", "balanced", "precise")
         },
         "embedding": {
             **embedding_status(),
-            "backfill": values.get("embedding_backfill", {"status": "pending"}),
+            "backfill": setting_value(db, "embedding_backfill", {"status": "pending"}),
         },
-        "deep_analysis_limit": values.get("deep_analysis_top_n", 5),
-        "deep_analysis_top_n": values.get("deep_analysis_top_n", 5),
-        "deep_relevance_threshold": values.get("deep_relevance_threshold", 90),
-        "retention_days": values.get("retention_days", 365),
-        "analysis_budget_mode": analysis_budget_mode,
-        "daily_ai_synthesis_enabled": bool(values.get("daily_ai_synthesis_enabled", True)),
+        "deep_analysis_limit": settings.deep_analysis_top_n,
+        "deep_analysis_top_n": settings.deep_analysis_top_n,
+        "deep_relevance_threshold": settings.deep_relevance_threshold,
+        "retention_days": settings.retention_days,
+        "analysis_budget_mode": settings.analysis_budget_mode,
+        "daily_ai_synthesis_enabled": settings.daily_ai_synthesis_enabled,
         **prompt_settings,
         "automatic_cleanup_enabled": False,
         "database_path": database_path,
@@ -82,27 +71,16 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         ),
         "token_usage": _token_usage_summary(db),
         "api_mode": config.api_mode,
-        "mock_mode": not bool(saved_key or config.api_key),
-        "email_enabled": email_enabled(values),
-        "smtp_host": str(xivpulse_env("SMTP_HOST") or values.get("smtp_host") or ""),
-        "smtp_port": int(xivpulse_env("SMTP_PORT") or values.get("smtp_port") or 587),
-        "smtp_security": str(
-            xivpulse_env("SMTP_SECURITY") or values.get("smtp_security") or "starttls"
-        ),
-        "smtp_username": str(xivpulse_env("SMTP_USERNAME") or values.get("smtp_username") or ""),
-        "smtp_password_configured": bool(smtp_password),
-        "smtp_from": str(xivpulse_env("SMTP_FROM") or values.get("smtp_from") or ""),
-        "email_recipients": clean_string_list(
-            [
-                item.strip()
-                for item in str(xivpulse_env("EMAIL_RECIPIENTS", "")).split(",")
-                if item.strip()
-            ]
-            or values.get("email_recipients")
-        ),
-        "public_base_url": str(
-            xivpulse_env("PUBLIC_BASE_URL") or values.get("public_base_url") or ""
-        ),
+        "mock_mode": config.mock_mode,
+        "email_enabled": settings.email_enabled,
+        "smtp_host": settings.smtp_host,
+        "smtp_port": settings.smtp_port,
+        "smtp_security": settings.smtp_security,
+        "smtp_username": settings.smtp_username,
+        "smtp_password_configured": bool(settings.smtp_password),
+        "smtp_from": settings.smtp_from,
+        "email_recipients": list(settings.email_recipients),
+        "public_base_url": settings.public_base_url,
     }
 
 
@@ -226,19 +204,4 @@ def _token_usage_summary(db: Session) -> dict[str, Any]:
 
 
 def _provider_public_status(db: Session) -> dict[str, Any]:
-    settings = setting_map(db)
-    public = provider_status()
-    if settings.get("provider_name"):
-        public["provider_name"] = settings["provider_name"]
-    if settings.get("base_url"):
-        public["base_url"] = settings["base_url"]
-    if settings.get("model"):
-        public["model"] = settings["model"]
-    if settings.get("api_key"):
-        public.update(
-            api_key_configured=True,
-            mock_mode=False,
-            key_source="database",
-            config_source="database",
-        )
-    return public
+    return provider_status(load_runtime_settings(db).provider)

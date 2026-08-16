@@ -7,7 +7,7 @@ from pathlib import Path
 import app.config as config_module
 import httpx
 import pytest
-from app.config import ProviderConfig, provider_status
+from app.config import ProviderConfig, load_runtime_settings, provider_status, set_setting
 from app.database import init_db, make_engine
 from app.database_defaults import DEFAULT_TOPICS
 from app.domain.paper import Paper as PaperDocument
@@ -110,6 +110,42 @@ def test_public_config_does_not_read_codex_credentials_without_opt_in(
     assert config.mock_mode is True
     assert config.config_source == "defaults"
     assert config.key_source == "none"
+
+
+def test_runtime_settings_use_environment_then_database_then_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = make_engine("sqlite:///:memory:")
+    init_db(engine)
+    with Session(engine) as session:
+        set_setting(session, "schedule_time", "08:00")
+        set_setting(session, "max_results", 250)
+        set_setting(session, "base_url", "https://database.test/v1")
+        set_setting(session, "model", "database-model")
+        set_setting(session, "api_key", "database-secret")
+        session.commit()
+
+        monkeypatch.setenv("XIVPULSE_SCHEDULE_TIME", "09:15")
+        monkeypatch.setenv("XIVPULSE_MODEL", "environment-model")
+        monkeypatch.setenv("XIVPULSE_SMTP_HOST", "smtp.environment.test")
+        monkeypatch.setenv(
+            "XIVPULSE_EMAIL_RECIPIENTS",
+            "first@example.com, second@example.com",
+        )
+        process = config_module._build_process_config()
+        settings = load_runtime_settings(session, process=process)
+
+    assert settings.schedule_time == "09:15"
+    assert settings.max_results == 250
+    assert settings.provider.base_url == "https://database.test/v1"
+    assert settings.provider.model == "environment-model"
+    assert settings.provider.api_key == "database-secret"
+    assert settings.provider.key_source == "database"
+    assert settings.smtp_host == "smtp.environment.test"
+    assert settings.email_recipients == (
+        "first@example.com",
+        "second@example.com",
+    )
 
 
 def test_context_anchor_migration_updates_only_exact_prototype_defaults(

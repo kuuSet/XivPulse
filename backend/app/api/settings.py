@@ -14,16 +14,14 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..config import get_process_config
+from ..config import delete_setting, load_runtime_settings, set_setting
 from ..database import get_db
-from ..models import Analysis, AppSetting, Paper, Topic, utcnow
+from ..models import Analysis, Paper, Topic, utcnow
 from ..schemas import ProfileUpdate
 from ..services.analytics import current_date_in_timezone
 from ..services.daily_reports import persist_daily_report, send_daily_report_email
 from ..services.direction_catalog import direction_catalog_payload
 from ..services.method_catalog import (
-    METHOD_CANDIDATE_MIN_PAPERS,
-    METHOD_CANDIDATE_WINDOW_DAYS,
     clean_custom_methods,
     discover_method_candidates,
     method_catalog_payload,
@@ -35,7 +33,7 @@ from ..services.prompt_catalog import (
     prompt_catalog_payload,
 )
 from ..services.semantic import SemanticEmbeddingError, embedding_status
-from ..services.state import active_profile, clean_string_list, set_setting, setting_map
+from ..services.state import active_profile, clean_string_list
 from .presenters import _profile_wire
 from .system_views import _settings_wire
 
@@ -136,11 +134,11 @@ class CustomMethodsPayload(BaseModel):
 
 @router.get("/api/profile")
 def get_profile(db: Session = Depends(get_db)) -> dict[str, Any]:
-    settings = setting_map(db)
+    settings = load_runtime_settings(db)
     return _profile_wire(
         active_profile(db),
-        float(settings.get("deep_relevance_threshold", 90)),
-        clean_string_list(settings.get("author_watchlist", [])),
+        settings.deep_relevance_threshold,
+        list(settings.author_watchlist),
     )
 
 
@@ -205,11 +203,11 @@ def update_profile(
                 db.delete(topic)
     db.commit()
     db.refresh(profile)
-    settings = setting_map(db)
+    settings = load_runtime_settings(db)
     return _profile_wire(
         active_profile(db),
-        float(settings.get("deep_relevance_threshold", 90)),
-        clean_string_list(settings.get("author_watchlist", [])),
+        settings.deep_relevance_threshold,
+        list(settings.author_watchlist),
     )
 
 
@@ -259,9 +257,7 @@ def update_settings(payload: SettingsPayload, db: Session = Depends(get_db)) -> 
             continue
         value = values[source]
         if target in {"api_key", "smtp_password"} and value == "":
-            setting = db.get(AppSetting, target)
-            if setting:
-                db.delete(setting)
+            delete_setting(db, target)
         elif target not in {"api_key", "smtp_password"} or value:
             set_setting(db, target, value)
     if "screen_top_n" in values or "screen_batch_size" in values:
@@ -309,17 +305,17 @@ def _method_candidate_records(db: Session, window_days: int) -> list[dict[str, A
 
 @router.get("/api/methods/catalog")
 def methods_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
-    settings = setting_map(db)
-    return method_catalog_payload(clean_custom_methods(settings.get("custom_method_terms")))
+    settings = load_runtime_settings(db)
+    return method_catalog_payload(clean_custom_methods(list(settings.custom_method_terms)))
 
 
 @router.get("/api/methods/candidates")
 def method_candidates(db: Session = Depends(get_db)) -> dict[str, Any]:
-    settings = setting_map(db)
-    window_days = int(settings.get("method_candidate_window_days", METHOD_CANDIDATE_WINDOW_DAYS))
-    min_papers = int(settings.get("method_candidate_min_papers", METHOD_CANDIDATE_MIN_PAPERS))
-    custom = clean_custom_methods(settings.get("custom_method_terms"))
-    dismissed = clean_string_list(settings.get("dismissed_method_candidates", []))
+    settings = load_runtime_settings(db)
+    window_days = settings.method_candidate_window_days
+    min_papers = settings.method_candidate_min_papers
+    custom = clean_custom_methods(list(settings.custom_method_terms))
+    dismissed = list(settings.dismissed_method_candidates)
     candidates = discover_method_candidates(
         _method_candidate_records(db, window_days),
         custom_values=custom,
@@ -341,7 +337,7 @@ def accept_method_candidate(
     payload: MethodCandidateDecisionPayload,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    settings = setting_map(db)
+    settings = load_runtime_settings(db)
     candidates = method_candidates(db)["items"]
     candidate = next(
         (item for item in candidates if item["key"] == normalize_method_key(payload.key)),
@@ -350,7 +346,7 @@ def accept_method_candidate(
     if candidate is None:
         raise HTTPException(status_code=404, detail="该候选已不存在或不再满足重复门槛")
     name = str(payload.name or candidate["name"]).strip()
-    custom = clean_custom_methods(settings.get("custom_method_terms"))
+    custom = clean_custom_methods(list(settings.custom_method_terms))
     if normalize_method_key(name) in {normalize_method_key(item["name"]) for item in custom}:
         raise HTTPException(status_code=409, detail="自定义方法中已经存在同名标签")
     aliases = clean_string_list(
@@ -368,8 +364,8 @@ def dismiss_method_candidate(
     payload: MethodCandidateDecisionPayload,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    settings = setting_map(db)
-    dismissed = clean_string_list(settings.get("dismissed_method_candidates", []))
+    settings = load_runtime_settings(db)
+    dismissed = list(settings.dismissed_method_candidates)
     key = normalize_method_key(payload.key)
     if key and key not in {normalize_method_key(item) for item in dismissed}:
         dismissed.append(key)
@@ -393,13 +389,10 @@ def replace_custom_methods(
 async def test_provider(
     payload: ProviderTestPayload, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    settings = setting_map(db)
-    process_provider = get_process_config().provider
-    key = payload.api_key or settings.get("api_key") or process_provider.api_key
-    base_url = (
-        payload.base_url or settings.get("base_url") or process_provider.base_url
-    ).rstrip("/")
-    model = payload.model or settings.get("model") or process_provider.model
+    settings = load_runtime_settings(db)
+    key = payload.api_key or settings.provider.api_key
+    base_url = (payload.base_url or settings.provider.base_url).rstrip("/")
+    model = payload.model or settings.provider.model
     if not key:
         return {
             "ok": True,
@@ -412,10 +405,10 @@ async def test_provider(
         from ..services.provider import OpenAICompatibleAdapter
 
         config = replace(
-            process_provider,
+            settings.provider,
             provider_name=payload.provider
             or payload.provider_name
-            or settings.get("provider_name")
+            or settings.provider.provider_name
             or "openai-compatible",
             base_url=base_url,
             model=model,
@@ -445,13 +438,13 @@ async def test_embedding_model() -> dict[str, Any]:
 @router.post("/api/settings/email/test")
 async def test_email_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
     profile = active_profile(db)
-    settings = setting_map(db)
-    selected_date = current_date_in_timezone(str(settings.get("timezone", "Asia/Shanghai")))
+    settings = load_runtime_settings(db)
+    selected_date = current_date_in_timezone(settings.timezone)
     snapshot = persist_daily_report(
         db,
         profile.id,
         report_date=selected_date,
-        timezone_name=str(settings.get("timezone", "Asia/Shanghai")),
+        timezone_name=settings.timezone,
         refresh=False,
     )
     db.commit()

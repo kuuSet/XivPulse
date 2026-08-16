@@ -11,6 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from ..config import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import (
     DailyResearchReport,
@@ -31,7 +32,7 @@ from .report_synthesis import (
     report_source_hash,
     synthesis_has_enough_data,
 )
-from .state import active_profile, configured_provider_config, setting_map
+from .state import active_profile
 
 LOG = logging.getLogger("xivpulse")
 
@@ -51,7 +52,7 @@ def create_digest(digest_date: date | None = None) -> dict[str, Any]:
             .order_by(desc(PaperMatch.relevance_score))
             .limit(20)
         ).all()
-        timezone_name = str(setting_map(db).get("timezone", "Asia/Shanghai"))
+        timezone_name = load_runtime_settings(db).timezone
         today = digest_date or current_date_in_timezone(timezone_name)
         digest = db.scalar(
             select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == today)
@@ -109,7 +110,9 @@ def persist_daily_report(
         timezone_name=timezone_name,
         highlight_limit=min(max_papers, 10),
         reading_queue_limit=max_papers,
-        custom_method_terms=clean_custom_methods(setting_map(db).get("custom_method_terms", [])),
+        custom_method_terms=clean_custom_methods(
+            list(load_runtime_settings(db).custom_method_terms)
+        ),
     )
     encoded = jsonable_encoder(report)
     if not isinstance(encoded, dict):
@@ -144,7 +147,7 @@ def create_daily_report(
 
     with session_scope() as db:
         profile = active_profile(db)
-        timezone_name = str(setting_map(db).get("timezone", "Asia/Shanghai"))
+        timezone_name = load_runtime_settings(db).timezone
         selected_date = report_date or current_date_in_timezone(timezone_name)
         snapshot = persist_daily_report(
             db,
@@ -214,7 +217,7 @@ async def synthesize_daily_report(
 
     with session_scope() as db:
         profile = active_profile(db)
-        settings = setting_map(db)
+        settings = load_runtime_settings(db)
         snapshot = db.scalar(
             select(DailyResearchReport).where(
                 DailyResearchReport.profile_id == profile.id,
@@ -227,8 +230,7 @@ async def synthesize_daily_report(
         previous_value = report.get("ai_synthesis")
         previous = dict(previous_value) if isinstance(previous_value, dict) else None
         source_hash = report_source_hash(report)
-        enabled = bool(settings.get("daily_ai_synthesis_enabled", True))
-        if respect_enabled and not enabled:
+        if respect_enabled and not settings.daily_ai_synthesis_enabled:
             if previous is None:
                 report["ai_synthesis"] = _synthesis_state(
                     None, status_name="disabled", source_hash=source_hash
@@ -252,7 +254,7 @@ async def synthesize_daily_report(
             and previous.get("source_hash") == source_hash
         ):
             return {"report_synthesis_status": "ready", "report_date": report_date.isoformat()}
-        config = configured_provider_config(settings)
+        config = settings.provider
         if config.mock_mode:
             report["ai_synthesis"] = _synthesis_state(
                 previous, status_name="not_configured", source_hash=source_hash
@@ -263,7 +265,7 @@ async def synthesize_daily_report(
                 "report_synthesis_status": "not_configured",
                 "report_date": report_date.isoformat(),
             }
-        budget_mode = str(settings.get("analysis_budget_mode") or "balanced")
+        budget_mode = settings.analysis_budget_mode
         run = ReportSynthesisRun(
             profile_id=profile.id,
             report_id=snapshot.id,
@@ -361,7 +363,7 @@ async def send_daily_report_email(
 ) -> dict[str, Any]:
     with SessionLocal() as db:
         profile = active_profile(db)
-        settings = setting_map(db)
+        settings = load_runtime_settings(db)
         if require_enabled and not email_enabled(settings):
             return {"email_status": "disabled", "email_sent": 0, "email_failed": 0}
         config = smtp_config(settings)

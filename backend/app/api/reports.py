@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from ..config import load_runtime_settings
 from ..database import SessionLocal, get_db
 from ..models import DailyResearchReport, Digest, Paper, PaperMatch
 from ..services.analytics import build_research_roadmap, build_topic_trends
@@ -20,7 +21,7 @@ from ..services.daily_reports import (
     synthesize_daily_report,
 )
 from ..services.direction_taxonomy import direction_taxonomy_fingerprint
-from ..services.state import active_profile, setting_map
+from ..services.state import active_profile
 from .presenters import _as_utc, _digest_wire, _paper_wire, _query_papers
 
 router = APIRouter()
@@ -94,7 +95,7 @@ def topic_trends(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    timezone_name = str(setting_map(db).get("timezone", "Asia/Shanghai"))
+    timezone_name = load_runtime_settings(db).timezone
     return build_topic_trends(
         db,
         profile.id,
@@ -112,7 +113,7 @@ def research_roadmap(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    timezone_name = str(setting_map(db).get("timezone", "Asia/Shanghai"))
+    timezone_name = load_runtime_settings(db).timezone
     return build_research_roadmap(
         db,
         profile.id,
@@ -157,7 +158,7 @@ def _get_or_refresh_daily_research_report(
     refresh: bool,
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    timezone_name = str(setting_map(db).get("timezone", "Asia/Shanghai"))
+    timezone_name = load_runtime_settings(db).timezone
     selected_date = report_date
     if selected_date is None:
         selected_date = db.scalar(

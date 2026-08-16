@@ -1446,9 +1446,9 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient,
 ) -> None:
+    from app.config import set_setting
     from app.services.paper_sync import sync_papers
     from app.services.semantic import SemanticEmbeddingError
-    from app.services.state import set_setting
 
     record = PaperDocument(
         arxiv_id="2608.09991",

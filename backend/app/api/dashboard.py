@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from ..config import load_runtime_settings
 from ..database import get_db
 from ..models import (
     Analysis,
@@ -25,7 +26,7 @@ from ..models import (
 from ..services.direction_taxonomy import direction_taxonomy_fingerprint
 from ..services.jobs import RUNNING_STATUSES
 from ..services.semantic import RECALL_THRESHOLDS, recall_mode
-from ..services.state import active_profile, clean_string_list, setting_map
+from ..services.state import active_profile
 from .presenters import _as_utc, _digest_wire, _job_wire, _paper_wire, _profile_wire, _query_papers
 from .system_views import _provider_public_status, _settings_wire
 
@@ -122,7 +123,7 @@ def dashboard(
         .order_by(desc(Job.completed_at), desc(Job.created_at))
     )
     latest_result = latest_daily_job.result if latest_daily_job is not None else {}
-    current_settings = setting_map(db)
+    current_settings = load_runtime_settings(db)
     recent_cutoff = utcnow() - timedelta(days=7)
     pending_screening = (
         db.scalar(
@@ -133,7 +134,7 @@ def dashboard(
         )
         or 0
     )
-    deep_threshold = float(current_settings.get("deep_relevance_threshold", 90))
+    deep_threshold = current_settings.deep_relevance_threshold
     pending_deep = (
         db.scalar(
             select(func.count(PaperMatch.id)).where(
@@ -172,11 +173,9 @@ def dashboard(
             "latest_deep_analyzed_count": int(latest_result.get("analyzed", 0) or 0),
             "pending_screening_count": pending_screening,
             "pending_deep_count": pending_deep,
-            "screening_limit": int(
-                current_settings.get("screen_batch_size", current_settings.get("screen_top_n", 30))
-            ),
+            "screening_limit": current_settings.screen_batch_size,
             "screening_semantic_threshold": RECALL_THRESHOLDS[
-                recall_mode(current_settings.get("semantic_recall_mode"))
+                recall_mode(current_settings.semantic_recall_mode)
             ],
             "screening_queue_total": int(latest_result.get("screening_queue_total", 0) or 0),
             "screening_completed": int(latest_result.get("screening_completed", 0) or 0),
@@ -184,7 +183,7 @@ def dashboard(
             "screening_current_batch": int(latest_result.get("screening_batches", 0) or 0),
             "screening_total_batches": int(latest_result.get("screening_total_batches", 0) or 0),
             "report_incomplete": bool(latest_result.get("report_incomplete", False)),
-            "deep_analysis_limit": int(current_settings.get("deep_analysis_top_n", 5)),
+            "deep_analysis_limit": current_settings.deep_analysis_top_n,
             "deep_relevance_threshold": deep_threshold,
         },
         "items": items,
@@ -192,7 +191,7 @@ def dashboard(
         "profile": _profile_wire(
             profile,
             deep_threshold,
-            clean_string_list(current_settings.get("author_watchlist", [])),
+            list(current_settings.author_watchlist),
         ),
         "settings": _settings_wire(db),
         "stats": {

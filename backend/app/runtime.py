@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from .config import get_process_config
+from .config import get_process_config, set_setting
 from .database import init_db, session_scope
 from .models import Job, Paper, PaperMatch, utcnow
 from .services.auth import auth_config
@@ -16,7 +16,7 @@ from .services.direction_matching import canonical_requested_direction_names
 from .services.jobs import RUNNING_STATUSES
 from .services.semantic import MODEL_ID as SEMANTIC_MODEL_ID
 from .services.semantic import match_papers as semantic_match_papers
-from .services.state import active_profile, set_setting
+from .services.state import active_profile
 
 LOG = logging.getLogger("xivpulse")
 _initialization_lock = threading.Lock()
