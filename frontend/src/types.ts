@@ -532,6 +532,20 @@ export interface AppStatus {
   latest_job?: JobInfo | null
 }
 
+export interface JobCalendarDay {
+  date: string
+  status: 'completed' | 'partial'
+  fetched: number
+  screened: number
+  analyzed: number
+  message: string
+}
+
+export interface JobCalendarData {
+  month: string
+  days: JobCalendarDay[]
+}
+
 export interface AuthSession {
   enabled: boolean
   authenticated: boolean

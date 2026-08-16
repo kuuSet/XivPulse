@@ -18,6 +18,7 @@ from app.models import (
     Digest,
     EmailDelivery,
     Feedback,
+    Job,
     Paper,
     PaperEmbedding,
     PaperMatch,
@@ -1275,6 +1276,99 @@ def test_digest_status_and_missing_job(client: TestClient) -> None:
     assert preview.status_code == 200
     assert preview.json()["persisted"] is False
     assert client.get("/api/jobs/does-not-exist").status_code == 404
+
+
+def test_job_calendar_uses_latest_daily_job_in_configured_timezone(
+    client: TestClient,
+) -> None:
+    with database.SessionLocal() as session:
+        session.add_all(
+            [
+                Job(
+                    kind="daily",
+                    status="completed",
+                    created_at=datetime(2026, 7, 31, 17, tzinfo=UTC),
+                    result_json={"fetched": 12, "screened": 4, "analyzed": 2},
+                ),
+                Job(
+                    kind="daily",
+                    status="failed",
+                    created_at=datetime(2026, 8, 2, 1, tzinfo=UTC),
+                    error="temporary failure",
+                ),
+                Job(
+                    kind="daily",
+                    status="completed",
+                    created_at=datetime(2026, 8, 2, 2, tzinfo=UTC),
+                    result_json={"fetched": 20, "screened": 6, "analyzed": 3},
+                ),
+                Job(
+                    kind="daily",
+                    status="completed",
+                    created_at=datetime(2026, 8, 3, 2, tzinfo=UTC),
+                    message="任务已完成",
+                    result_json={"fetched": 10, "report_incomplete": True},
+                ),
+                Job(
+                    kind="daily",
+                    status="failed",
+                    created_at=datetime(2026, 8, 4, 2, tzinfo=UTC),
+                    error="network unavailable",
+                ),
+                Job(
+                    kind="sync",
+                    status="completed",
+                    created_at=datetime(2026, 8, 5, 2, tzinfo=UTC),
+                ),
+                Job(
+                    kind="daily",
+                    status="completed",
+                    created_at=datetime(2026, 7, 31, 8, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/job-calendar?month=2026-08")
+    assert response.status_code == 200
+    assert response.json() == {
+        "month": "2026-08",
+        "days": [
+            {
+                "date": "2026-08-01",
+                "status": "completed",
+                "fetched": 12,
+                "screened": 4,
+                "analyzed": 2,
+                "message": "任务完整完成",
+            },
+            {
+                "date": "2026-08-02",
+                "status": "completed",
+                "fetched": 20,
+                "screened": 6,
+                "analyzed": 3,
+                "message": "任务完整完成",
+            },
+            {
+                "date": "2026-08-03",
+                "status": "partial",
+                "fetched": 10,
+                "screened": 0,
+                "analyzed": 0,
+                "message": "任务已完成",
+            },
+            {
+                "date": "2026-08-04",
+                "status": "partial",
+                "fetched": 0,
+                "screened": 0,
+                "analyzed": 0,
+                "message": "network unavailable",
+            },
+        ],
+    }
+    assert client.get("/api/job-calendar?month=2026-13").status_code == 422
 
 
 @pytest.mark.asyncio

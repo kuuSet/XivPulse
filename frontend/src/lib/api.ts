@@ -10,6 +10,7 @@ import type {
   DashboardData,
   FeedbackReason,
   FeedbackWriteAction,
+  JobCalendarData,
   Profile,
   ProjectDraft,
   ProjectMembership,
@@ -85,6 +86,7 @@ export const api = {
     request<DashboardData>(`/dashboard${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   refresh: () => request<{ job_id: string; status: string; message: string }>('/refresh', { method: 'POST' }),
   status: () => request<AppStatus>('/status'),
+  jobCalendar: (month: string) => request<JobCalendarData>(`/job-calendar?month=${encodeURIComponent(month)}`),
   papers: (query: PaperQuery = {}) => {
     const params = new URLSearchParams()
     Object.entries(query).forEach(([key, value]) => {

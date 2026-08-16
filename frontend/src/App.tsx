@@ -78,6 +78,7 @@ import type {
   Settings,
   MethodCandidate,
   MethodCatalog,
+  JobCalendarData,
   JobInfo,
   TopicTrendItem,
   TopicTrends,
@@ -676,6 +677,8 @@ function PaperWorkspace(props: PaperWorkspaceProps) {
         </section>
       )}
 
+      {mode === 'today' && <RunCalendar refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} />}
+
       <section className="paper-workbench">
         <div className={`paper-column ${mode === 'library' ? 'paginated' : ''}`}>
           <div className="paper-tools">
@@ -748,6 +751,66 @@ function JobStatusBanner({ job }: { job: JobInfo }) {
     ? `抓取 ${Number(result.fetched ?? 0)} 篇 · 初筛 ${Number(result.screened ?? 0)}/${Number(result.screening_queue_total ?? result.screened ?? 0)} 篇 · 失败 ${Number(result.screening_failed ?? 0)} 篇 · 深读 ${Number(result.analyzed ?? 0)} 篇`
     : failed ? (job.error || job.message || '任务失败') : (job.message || '正在执行每日流程')
   return <section className={`job-status-banner ${failed ? 'failed' : running ? 'running' : 'completed'}`} aria-live="polite"><div>{running ? <LoaderCircle className="spin" size={17} /> : failed ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}<span><strong>{running ? '每日任务进行中' : failed ? '最近一次任务失败' : '最近一次任务已完成'}</strong><small>{summary}</small></span></div><div className="job-progress"><span style={{ width: `${Math.max(running ? 4 : 0, Math.min(100, job.progress ?? 0))}%` }} /></div></section>
+}
+
+function RunCalendar({ refreshToken }: { refreshToken: string }) {
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [month, setMonth] = useState(currentMonth)
+  const [data, setData] = useState<JobCalendarData | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    setError('')
+    if (isDemo) {
+      setData({ month, days: [] })
+      return () => { active = false }
+    }
+    void api.jobCalendar(month)
+      .then((result) => { if (active) setData(result) })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : '任务日历加载失败')
+      })
+    return () => { active = false }
+  }, [month, refreshToken])
+
+  const [year, monthNumber] = month.split('-').map(Number)
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const firstWeekday = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7
+  const dayCount = new Date(year, monthNumber, 0).getDate()
+  const daysByDate = new globalThis.Map(data?.days.map((day) => [day.date, day]) ?? [])
+  const cells = [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: dayCount }, (_, index) => index + 1)]
+  const monthLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(new Date(year, monthNumber - 1, 1))
+  const moveMonth = (offset: number) => {
+    const target = new Date(year, monthNumber - 1 + offset, 1)
+    setMonth(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  return (
+    <section className="run-calendar" aria-label="日更任务日历">
+      <header>
+        <div><span>日更记录</span><h2>{monthLabel}</h2></div>
+        <div className="calendar-controls">
+          <span><i className="completed" />完整完成</span>
+          <span><i className="partial" />未完整完成</span>
+          <button className="icon-button" onClick={() => moveMonth(-1)} aria-label="上个月"><ChevronLeft size={16} /></button>
+          <button className="icon-button" onClick={() => moveMonth(1)} aria-label="下个月"><ChevronRight size={16} /></button>
+        </div>
+      </header>
+      <div className="calendar-weekdays" aria-hidden="true">{['一', '二', '三', '四', '五', '六', '日'].map((day) => <span key={day}>{day}</span>)}</div>
+      <div className="calendar-grid">
+        {cells.map((day, index) => {
+          if (day === null) return <span className="calendar-empty" key={`empty-${index}`} />
+          const date = `${month}-${String(day).padStart(2, '0')}`
+          const record = daysByDate.get(date)
+          const title = record ? `${record.message}；抓取 ${record.fetched}，初筛 ${record.screened}，深读 ${record.analyzed}` : '当天没有运行日更任务'
+          return <div className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''}`} title={title} key={date}><strong>{day}</strong>{record && <small>抓取 {record.fetched}</small>}</div>
+        })}
+      </div>
+      {error && <p className="calendar-error">{error}</p>}
+    </section>
+  )
 }
 
 function Metric({ label, value, note, accent = false }: { label: string; value: number; note: string; accent?: boolean }) {
