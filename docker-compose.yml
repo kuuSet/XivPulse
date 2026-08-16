@@ -45,5 +45,19 @@ services:
     healthcheck:
       disable: true
 
+  e2e:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    environment:
+      PLAYWRIGHT_BASE_URL: http://xivpulse:8765
+    volumes:
+      - ./playwright-report:/work/playwright-report
+      - ./test-results:/work/test-results
+    depends_on:
+      xivpulse:
+        condition: service_healthy
+
 volumes:
   xivpulse-data:

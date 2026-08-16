@@ -207,6 +207,14 @@ Set-Location frontend
 npm run build
 ```
 
+运行 Chromium 无头界面测试：
+
+```powershell
+docker compose --profile e2e run --rm --build e2e
+```
+
+首次运行会下载独立的 Playwright 开发镜像；浏览器不会进入 XivPulse 生产镜像。
+
 CI 会在每次 Push 和 Pull Request 中执行敏感信息扫描、Ruff、后端测试、前端生产构建和 Docker 镜像构建。欢迎通过 Issue 描述使用场景和问题，也欢迎提交范围清晰、包含验证方式的 Pull Request。
 
 ## License
