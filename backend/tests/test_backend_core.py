@@ -44,6 +44,7 @@ from app.services.prompt_catalog import (
     prompt_catalog_payload,
 )
 from app.services.provider import OpenAICompatibleAdapter
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -111,6 +112,93 @@ def test_public_config_does_not_read_codex_credentials_without_opt_in(
     assert config.key_source == "none"
 
 
+def test_process_config_imports_codex_only_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "XIVPULSE_PROVIDER_NAME",
+        "XIVPULSE_BASE_URL",
+        "XIVPULSE_MODEL",
+        "XIVPULSE_API_KEY",
+        "OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("XIVPULSE_IMPORT_CODEX_CONFIG", "true")
+    monkeypatch.setattr(
+        config_module,
+        "_load_codex_config",
+        lambda: {
+            "model_provider": "codex-provider",
+            "model": "codex-model",
+            "model_providers": {
+                "codex-provider": {
+                    "base_url": "https://codex.test/v1/",
+                    "wire_api": "chat",
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(config_module, "_load_codex_api_key", lambda: "codex-secret")
+
+    provider = config_module._build_process_config().provider
+
+    assert provider.provider_name == "codex-provider"
+    assert provider.base_url == "https://codex.test/v1"
+    assert provider.model == "codex-model"
+    assert provider.api_mode == "chat"
+    assert provider.api_key == "codex-secret"
+    assert provider.key_source == "codex-auth"
+
+
+def test_environment_key_fallback_and_secrets_are_hidden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("XIVPULSE_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
+    monkeypatch.setenv("XIVPULSE_SESSION_SECRET", "session-secret")
+    config = config_module._build_process_config()
+
+    assert config.provider.api_key == "openai-secret"
+    assert config.provider.key_source == "environment:OPENAI_API_KEY"
+    assert "openai-secret" not in repr(config.provider)
+    assert "session-secret" not in repr(config)
+    assert "openai-secret" not in json.dumps(config.model_dump(), default=str)
+    assert "session-secret" not in json.dumps(config.model_dump(), default=str)
+
+
+def test_invalid_configuration_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XIVPULSE_PORT", "70000")
+    with pytest.raises(ValidationError, match="port"):
+        config_module._build_process_config()
+
+    monkeypatch.delenv("XIVPULSE_PORT")
+    engine = make_engine("sqlite:///:memory:")
+    init_db(engine)
+    with Session(engine) as session:
+        set_setting(session, "max_results", 1001)
+        session.commit()
+        with pytest.raises(ValidationError, match="max_results"):
+            load_runtime_settings(session)
+
+        set_setting(session, "max_results", 1000)
+        set_setting(session, "semantic_recall_mode", "wide")
+        session.commit()
+        with pytest.raises(ValidationError, match="semantic_recall_mode"):
+            load_runtime_settings(session)
+
+
+def test_runtime_secrets_are_hidden_from_repr_and_serialization() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    init_db(engine)
+    with Session(engine) as session:
+        set_setting(session, "smtp_password", "smtp-secret")
+        session.commit()
+        settings = load_runtime_settings(session)
+
+    assert "smtp-secret" not in repr(settings)
+    assert "smtp-secret" not in json.dumps(settings.model_dump(), default=str)
+
+
 def test_runtime_settings_use_environment_then_database_then_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -129,7 +217,7 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
         monkeypatch.setenv("XIVPULSE_SMTP_HOST", "smtp.environment.test")
         monkeypatch.setenv(
             "XIVPULSE_EMAIL_RECIPIENTS",
-            "first@example.com, second@example.com",
+            "first@example.com, second@example.com, FIRST@example.com",
         )
         process = config_module._build_process_config()
         settings = load_runtime_settings(session, process=process)

@@ -2,58 +2,109 @@
 
 from __future__ import annotations
 
+import json
 import os
-import re
-from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+from pydantic import Field, field_validator
+from pydantic_settings import (
+    BaseSettings,
+    NoDecode,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 from sqlalchemy import select
 
-from .process import (
-    ProcessConfig,
-    ProviderConfig,
-    _environment,
-    _nonempty_environment,
-    _normalise_base_url,
-    _string_or_none,
-    get_process_config,
-)
+from .process import ProcessConfig, ProviderConfig, _string_tuple, get_process_config
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
+StringTuple = Annotated[tuple[str, ...], NoDecode]
+JsonTuple = Annotated[tuple[Any, ...], NoDecode]
 
-@dataclass(frozen=True, slots=True)
-class RuntimeSettings:
+
+class RuntimeSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="XIVPULSE_",
+        extra="ignore",
+        frozen=True,
+        str_strip_whitespace=True,
+    )
+
     provider: ProviderConfig
-    schedule_time: str = "13:30"
+    schedule_time: str = Field(default="13:30", pattern=r"(?:[01]\d|2[0-3]):[0-5]\d")
     timezone: str = "Asia/Shanghai"
-    max_results: int = 1000
-    screen_batch_size: int = 30
+    max_results: int = Field(default=1000, ge=1, le=1000)
+    screen_batch_size: int = Field(default=30, ge=0, le=500)
     semantic_recall_mode: Literal["high", "balanced", "precise"] = "high"
-    deep_analysis_top_n: int = 5
-    deep_relevance_threshold: float = 90.0
-    retention_days: int = 365
+    deep_analysis_top_n: int = Field(default=5, ge=0, le=100)
+    deep_relevance_threshold: float = Field(default=90.0, ge=0.0, le=100.0)
+    retention_days: int = Field(default=365, ge=1, le=3650)
     analysis_budget_mode: Literal["economy", "balanced", "deep"] = "balanced"
     daily_ai_synthesis_enabled: bool = True
     analysis_prompt_template_id: str = "balanced-review"
     screening_prompt: str | None = None
     deep_prompt: str | None = None
-    custom_method_terms: tuple[Any, ...] = ()
-    dismissed_method_candidates: tuple[str, ...] = ()
-    method_candidate_window_days: int = 30
-    method_candidate_min_papers: int = 2
-    author_watchlist: tuple[str, ...] = ()
+    custom_method_terms: JsonTuple = ()
+    dismissed_method_candidates: StringTuple = ()
+    method_candidate_window_days: int = Field(default=30, ge=1, le=365)
+    method_candidate_min_papers: int = Field(default=2, ge=2, le=100)
+    author_watchlist: StringTuple = ()
     email_enabled: bool = False
     smtp_host: str = ""
-    smtp_port: int = 587
+    smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_security: Literal["starttls", "ssl"] = "starttls"
     smtp_username: str = ""
-    smtp_password: str = field(default="", repr=False, compare=False)
+    smtp_password: str = Field(default="", repr=False, exclude=True)
     smtp_from: str = ""
-    email_recipients: tuple[str, ...] = ()
+    email_recipients: StringTuple = ()
     public_base_url: str = ""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return env_settings, init_settings
+
+    @field_validator(
+        "dismissed_method_candidates",
+        "author_watchlist",
+        "email_recipients",
+        mode="before",
+    )
+    @classmethod
+    def parse_string_tuple(cls, value: Any) -> tuple[str, ...]:
+        return _string_tuple(value)
+
+    @field_validator("custom_method_terms", mode="before")
+    @classmethod
+    def parse_custom_method_terms(cls, value: Any) -> tuple[Any, ...]:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("expected a JSON array") from exc
+        if not isinstance(value, list | tuple):
+            raise ValueError("expected a sequence")
+        return tuple(value)
+
+    @field_validator("screening_prompt", "deep_prompt", mode="before")
+    @classmethod
+    def empty_prompt_is_none(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @field_validator("public_base_url")
+    @classmethod
+    def normalise_public_base_url(cls, value: str) -> str:
+        return value.rstrip("/")
 
     def prompt_values(self) -> dict[str, Any]:
         return {
@@ -69,133 +120,39 @@ def _setting_values(db: Session) -> dict[str, Any]:
     return {item.key: item.value for item in db.scalars(select(AppSetting)).all()}
 
 
-def _configured_value(
-    values: Mapping[str, Any],
-    key: str,
-    default: Any,
-    *,
-    environment_name: str | None = None,
-) -> Any:
-    environment = _environment(environment_name or key.upper())
-    if environment is not None:
-        return environment
-    return values.get(key, default)
-
-
-def _bounded_int(
-    values: Mapping[str, Any],
-    key: str,
-    default: int,
-    minimum: int,
-    maximum: int,
-) -> int:
-    try:
-        parsed = int(_configured_value(values, key, default))
-    except (TypeError, ValueError):
-        return default
-    return min(max(parsed, minimum), maximum)
-
-
-def _bounded_float(
-    values: Mapping[str, Any],
-    key: str,
-    default: float,
-    minimum: float,
-    maximum: float,
-) -> float:
-    try:
-        parsed = float(_configured_value(values, key, default))
-    except (TypeError, ValueError):
-        return default
-    return min(max(parsed, minimum), maximum)
-
-
-def _configured_bool(values: Mapping[str, Any], key: str, default: bool) -> bool:
-    value = _configured_value(values, key, default)
-    if isinstance(value, bool):
-        return value
-    normalized = str(value).strip().casefold()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
-def _configured_text(values: Mapping[str, Any], key: str, default: str = "") -> str:
-    value = _configured_value(values, key, default)
-    return str(value).strip() if value is not None else default
-
-
-def _optional_text(values: Mapping[str, Any], key: str) -> str | None:
-    value = _configured_value(values, key, None)
-    cleaned = str(value).strip() if value is not None else ""
-    return cleaned or None
-
-
-def _string_tuple(value: Any) -> tuple[str, ...]:
-    if isinstance(value, str):
-        values = value.split(",")
-    elif isinstance(value, list | tuple | set):
-        values = value
-    else:
-        return ()
-    result: list[str] = []
-    seen: set[str] = set()
-    for item in values:
-        cleaned = str(item).strip()
-        key = cleaned.casefold()
-        if cleaned and key not in seen:
-            seen.add(key)
-            result.append(cleaned)
-    return tuple(result)
-
-
-def _effective_provider(values: Mapping[str, Any], process: ProcessConfig) -> ProviderConfig:
+def _effective_provider(values: dict[str, Any], process: ProcessConfig) -> ProviderConfig:
     configured = process.provider
-    provider_environment = any(
-        _nonempty_environment(name)
-        for name in ("PROVIDER_NAME", "BASE_URL", "MODEL", "API_KEY")
-    )
-    environment_key = bool(
-        _nonempty_environment("API_KEY") or _string_or_none(os.getenv("OPENAI_API_KEY"))
-    )
     database_provider = any(
         values.get(key) for key in ("provider_name", "base_url", "model", "api_key")
     )
-
-    def database_or_process(key: str, environment_name: str, fallback: Any) -> Any:
-        if _nonempty_environment(environment_name):
-            return fallback
-        return values.get(key) or fallback
-
-    api_key = (
-        configured.api_key if environment_key else values.get("api_key") or configured.api_key
+    provider_environment = any(
+        os.getenv(f"XIVPULSE_{name}")
+        for name in ("PROVIDER_NAME", "BASE_URL", "MODEL", "API_KEY")
     )
-    source = (
-        configured.config_source
-        if provider_environment
-        else "database"
-        if database_provider
-        else configured.config_source
-    )
-    key_source = (
-        configured.key_source
-        if environment_key or not values.get("api_key")
-        else "database"
-    )
-    return replace(
-        configured,
-        provider_name=str(
-            database_or_process("provider_name", "PROVIDER_NAME", configured.provider_name)
+    environment_key = bool(os.getenv("XIVPULSE_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    return ProviderConfig(
+        provider_name=values.get("provider_name") or configured.provider_name,
+        base_url=values.get("base_url") or configured.base_url,
+        model=values.get("model") or configured.model,
+        api_mode=configured.api_mode,
+        api_key=(
+            configured.api_key
+            if environment_key
+            else values.get("api_key") or configured.api_key
         ),
-        base_url=_normalise_base_url(
-            str(database_or_process("base_url", "BASE_URL", configured.base_url))
+        config_source=(
+            configured.config_source
+            if provider_environment
+            else "database"
+            if database_provider
+            else configured.config_source
         ),
-        model=str(database_or_process("model", "MODEL", configured.model)),
-        api_key=api_key,
-        config_source=source,
-        key_source=key_source,
+        key_source=(
+            configured.key_source
+            if environment_key or not values.get("api_key")
+            else "database"
+        ),
+        request_timeout=configured.request_timeout,
     )
 
 
@@ -206,64 +163,7 @@ def load_runtime_settings(
 ) -> RuntimeSettings:
     process = process or get_process_config()
     values = _setting_values(db)
-    schedule_time = _configured_text(values, "schedule_time", "13:30")
-    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", schedule_time):
-        schedule_time = "13:30"
-    recall = _configured_text(values, "semantic_recall_mode", "high").casefold()
-    if recall not in {"high", "balanced", "precise"}:
-        recall = "high"
-    budget = _configured_text(values, "analysis_budget_mode", "balanced").casefold()
-    if budget not in {"economy", "balanced", "deep"}:
-        budget = "balanced"
-    security = _configured_text(values, "smtp_security", "starttls").casefold()
-    if security not in {"starttls", "ssl"}:
-        security = "starttls"
-    custom_methods = values.get("custom_method_terms", [])
-    dismissed = values.get("dismissed_method_candidates", [])
-    return RuntimeSettings(
-        provider=_effective_provider(values, process),
-        schedule_time=schedule_time,
-        timezone=_configured_text(values, "timezone", "Asia/Shanghai"),
-        max_results=_bounded_int(values, "max_results", 1000, 1, 1000),
-        screen_batch_size=_bounded_int(values, "screen_batch_size", 30, 0, 500),
-        semantic_recall_mode=cast(Literal["high", "balanced", "precise"], recall),
-        deep_analysis_top_n=_bounded_int(values, "deep_analysis_top_n", 5, 0, 100),
-        deep_relevance_threshold=_bounded_float(
-            values, "deep_relevance_threshold", 90.0, 0.0, 100.0
-        ),
-        retention_days=_bounded_int(values, "retention_days", 365, 1, 3650),
-        analysis_budget_mode=cast(Literal["economy", "balanced", "deep"], budget),
-        daily_ai_synthesis_enabled=_configured_bool(
-            values, "daily_ai_synthesis_enabled", True
-        ),
-        analysis_prompt_template_id=_configured_text(
-            values, "analysis_prompt_template_id", "balanced-review"
-        ),
-        screening_prompt=_optional_text(values, "screening_prompt"),
-        deep_prompt=_optional_text(values, "deep_prompt"),
-        custom_method_terms=(
-            tuple(custom_methods) if isinstance(custom_methods, list | tuple) else ()
-        ),
-        dismissed_method_candidates=_string_tuple(dismissed),
-        method_candidate_window_days=_bounded_int(
-            values, "method_candidate_window_days", 30, 1, 365
-        ),
-        method_candidate_min_papers=_bounded_int(
-            values, "method_candidate_min_papers", 2, 2, 100
-        ),
-        author_watchlist=_string_tuple(values.get("author_watchlist", [])),
-        email_enabled=_configured_bool(values, "email_enabled", False),
-        smtp_host=_configured_text(values, "smtp_host"),
-        smtp_port=_bounded_int(values, "smtp_port", 587, 1, 65535),
-        smtp_security=cast(Literal["starttls", "ssl"], security),
-        smtp_username=_configured_text(values, "smtp_username"),
-        smtp_password=_configured_text(values, "smtp_password"),
-        smtp_from=_configured_text(values, "smtp_from"),
-        email_recipients=_string_tuple(
-            _configured_value(values, "email_recipients", [])
-        ),
-        public_base_url=_configured_text(values, "public_base_url").rstrip("/"),
-    )
+    return RuntimeSettings(provider=_effective_provider(values, process), **values)
 
 
 def setting_value(db: Session, key: str, default: Any = None) -> Any:
