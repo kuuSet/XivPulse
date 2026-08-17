@@ -203,7 +203,7 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
       </section>
       <div className="form-layout profile-form-layout">
         <div className="form-main">
-          <FormSection title="关注列表" description="研究方向决定语义召回；作者和机构只对已通过门槛的论文调整处理顺序。">
+          <FormSection title="关注列表" description="研究方向决定语义召回；作者和机构用于“今日论文”中的关注项排序。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
                 {profile.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" key={topic.id ?? `new-${index}`}>
@@ -215,10 +215,6 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
                 <button className="interest-add-tag" type="button" onClick={() => setPickerOpen(true)} aria-label="添加关注项" title="添加关注项"><Plus size={16} /></button>
               </div>
               <p>建议保留 3–12 个边界清晰的研究方向；所有修改都会自动保存。</p>
-              <div className="watch-priority-options">
-                <label className="toggle-field"><input type="checkbox" checked={profile.prioritize_watched_authors} onChange={(event) => setProfile({ ...profile, prioritize_watched_authors: event.target.checked })} /><span><strong>关注作者优先</strong><small>命中完整作者姓名的候选优先初筛和深读</small></span></label>
-                <label className="toggle-field"><input type="checkbox" checked={profile.prioritize_watched_organizations} onChange={(event) => setProfile({ ...profile, prioritize_watched_organizations: event.target.checked })} /><span><strong>关注机构优先</strong><small>命中机构名称的候选优先初筛和深读</small></span></label>
-              </div>
             </div>
           </FormSection>
           <details className="form-section optional-section">

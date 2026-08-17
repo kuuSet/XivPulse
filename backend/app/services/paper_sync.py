@@ -43,7 +43,7 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
             fetch_limit=settings.arxiv_fetch_limit,
             affiliation_limit=(
                 100
-                if settings.prioritize_watched_organizations and settings.watched_organizations
+                if settings.watched_organizations
                 else settings.screening_batch_size
             ),
             recall_mode=settings.semantic_recall_mode,

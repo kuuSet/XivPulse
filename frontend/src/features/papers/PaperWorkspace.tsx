@@ -33,12 +33,14 @@ interface PaperWorkspaceProps {
   onToast: (kind: Toast['kind'], message: string) => void
 }
 
+type PaperSort = 'recommendation' | 'relevance' | 'time' | 'watched_authors' | 'watched_organizations'
+
 export function PaperWorkspace(props: PaperWorkspaceProps) {
   const { mode, data, state, error, selectedId, refreshing, job, onRetry, onRefresh, onSelect, onCloseDetail, onFeedback, onSaveReading, onSaveDetailedFeedback, projects, onProjectsChange, onToast } = props
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [priority, setPriority] = useState(mode === 'today' ? 'recommended' : 'all')
-  const [sort, setSort] = useState<'recommendation' | 'relevance' | 'time'>('recommendation')
+  const [sort, setSort] = useState<PaperSort>('recommendation')
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(Boolean(new URLSearchParams(window.location.search).get('paper')))
   const [linkedPaper, setLinkedPaper] = useState<Paper | null>(null)
@@ -51,6 +53,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
 
   useEffect(() => {
     setPriority(mode === 'today' ? 'recommended' : 'all')
+    setSort('recommendation')
   }, [mode])
 
   useEffect(() => {
@@ -69,7 +72,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
         priority: priority === 'recommended' ? 'high' : undefined,
         feedback: priority === 'saved' ? 'save' : undefined,
         reading_state: priority === 'unread' ? 'unread' : undefined,
-        sort,
+        sort: sort === 'watched_authors' || sort === 'watched_organizations' ? 'recommendation' : sort,
         limit: pageSize,
         offset: (page - 1) * pageSize,
       }).then((result) => {
@@ -96,6 +99,8 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
     if (mode === 'library' && !isDemo) return [...(libraryPage?.items ?? [])]
     const normalized = query.trim().toLowerCase()
     const source = mode === 'library' && isDemo ? sampleDashboard.items : data?.items ?? []
+    const watchedAuthors = new Set((data?.profile?.watched_authors ?? []).map(authorIdentity))
+    const watchedOrganizations = (data?.profile?.watched_organizations ?? []).map(organizationIdentity)
     return [...source]
       .filter((paper) => {
         if (category !== 'all' && !paper.categories.includes(category)) return false
@@ -111,6 +116,14 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
       .sort((a, b) => {
         if (sort === 'time') return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
         if (sort === 'relevance') return b.relevance_score - a.relevance_score
+        if (sort === 'watched_authors') {
+          const priorityDifference = Number(matchesWatchedAuthor(b, watchedAuthors)) - Number(matchesWatchedAuthor(a, watchedAuthors))
+          if (priorityDifference) return priorityDifference
+        }
+        if (sort === 'watched_organizations') {
+          const priorityDifference = Number(matchesWatchedOrganization(b, watchedOrganizations)) - Number(matchesWatchedOrganization(a, watchedOrganizations))
+          if (priorityDifference) return priorityDifference
+        }
         return b.relevance_score - a.relevance_score
       })
   }, [data, libraryPage, mode, query, category, priority, sort])
@@ -132,6 +145,17 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   const selected = papersWithMemberships.find((paper) => String(paper.id) === String(selectedId))
     ?? (linkedPaper && String(linkedPaper.id) === String(selectedId) ? linkedPaper : null)
     ?? (selectedId === null ? papersWithMemberships[0] : null)
+  const sortOptions: Array<[PaperSort, string]> = [
+    ['recommendation', '推荐优先'],
+    ['relevance', '相关度优先'],
+    ['time', '最新提交'],
+  ]
+  if (mode === 'today') {
+    sortOptions.push(
+      ['watched_authors', '关注作者优先'],
+      ['watched_organizations', '关注机构优先'],
+    )
+  }
 
   useEffect(() => {
     const linkedId = new URLSearchParams(window.location.search).get('paper')
@@ -239,9 +263,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
             <SelectControl value={category} onChange={setCategory} label="分类" options={[
               ['all', '全部分类'], ...categories.map((item) => [item, item] as [string, string]),
             ]} />
-            <SelectControl value={sort} onChange={(value) => setSort(value as typeof sort)} label="排序" icon={<ArrowDownUp size={14} />} options={[
-              ['recommendation', '推荐优先'], ['relevance', '相关度优先'], ['time', '最新提交'],
-            ]} />
+            <SelectControl value={sort} onChange={(value) => setSort(value as typeof sort)} label="排序" icon={<ArrowDownUp size={14} />} options={sortOptions} />
           </div>
 
           <div className="result-summary">
@@ -282,6 +304,25 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
       </section>
     </div>
   )
+}
+
+function authorIdentity(value: string) {
+  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+}
+
+function organizationIdentity(value: string) {
+  return value.normalize('NFKC').trim().replace(/[^\p{L}\p{N}]+/gu, ' ').toLocaleLowerCase()
+}
+
+function matchesWatchedAuthor(paper: Paper, watched: Set<string>) {
+  return paper.authors.some((author) => watched.has(authorIdentity(author)))
+}
+
+function matchesWatchedOrganization(paper: Paper, watched: string[]) {
+  return (paper.affiliations ?? []).some((affiliation) => {
+    const normalized = ` ${organizationIdentity(affiliation)} `
+    return watched.some((organization) => normalized.includes(` ${organization} `))
+  })
 }
 
 function JobStatusBanner({ job }: { job: JobInfo }) {
@@ -351,12 +392,12 @@ function RunCalendar({ busy, refreshToken, onRun }: { busy: boolean; refreshToke
           const date = `${month}-${String(day).padStart(2, '0')}`
           const record = daysByDate.get(date)
           const unavailable = !data || date > data.latest_available_date
-          const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；抓取 ${record.fetched}，初筛 ${record.screened}，深读 ${record.analyzed}` : '尚未筛选，点击后可以补跑'
-          return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === selectedDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => setSelectedDate(date)} title={title} key={date}><strong>{day}</strong>{record && <small>初筛 {record.screened}</small>}</button>
+          const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；当前语义候选 ${record.candidates}，AI 初筛 ${record.screened}，待初筛 ${record.pending_screening}` : '尚未筛选，点击后可以补跑'
+          return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === selectedDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => setSelectedDate(date)} title={title} key={date}><strong>{day}</strong>{record && <small>候选 {record.candidates}</small>}</button>
         })}
       </div>
       {selectedDate && data && <div className={`calendar-detail ${selectedRecord?.status ?? 'missing'}`}>
-        <div><span>{formatArchiveDate(selectedDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 初筛 ${selectedRecord.screened} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
+        <div><span>{formatArchiveDate(selectedDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord?.pending_screening ? '有新的语义候选待初筛' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 语义候选 ${selectedRecord.candidates} · AI 初筛 ${selectedRecord.screened} · 待初筛 ${selectedRecord.pending_screening} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
         {selectedRecord?.status !== 'completed' && <button className="button primary compact" disabled={busy} onClick={() => onRun(selectedDate)}><RefreshCw className={busy ? 'spin' : ''} size={14} />{busy ? '任务进行中' : selectedRecord ? '继续补跑' : '补跑这一天'}</button>}
         <button className="icon-button" onClick={() => setSelectedDate(null)} aria-label="关闭日期详情"><X size={15} /></button>
       </div>}

@@ -65,10 +65,6 @@ class RuntimeSettings(BaseSettings):
     watched_authors: tuple[str, ...] = ()
     watched_organizations: tuple[str, ...] = ()
 
-    # Watched author and organization processing priority.
-    prioritize_watched_authors: bool = False
-    prioritize_watched_organizations: bool = False
-
     # Email delivery controls.
     email_enabled: bool = False
     email_recipients: tuple[str, ...] = ()

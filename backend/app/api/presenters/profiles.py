@@ -31,8 +31,6 @@ def _profile_wire(
         "categories": categories,
         "watched_authors": list(settings.watched_authors),
         "watched_organizations": list(settings.watched_organizations),
-        "prioritize_watched_authors": settings.prioritize_watched_authors,
-        "prioritize_watched_organizations": settings.prioritize_watched_organizations,
         "min_relevance": settings.deep_analysis_threshold,
         "topics": [
             {

@@ -5,7 +5,6 @@ test('research interests use a unified auto-saved watch list', async ({ page }) 
     topics: Array<{ name: string }>
     watched_authors: string[]
     watched_organizations: string[]
-    prioritize_watched_authors: boolean
   }> = []
   await page.route('**/api/profile', async (route) => {
     if (route.request().method() !== 'PUT') {
@@ -58,9 +57,6 @@ test('research interests use a unified auto-saved watch list', async ({ page }) 
   await expect.poll(() => savedProfiles.at(-1)?.watched_organizations).toContain('NVIDIA Research')
 
   await dialog.getByRole('button', { name: '关闭' }).click()
-  await page.getByText('关注作者优先', { exact: true }).click()
-  await expect.poll(() => savedProfiles.at(-1)?.prioritize_watched_authors).toBe(true)
-
   await interests.getByRole('button', { name: `删除 ${customLabel}` }).click()
   await expect.poll(() => savedProfiles.at(-1)?.topics.some((topic) => topic.name === customLabel)).toBe(false)
   expect(savedProfiles.at(-1)?.topics.some((topic) => topic.name === customLabel)).toBe(false)

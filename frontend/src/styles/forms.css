@@ -116,9 +116,6 @@
 .interest-options > button.selected { border-color: #b7d8c8; color: #4c705f; background: var(--green-soft); }
 .interest-options > button:disabled { cursor: default; opacity: .68; }
 .interest-empty { width: 100%; margin: 0; padding: 18px 10px; color: var(--quiet); background: var(--soft); font-size: 9px; text-align: center; }
-.watch-priority-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.watch-priority-options .toggle-field { margin: 0; }
-
 .optional-section > summary {
   display: flex;
   min-height: 43px;

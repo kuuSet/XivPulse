@@ -253,7 +253,6 @@
   .range-readout { align-items: flex-start; }
   .range-readout span { min-width: 0; overflow-wrap: anywhere; }
   .field-grid.two { grid-template-columns: 1fr; }
-  .watch-priority-options { grid-template-columns: 1fr; }
   .analysis-thresholds { grid-template-columns: 1fr; }
   .analysis-thresholds article p { min-height: 0; }
   .database-status { grid-template-columns: 1fr 1fr; }

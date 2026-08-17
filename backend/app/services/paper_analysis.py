@@ -7,7 +7,7 @@ import logging
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import joinedload
 
 from ..database import SessionLocal, session_scope
@@ -17,7 +17,6 @@ from .analyzer import PaperAnalyzer
 from .directions.matching import canonical_requested_direction_names
 from .directions.taxonomy import stamp_direction_attribution
 from .jobs import update_job_progress
-from .paper_priority import PaperPriorityPolicy
 from .prompt_catalog import resolve_prompt_settings
 from .provider import OpenAICompatibleAdapter, ProviderError
 from .reporting.records import current_date_in_timezone
@@ -42,12 +41,6 @@ async def analyze_papers(
         screening_batch_size = max(1, settings.screening_batch_size)
         selected_recall_mode = settings.semantic_recall_mode
         recall_service = get_semantic_services().recall
-        priority_policy = PaperPriorityPolicy(
-            watched_authors=settings.watched_authors,
-            watched_organizations=settings.watched_organizations,
-            prioritize_authors=settings.prioritize_watched_authors,
-            prioritize_organizations=settings.prioritize_watched_organizations,
-        )
         today = report_date or current_date_in_timezone(settings.schedule_timezone)
         paper_date_condition = (
             PaperMatch.paper.has(
@@ -176,30 +169,22 @@ async def analyze_papers(
     with SessionLocal() as db:
         profile = active_profile(db)
         queue_order_query = (
-            select(ScreeningQueueItem)
-            .options(joinedload(ScreeningQueueItem.paper))
+            select(ScreeningQueueItem.id)
             .where(
                 ScreeningQueueItem.profile_id == profile.id,
                 ScreeningQueueItem.status == "queued",
+            )
+            .order_by(
+                ScreeningQueueItem.report_date,
+                desc(ScreeningQueueItem.semantic_score),
+                ScreeningQueueItem.id,
             )
         )
         if report_date:
             queue_order_query = queue_order_query.where(
                 ScreeningQueueItem.report_date == report_date
             )
-        queued_items = db.scalars(queue_order_query).unique().all()
-        pending_queue_ids = [
-            item.id
-            for item in sorted(
-                queued_items,
-                key=lambda item: (
-                    item.report_date,
-                    -priority_policy.rank(item.paper),
-                    -(item.semantic_score if item.semantic_score is not None else -1.0),
-                    item.id,
-                ),
-            )
-        ]
+        pending_queue_ids = list(db.scalars(queue_order_query).all())
 
     while pending_queue_ids:
         batch_ids = pending_queue_ids[:screening_batch_size]
@@ -377,7 +362,6 @@ async def analyze_papers(
         matches = sorted(
             matches,
             key=lambda match: (
-                -priority_policy.rank(match.paper),
                 -(match.relevance_score or 0.0),
                 -(match.semantic_score or 0.0),
                 match.id,

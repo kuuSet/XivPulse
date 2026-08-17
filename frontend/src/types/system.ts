@@ -30,7 +30,9 @@ interface JobCalendarDay {
   date: string
   status: 'completed' | 'partial'
   fetched: number
+  candidates: number
   screened: number
+  pending_screening: number
   analyzed: number
   message: string
 }

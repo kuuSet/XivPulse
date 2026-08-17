@@ -271,8 +271,6 @@ function toProfile(profile: BackendProfile | Profile): Profile {
     categories: profile.categories ?? unique(enabled.flatMap((topic) => topic.arxiv_categories ?? [])),
     watched_authors: profile.watched_authors ?? [],
     watched_organizations: profile.watched_organizations ?? [],
-    prioritize_watched_authors: profile.prioritize_watched_authors ?? false,
-    prioritize_watched_organizations: profile.prioritize_watched_organizations ?? false,
     min_relevance: profile.min_relevance ?? 80,
   }
 }
@@ -299,8 +297,6 @@ function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: n
     })),
     watched_authors: unique(profile.watched_authors),
     watched_organizations: unique(profile.watched_organizations),
-    prioritize_watched_authors: profile.prioritize_watched_authors,
-    prioritize_watched_organizations: profile.prioritize_watched_organizations,
     min_relevance: profile.min_relevance,
   }
 }

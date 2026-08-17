@@ -76,8 +76,6 @@ class ProfileUpdate(BaseModel):
     topics: list[TopicWrite] | None = None
     watched_authors: list[str] | None = None
     watched_organizations: list[str] | None = None
-    prioritize_watched_authors: bool | None = None
-    prioritize_watched_organizations: bool | None = None
 
     @model_validator(mode="after")
     def validate_topic_directions(self) -> ProfileUpdate:

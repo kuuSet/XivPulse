@@ -63,13 +63,6 @@ def update_profile(
         value = getattr(validated, field)
         if value is not None:
             set_setting(db, field, clean_string_list(value))
-    for field in (
-        "prioritize_watched_authors",
-        "prioritize_watched_organizations",
-    ):
-        value = getattr(validated, field)
-        if value is not None:
-            set_setting(db, field, value)
     for field in ("name", "description", "language", "active"):
         value = getattr(validated, field)
         if value is not None:

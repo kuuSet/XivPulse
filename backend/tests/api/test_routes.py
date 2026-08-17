@@ -263,79 +263,6 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
 
 
 @pytest.mark.asyncio
-async def test_watched_author_and_organization_rank_screening_candidates(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.schemas import ScreeningResult
-    from app.services import paper_analysis
-    from app.services import provider as provider_module
-    from app.settings import set_setting
-
-    screened_order: list[str] = []
-    with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
-        direction = profile.topics[0].name
-        set_setting(session, "screening_batch_size", 1)
-        set_setting(session, "watched_authors", ["Jane Doe"])
-        set_setting(session, "watched_organizations", ["NVIDIA"])
-        set_setting(session, "prioritize_watched_authors", True)
-        set_setting(session, "prioritize_watched_organizations", True)
-        candidates = [
-            ("both", ["Jane Doe"], ["NVIDIA Research"], 0.7),
-            ("author", ["Jane Doe"], ["Other Lab"], 0.8),
-            ("neither", ["John Doe"], ["Other Lab"], 0.9),
-        ]
-        for index, (title, authors, affiliations, score) in enumerate(candidates):
-            paper = Paper(
-                arxiv_id=f"2608.3000{index}",
-                title=title,
-                abstract="Priority ordering candidate.",
-                authors_json=authors,
-                affiliations_json=affiliations,
-                categories_json=["cs.AI"],
-                primary_category="cs.AI",
-                last_seen_at=datetime.now(UTC),
-            )
-            session.add(paper)
-            session.flush()
-            session.add(
-                PaperMatch(
-                    paper_id=paper.id,
-                    profile_id=profile.id,
-                    semantic_score=score,
-                )
-            )
-        session.commit()
-
-    class FakePaperAnalyzer:
-        def __init__(self, _adapter: object, **_options: object) -> None:
-            pass
-
-        async def screen_with_metadata(self, paper: Paper, _profile: Profile) -> object:
-            screened_order.append(paper.title)
-            return provider_module.GenerationResult(
-                data=ScreeningResult(
-                    relevant=True,
-                    relevance_score=90,
-                    reason="Relevant fake result",
-                    matched_topics=[direction],
-                    key_contributions=[],
-                    tags=[],
-                ),
-                transport="mock",
-                provider="test",
-                model="test",
-            )
-
-    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakePaperAnalyzer)
-
-    result = await paper_analysis.analyze_papers(limit=0)
-
-    assert result["screened"] == 3
-    assert screened_order == ["both", "author", "neither"]
-
-
-@pytest.mark.asyncio
 async def test_analysis_does_not_hide_constructor_errors(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -520,8 +447,6 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     profile_payload["min_relevance"] = 75
     profile_payload["watched_authors"] = ["A. Author"]
     profile_payload["watched_organizations"] = ["NVIDIA Research"]
-    profile_payload["prioritize_watched_authors"] = True
-    profile_payload["prioritize_watched_organizations"] = True
     saved_profile = client.put("/api/profile", json=profile_payload)
     assert saved_profile.status_code == 200
     assert saved_profile.json()["min_relevance"] == 75
@@ -533,8 +458,8 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert all(item["keywords"] for item in catalog.json()["items"])
     assert saved_profile.json()["watched_authors"] == ["A. Author"]
     assert saved_profile.json()["watched_organizations"] == ["NVIDIA Research"]
-    assert saved_profile.json()["prioritize_watched_authors"] is True
-    assert saved_profile.json()["prioritize_watched_organizations"] is True
+    assert "prioritize_watched_authors" not in saved_profile.json()
+    assert "prioritize_watched_organizations" not in saved_profile.json()
     assert client.get("/api/profile").json()["watched_authors"] == ["A. Author"]
     assert client.get("/api/profile").json()["watched_organizations"] == ["NVIDIA Research"]
 
@@ -1438,6 +1363,23 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
     from app.services.paper_sync import latest_complete_submission_date
 
     with database.SessionLocal() as session:
+        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        for index, (score, screened) in enumerate(((0.8, True), (0.7, False), (0.5, True))):
+            paper = Paper(
+                arxiv_id=f"2608.4000{index}",
+                title=f"Calendar candidate {index}",
+                published_at=datetime(2026, 8, 1, 12, tzinfo=UTC),
+            )
+            session.add(paper)
+            session.flush()
+            session.add(
+                PaperMatch(
+                    paper_id=paper.id,
+                    profile_id=profile.id,
+                    semantic_score=score,
+                    screened_at=datetime(2026, 8, 1, 13, tzinfo=UTC) if screened else None,
+                )
+            )
         session.add_all(
             [
                 Job(
@@ -1511,17 +1453,21 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
         "days": [
             {
                 "date": "2026-08-01",
-                "status": "completed",
+                "status": "partial",
                 "fetched": 12,
-                "screened": 4,
+                "candidates": 2,
+                "screened": 1,
+                "pending_screening": 1,
                 "analyzed": 2,
-                "message": "任务完整完成",
+                "message": "有 1 篇当前语义候选等待 AI 初筛",
             },
             {
                 "date": "2026-08-02",
                 "status": "completed",
                 "fetched": 20,
+                "candidates": 6,
                 "screened": 6,
+                "pending_screening": 0,
                 "analyzed": 3,
                 "message": "任务完整完成",
             },
@@ -1529,7 +1475,9 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
                 "date": "2026-08-03",
                 "status": "partial",
                 "fetched": 10,
+                "candidates": 0,
                 "screened": 0,
+                "pending_screening": 0,
                 "analyzed": 0,
                 "message": "任务已完成",
             },
@@ -1537,7 +1485,9 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
                 "date": "2026-08-04",
                 "status": "partial",
                 "fetched": 0,
+                "candidates": 0,
                 "screened": 0,
+                "pending_screening": 0,
                 "analyzed": 0,
                 "message": "network unavailable",
             },
@@ -1803,7 +1753,7 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 
 
 @pytest.mark.asyncio
-async def test_organization_priority_bounds_affiliation_enrichment_to_100(
+async def test_watched_organizations_bound_affiliation_enrichment_to_100(
     client: TestClient,
 ) -> None:
     from app.services.paper_sync import sync_papers
@@ -1843,7 +1793,6 @@ async def test_organization_priority_bounds_affiliation_enrichment_to_100(
 
     with database.SessionLocal() as session:
         set_setting(session, "watched_organizations", ["NVIDIA"])
-        set_setting(session, "prioritize_watched_organizations", True)
         session.commit()
 
     result = await sync_papers(

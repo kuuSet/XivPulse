@@ -224,8 +224,6 @@ export const sampleProfile: Profile = {
   categories: ['cs.RO', 'cs.AI', 'cs.LG', 'cs.CV'],
   watched_authors: [],
   watched_organizations: [],
-  prioritize_watched_authors: false,
-  prioritize_watched_organizations: false,
   min_relevance: 80,
 }
 

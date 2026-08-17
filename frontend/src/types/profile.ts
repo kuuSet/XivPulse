@@ -51,8 +51,6 @@ export interface BackendProfile {
   categories?: string[]
   watched_authors?: string[]
   watched_organizations?: string[]
-  prioritize_watched_authors?: boolean
-  prioritize_watched_organizations?: boolean
   min_relevance?: number
 }
 
@@ -68,7 +66,5 @@ export interface Profile {
   categories: string[]
   watched_authors: string[]
   watched_organizations: string[]
-  prioritize_watched_authors: boolean
-  prioritize_watched_organizations: boolean
   min_relevance: number
 }
