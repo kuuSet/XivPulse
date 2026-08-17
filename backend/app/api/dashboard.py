@@ -23,7 +23,7 @@ from ..models import (
     ScreeningQueueItem,
     utcnow,
 )
-from ..services.direction_taxonomy import direction_taxonomy_fingerprint
+from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.jobs import RUNNING_STATUSES
 from ..services.semantic.embedding import RECALL_THRESHOLDS, recall_mode
 from ..services.state import active_profile

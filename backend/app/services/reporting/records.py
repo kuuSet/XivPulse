@@ -24,12 +24,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ...models import Analysis, Digest, Paper, PaperMatch, Profile, Topic
-from ..direction_matching import canonical_requested_direction_names, direction_evidence
-from ..direction_taxonomy import (
+from ..directions.matching import canonical_requested_direction_names, direction_evidence
+from ..directions.taxonomy import (
     direction_taxonomy_fingerprint,
     has_current_direction_attribution,
 )
-from ..method_catalog import match_method_labels
+from ..methods.catalog import match_method_labels
 from ..organizations import paper_organizations
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"

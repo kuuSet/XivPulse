@@ -1,3 +1,4 @@
+
 """Versioned, curated AI research directions for the profile editor.
 
 The catalog is deliberately broader than the default robotics profile, but its
@@ -218,6 +219,7 @@ CORE_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
         "生成模型与生成式 AI",
         "生成建模的统一方法、可控生成、条件生成与生成质量评估。",
         (
+
             "generative model",
             "generative models",
             "generative artificial intelligence",
@@ -438,6 +440,7 @@ CORE_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
         ("cs.RO", "cs.AI"),
         aliases=("Embodied AI", "Embodied Intelligence", "Generalist Robot"),
         weight=1.35,
+
     ),
     _entry(
         "vision-language-action",
@@ -658,6 +661,7 @@ CORE_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
         "数据质量、标注、合成数据、数据选择和训练数据治理。",
         (
             "data-centric AI",
+
             "data quality",
             "synthetic data",
             "data curation",
@@ -878,6 +882,7 @@ SPECIALTY_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
         ("cs.CL", "cs.LG", "cs.AI"),
         aliases=("Long-Context Language Models", "Long-Context LLM"),
     ),
+
     _specialty(
         "language-model-factuality",
         "基础模型与生成式 AI",
@@ -1098,6 +1103,7 @@ SPECIALTY_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
         ),
         ("cs.RO", "cs.LG"),
         aliases=("Sim-to-Real Robotics", "Robot Policy Adaptation"),
+
     ),
     _specialty(
         "robot-data-teleoperation",
@@ -1318,6 +1324,7 @@ SPECIALTY_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
         aliases=("AI Hardware Accelerators", "Machine Learning Accelerators"),
     ),
     _specialty(
+
         "sustainable-green-ai",
         "系统与基础设施",
         "ml-systems",
@@ -1497,37 +1504,3 @@ SPECIALTY_DIRECTION_CATALOG: tuple[dict[str, Any], ...] = (
 
 DIRECTION_CATALOG = CORE_DIRECTION_CATALOG + SPECIALTY_DIRECTION_CATALOG
 
-
-def direction_catalog_payload() -> dict[str, Any]:
-    groups = list(dict.fromkeys(item["group"] for item in DIRECTION_CATALOG))
-    by_slug = {item["slug"]: item for item in DIRECTION_CATALOG}
-    items = []
-    for catalog_item in DIRECTION_CATALOG:
-        item = dict(catalog_item)
-        parent = by_slug.get(str(item.get("parent_slug") or ""))
-        item["parent_name"] = parent["name"] if parent is not None else None
-        items.append(item)
-    return {
-        "version": CATALOG_VERSION,
-        "updated_at": "2026-08-14",
-        "groups": groups,
-        "count": len(DIRECTION_CATALOG),
-        "main_count": len(CORE_DIRECTION_CATALOG),
-        "specialty_count": len(SPECIALTY_DIRECTION_CATALOG),
-        "items": items,
-        "sources": [dict(source) for source in CATALOG_SOURCES],
-        "scope_note": (
-            "目录分为稳定主干与精确专题；专题隶属于主干，但添加后仍是独立关注方向。"
-            "单一方法、数据集、榜单、论文分区、产品名或短期热词不会成为方向。"
-        ),
-    }
-
-
-__all__ = [
-    "CATALOG_SOURCES",
-    "CATALOG_VERSION",
-    "CORE_DIRECTION_CATALOG",
-    "DIRECTION_CATALOG",
-    "SPECIALTY_DIRECTION_CATALOG",
-    "direction_catalog_payload",
-]

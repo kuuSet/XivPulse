@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ...models import Feedback, Paper, ProjectPaper, Topic
-from ...services.direction_matching import canonical_requested_direction_names
-from ...services.direction_taxonomy import has_current_direction_attribution
+from ...services.directions.matching import canonical_requested_direction_names
+from ...services.directions.taxonomy import has_current_direction_attribution
 from ...services.organizations import paper_organizations
 from ...services.state import clean_string_list as _clean_string_list
 from .analyses import _analysis_wire

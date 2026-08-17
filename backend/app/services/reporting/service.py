@@ -24,7 +24,7 @@ from ...models import (
 from ...settings import load_runtime_settings
 from ..jobs import update_job_progress
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
-from ..method_catalog import clean_custom_methods
+from ..methods.catalog import clean_custom_methods
 from ..provider import OpenAICompatibleAdapter, ProviderError
 from ..state import active_profile
 from .builder import build_daily_research_report

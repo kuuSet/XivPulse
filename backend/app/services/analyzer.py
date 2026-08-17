@@ -12,12 +12,12 @@ from sqlalchemy.orm import Session
 
 from ..models import Analysis, Paper, Profile, Topic
 from ..schemas import DeepAnalysisResult, ScreeningResult
-from .direction_matching import (
+from .directions.matching import (
     canonical_requested_direction_names,
     direction_evidence,
     terms,
 )
-from .direction_taxonomy import stamp_direction_attribution
+from .directions.taxonomy import stamp_direction_attribution
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompt_catalog import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,

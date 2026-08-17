@@ -21,7 +21,7 @@ from ..services.reporting.service import (
     synthesize_daily_report,
 )
 from ..services.reporting.trends import build_topic_trends
-from ..services.direction_taxonomy import direction_taxonomy_fingerprint
+from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.state import active_profile
 from .presenters.common import _as_utc
 from .presenters.papers import _paper_wire, _query_papers

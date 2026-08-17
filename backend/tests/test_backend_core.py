@@ -18,16 +18,16 @@ from app.arxiv.download import limited_bytes
 from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
-from app.services.direction_catalog import (
+from app.services.directions.catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
     direction_catalog_payload,
 )
-from app.services.direction_matching import (
+from app.services.directions.matching import (
     contains_term,
     verified_requested_direction_names,
 )
-from app.services.method_catalog import (
+from app.services.methods.catalog import (
     METHOD_CATALOG,
     discover_method_candidates,
     match_method_labels,

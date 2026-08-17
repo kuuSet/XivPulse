@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ...models import Analysis, Paper, Profile, Topic
-from ...services.direction_matching import matched_direction_names
+from ...services.directions.matching import matched_direction_names
 
 
 def _as_utc(value: datetime | None) -> datetime | None:

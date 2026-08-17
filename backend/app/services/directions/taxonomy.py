@@ -1,4 +1,4 @@
-"""Versioned fingerprints for AI research-direction attribution."""
+"""Versioned fingerprints for research-direction attribution."""
 
 from __future__ import annotations
 

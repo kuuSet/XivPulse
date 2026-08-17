@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Feedback, FeedbackReason, Paper, PaperMatch, PaperReadingState
-from ..services.direction_taxonomy import direction_taxonomy_fingerprint
+from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.library import sync_favorites_membership
 from ..services.state import active_profile
 from .presenters.common import _clean_tags

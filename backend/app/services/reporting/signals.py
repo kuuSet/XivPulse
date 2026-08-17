@@ -6,7 +6,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from ..method_catalog import match_method_labels
+from ..methods.catalog import match_method_labels
 from .records import (
     _EVIDENCE_TERMS,
     _PaperSignal,

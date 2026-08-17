@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Topic
 from ..schemas import ProfileUpdate
-from ..services.direction_catalog import direction_catalog_payload
+from ..services.directions.catalog import direction_catalog_payload
 from ..services.state import active_profile, clean_string_list
 from ..settings import load_runtime_settings, set_setting
 from .presenters.profiles import _profile_wire

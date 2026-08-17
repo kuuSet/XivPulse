@@ -1,4 +1,4 @@
-"""Shared, auditable research-direction matching rules."""
+"""Auditable research-direction matching rules."""
 
 from __future__ import annotations
 

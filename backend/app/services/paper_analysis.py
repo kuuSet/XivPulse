@@ -15,8 +15,8 @@ from ..database import SessionLocal, session_scope
 from ..models import Analysis, Paper, PaperMatch, Profile, ScreeningQueueItem, utcnow
 from .reporting.records import current_date_in_timezone
 from .analyzer import PaperAnalyzer
-from .direction_matching import canonical_requested_direction_names
-from .direction_taxonomy import stamp_direction_attribution
+from .directions.matching import canonical_requested_direction_names
+from .directions.taxonomy import stamp_direction_attribution
 from .jobs import update_job_progress
 from .prompt_catalog import resolve_prompt_settings
 from .provider import OpenAICompatibleAdapter, ProviderError

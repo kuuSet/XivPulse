@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Analysis, Paper, utcnow
-from ..services.method_catalog import (
+from ..services.methods.catalog import (
     METHOD_CANDIDATE_MIN_PAPERS,
     METHOD_CANDIDATE_WINDOW_DAYS,
     clean_custom_methods,
