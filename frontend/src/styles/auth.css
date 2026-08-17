@@ -1,0 +1,14 @@
+.auth-loading, .login-page { min-height: 100dvh; display: grid; place-items: center; background: #edf3f9; color: var(--ink); }
+.auth-loading { align-content: center; gap: 10px; color: var(--muted); }
+.login-panel { width: min(420px, calc(100vw - 32px)); padding: 30px; border: 1px solid var(--line); border-radius: 7px; background: #fff; box-shadow: 0 18px 50px rgb(31 48 55 / 12%); }
+.login-brand { display: grid; justify-items: start; gap: 5px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.login-brand img { display: block; width: 235px; max-width: 100%; height: 76px; object-fit: contain; object-position: left center; }
+.login-brand small, .login-status { color: var(--muted); }
+.login-panel header { padding: 25px 0 18px; }
+.login-panel h1 { margin: 0 0 5px; font-size: 24px; letter-spacing: 0; }
+.login-panel header p { margin: 0; color: var(--muted); }
+.login-panel form { display: grid; gap: 15px; }
+.login-panel form .button { width: 100%; justify-content: center; min-height: 42px; margin-top: 4px; }
+.login-error { display: flex; gap: 8px; align-items: center; padding: 10px 12px; margin-bottom: 16px; color: #8d2d2d; background: #fff0ef; border: 1px solid #efcfca; border-radius: 5px; }
+.login-status { display: block; margin-top: 18px; line-height: 1.5; }
+.sidebar-logout { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 7px 0; border: 0; color: inherit; background: transparent; cursor: pointer; }

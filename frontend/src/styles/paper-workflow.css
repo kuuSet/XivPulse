@@ -1,0 +1,178 @@
+/* Paper reading and feedback workflow */
+.workflow-panel,
+.feedback-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f8faf9;
+}
+
+.feedback-panel { background: #fbfaf8; }
+
+.workflow-heading,
+.workflow-heading > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-heading > div { justify-content: flex-start; }
+.workflow-heading h3 { margin: 0; font-size: 12px; }
+.workflow-heading p { margin: 2px 0 0; color: var(--muted); font-size: 9px; }
+
+.section-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.compact-field select { height: 34px; }
+.workflow-panel .tag-field { margin-top: 11px; }
+.workflow-notes { margin-top: 11px; }
+.workflow-notes textarea { min-height: 72px; resize: vertical; }
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #4e5c57;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.project-membership-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.membership-list {
+  display: flex;
+  min-height: 26px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.membership-list > small { color: var(--quiet); font-size: 9px; }
+
+.membership-chip {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: #43504c;
+  background: #fff;
+  font-size: 9px;
+}
+
+.membership-chip i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--project-color); }
+.membership-chip button { display: grid; width: 18px; height: 18px; padding: 0; place-items: center; border: 0; color: var(--quiet); background: transparent; cursor: pointer; }
+
+.membership-add {
+  display: flex;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.membership-add select,
+.project-paper-tools > select {
+  min-width: 0;
+  height: 34px;
+  flex: 1;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: #35423e;
+  background: #fff;
+  font-size: 10px;
+}
+
+.classification-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.classification-picker > label {
+  display: grid;
+  min-width: 0;
+  min-height: 34px;
+  grid-template-columns: 15px 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #53605c;
+  background: #fff;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.classification-picker > label.selected {
+  border-color: #93b2ce;
+  color: #205d91;
+  background: #eaf3fb;
+}
+
+.classification-picker input { width: 14px; height: 14px; accent-color: var(--green); }
+.classification-picker label > i { width: 7px; height: 20px; border-radius: 2px; }
+.classification-picker label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.classification-picker label > small,
+.classification-picker > small { color: var(--quiet); font-size: 8px; }
+.classification-picker > small { grid-column: 1 / -1; }
+
+.rating-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  color: #4e5c57;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.rating-row > div { display: flex; gap: 2px; }
+.rating-row button { display: grid; width: 27px; height: 27px; padding: 0; place-items: center; border: 0; color: #a7aeab; background: transparent; cursor: pointer; }
+.rating-row button.active { color: #a8730b; }
+
+.feedback-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.feedback-reasons button {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: #68726f;
+  background: #fff;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.feedback-reasons button.active { border-color: #b86a6f; color: #8e343b; background: var(--red-soft); }

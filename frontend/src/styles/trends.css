@@ -1,0 +1,71 @@
+/* Topic trends and research roadmap */
+.view-tabs button { display: inline-flex; align-items: center; gap: 5px; }
+.trends-layout { display: grid; grid-template-columns: minmax(520px, 1fr) 250px; align-items: start; gap: 16px; }
+.trend-table, .trend-aside, .roadmap-canvas, .roadmap-inspector { border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.trend-pending { display: flex; align-items: flex-start; gap: 8px; padding: 9px 16px; border-bottom: 1px solid #d5e2ee; color: #275f90; background: #edf5fb; }
+.trend-pending svg { flex: 0 0 auto; margin-top: 1px; }
+.trend-pending strong, .trend-pending span { display: block; }
+.trend-pending strong { font-size: 9px; }
+.trend-pending span { margin-top: 2px; color: #5f7069; font-size: 8px; line-height: 1.5; }
+.trend-table > header, .roadmap-canvas > header { display: flex; min-height: 62px; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+.trend-table h2, .roadmap-canvas h2, .trend-aside h2, .roadmap-inspector h2 { margin: 0; font-size: 13px; }
+.trend-table header p, .roadmap-canvas header p { margin: 2px 0 0; color: var(--muted); font-size: 8px; }
+.trend-table header > span, .roadmap-canvas header > span { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 9px; }
+.trend-period-control { display: inline-flex; flex: 0 0 auto; padding: 2px; border: 1px solid var(--line); border-radius: 5px; background: #f4f6f5; }
+.trend-period-control button { min-height: 27px; padding: 0 10px; border: 0; border-radius: 3px; color: var(--muted); background: transparent; font-size: 9px; cursor: pointer; }
+.trend-period-control button.active { color: #fff; background: var(--green); }
+.trend-rows article { display: grid; min-height: 72px; grid-template-columns: minmax(120px, 190px) minmax(170px, 1fr) 70px; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.trend-rows article:last-child { border-bottom: 0; }
+.trend-topic strong, .trend-topic span { display: block; }
+.trend-topic strong { font-size: 11px; }
+.trend-topic span { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.mini-series { display: grid; height: 40px; min-width: 0; grid-auto-flow: column; grid-auto-columns: minmax(5px, 18px); align-items: end; justify-content: start; gap: 4px; overflow: hidden; }
+.mini-series span { width: 100%; max-height: 100%; border-radius: 2px 2px 0 0; background: #6e9988; }
+.mini-series span.zero { min-height: 2px; background: #cbd4d0; }
+.momentum { display: flex; align-items: center; justify-content: space-between; gap: 5px; color: var(--muted); }
+.momentum span { font-size: 8px; }
+.momentum strong { font-size: 12px; }
+.momentum.rising, .momentum.new { color: var(--green); }
+.momentum.falling { color: var(--red); }
+.trend-aside { padding: 16px; }
+.trend-callout { display: flex; gap: 9px; margin-top: 12px; padding: 11px; border-left: 3px solid #6c829b; color: #42617c; background: var(--blue-soft); }
+.trend-callout.rising { border-color: #4384bb; color: var(--green); background: var(--green-soft); }
+.trend-callout svg { flex: 0 0 auto; margin-top: 1px; }
+.trend-callout strong, .trend-callout span { display: block; }
+.trend-callout strong { font-size: 9px; }
+.trend-callout span { margin-top: 3px; color: #56635e; font-size: 8px; line-height: 1.5; }
+.method-note, .relation-basis { margin: 14px 0 0; color: var(--quiet); font-size: 8px; line-height: 1.6; }
+
+.roadmap-layout { display: grid; grid-template-columns: minmax(520px, 1fr) 280px; align-items: start; gap: 16px; }
+.roadmap-clusters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 14px; }
+.roadmap-cluster { min-width: 0; border: 1px solid var(--line); border-top: 3px solid var(--cluster-color); border-radius: 5px; background: #f8fbfe; }
+.cluster-head { padding: 10px; border-bottom: 1px solid var(--line); }
+.cluster-head span, .cluster-head small { display: block; }
+.cluster-head span { font-size: 10px; font-weight: 700; }
+.cluster-head small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.roadmap-cluster > div:last-child { display: grid; }
+.roadmap-cluster button { display: grid; min-width: 0; grid-template-columns: 8px minmax(0, 1fr); gap: 2px 7px; padding: 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; cursor: pointer; text-align: left; }
+.roadmap-cluster button:last-child { border-bottom: 0; }
+.roadmap-cluster button:hover, .roadmap-cluster button.active { background: #eaf2f9; }
+.roadmap-cluster button > i { width: 8px; height: 8px; grid-row: 1 / 3; margin-top: 2px; border-radius: 50%; background: #82918b; }
+.roadmap-cluster button > i.emerging { background: #c5773d; }
+.roadmap-cluster button > i.active { background: #398062; }
+.roadmap-cluster button strong { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.roadmap-cluster button span { color: var(--muted); font-size: 7px; }
+.relation-basis { padding: 0 14px 14px; }
+.roadmap-inspector { position: sticky; top: 20px; padding: 17px; }
+.node-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.node-status span { padding: 3px 6px; border-radius: 3px; color: var(--green); background: var(--green-soft); font-size: 8px; font-weight: 600; }
+.node-status span.emerging { color: #96521f; background: #f8ede5; }
+.node-status strong { color: var(--green); font-size: 14px; }
+.roadmap-inspector h2 { margin-top: 13px; font-size: 16px; }
+.roadmap-inspector > p { margin: 5px 0 14px; color: var(--muted); font-size: 9px; line-height: 1.6; }
+.info-tags { margin-top: 12px; }
+.info-tags > span, .connected-topics > span { display: block; margin-bottom: 6px; color: #57645f; font-size: 8px; font-weight: 700; }
+.info-tags > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.info-tags em { padding: 3px 6px; border-radius: 3px; color: #50605a; background: var(--soft); font-size: 8px; font-style: normal; }
+.info-tags small { color: var(--quiet); font-size: 8px; }
+.connected-topics { margin: 14px 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.connected-topics button { display: flex; width: 100%; justify-content: space-between; gap: 8px; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 8px; text-align: left; }
+.connected-topics button strong { color: var(--muted); font-weight: 500; }
+.roadmap-inspector > .button { width: 100%; }

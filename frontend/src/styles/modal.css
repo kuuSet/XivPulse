@@ -1,0 +1,28 @@
+/* Modal */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(21, 29, 27, 0.42);
+}
+
+.modal {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 18px 52px rgba(19, 27, 24, 0.24);
+}
+
+.modal > header { display: flex; min-height: 54px; align-items: center; justify-content: space-between; padding: 0 15px 0 18px; border-bottom: 1px solid var(--line); }
+.modal > header h2 { margin: 0; font-size: 14px; }
+.modal-form { display: grid; gap: 13px; padding: 18px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.color-options { display: flex; gap: 8px; }
+.color-options button { display: grid; width: 30px; height: 30px; padding: 0; place-items: center; border: 2px solid transparent; border-radius: 4px; color: #fff; cursor: pointer; }
+.color-options button.active { border-color: #18231f; }
