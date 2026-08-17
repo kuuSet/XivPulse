@@ -105,31 +105,6 @@ class RecallService:
         ]
         return RecallResult(len(candidates), enrichment_ids, semantic_error)
 
-    def backfill(
-        self,
-        session: Session,
-        papers: Sequence[Paper],
-        *,
-        profile_id: int,
-        topics: Sequence[Topic],
-    ) -> int:
-        results = self.matcher.match(session, papers, topics)
-        if not papers:
-            return 0
-        matches = session.scalars(
-            select(PaperMatch).where(
-                PaperMatch.profile_id == profile_id,
-                PaperMatch.paper_id.in_([paper.id for paper in papers]),
-            )
-        ).all()
-        for match in matches:
-            semantic = results.get(match.paper_id)
-            if semantic is not None:
-                match.semantic_score = semantic.score
-                match.semantic_topics_json = semantic.topic_scores
-                match.semantic_model = self.matcher.model_name
-        return len(papers)
-
     @staticmethod
     def _watched_paper_ids(
         papers: Sequence[Paper],

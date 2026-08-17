@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..services.semantic import get_semantic_services
-from ..settings import get_process_settings, load_runtime_settings, setting_value
+from ..settings import get_process_settings, load_runtime_settings
 from .presenters.common import _as_utc
 
 
@@ -49,9 +49,7 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         },
         "embedding": {
             **get_semantic_services().model.status(),
-            "backfill": setting_value(
-                db, "semantic_backfill_status", {"status": "pending"}
-            ),
+            "rescore": get_semantic_services().rescorer.status(db),
         },
         "deep_analysis_limit": settings.deep_analysis_limit,
         "deep_analysis_threshold": settings.deep_analysis_threshold,

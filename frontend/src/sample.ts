@@ -242,7 +242,7 @@ export const sampleSettings: Settings = {
     balanced: { semantic_threshold: 0.68 },
     precise: { semantic_threshold: 0.7 },
   },
-  embedding: { model: 'BAAI/bge-small-en-v1.5', dimensions: 384, cache_dir: 'data/model-cache', loaded: false, available: true },
+  embedding: { model: 'BAAI/bge-small-en-v1.5', dimensions: 384, cache_dir: 'data/model-cache', loaded: false, available: true, rescore: { status: 'pending' } },
   deep_analysis_limit: 5,
   deep_analysis_threshold: 90,
   analysis_budget: 'balanced',

@@ -24,8 +24,9 @@ from .services.jobs import RUNNING_STATUSES, update_job_progress
 LOG = logging.getLogger("xivpulse")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_LOCK_PATH = PROJECT_ROOT / "data" / "pipeline.lock"
-PipelineKind = Literal["daily", "sync", "analyze"]
+PipelineKind = Literal["daily", "sync", "analyze", "semantic_rescore"]
 PipelineResult = dict[str, Any]
+SemanticRescoreStage = Callable[..., Awaitable[PipelineResult]]
 SyncStage = Callable[..., Awaitable[PipelineResult]]
 AnalyzeStage = Callable[..., Awaitable[PipelineResult]]
 FinalizeDailyStage = Callable[[date, PipelineResult, str | None], Awaitable[PipelineResult]]
@@ -89,11 +90,13 @@ class PipelineCoordinator:
         self,
         *,
         initialize: Callable[[], None],
+        semantic_rescore_stage: SemanticRescoreStage,
         sync_stage: SyncStage,
         analyze_stage: AnalyzeStage,
         finalize_daily_stage: FinalizeDailyStage,
     ) -> None:
         self._initialize = initialize
+        self._semantic_rescore_stage = semantic_rescore_stage
         self._sync_stage = sync_stage
         self._analyze_stage = analyze_stage
         self._finalize_daily_stage = finalize_daily_stage
@@ -109,10 +112,31 @@ class PipelineCoordinator:
     ) -> PipelineResult:
         result: PipelineResult = {}
         pipeline_date: date | None = None
+        if kind in ("daily", "sync", "semantic_rescore"):
+            update_job_progress(
+                job_id,
+                progress=5,
+                message="正在检查历史论文语义分数",
+            )
+            try:
+                result.update(
+                    await self._semantic_rescore_stage(
+                        force=kind == "semantic_rescore",
+                        job_id=job_id,
+                    )
+                )
+            except Exception as exc:
+                if kind == "semantic_rescore":
+                    raise
+                LOG.exception("Automatic semantic rescoring failed")
+                result.update(
+                    semantic_rescore_failed=True,
+                    semantic_rescore_error=str(exc)[:1000],
+                )
         if kind in ("daily", "sync"):
             update_job_progress(
                 job_id,
-                progress=10,
+                progress=15,
                 message="正在抓取并匹配 arXiv 候选",
             )
             result.update(await self._sync_stage(target_date=target_date))
@@ -120,7 +144,7 @@ class PipelineCoordinator:
         if kind in ("daily", "analyze"):
             update_job_progress(
                 job_id,
-                progress=35,
+                progress=40,
                 message="正在进行 AI 摘要初筛与全文深读",
             )
             result.update(
@@ -256,12 +280,15 @@ class PipelineCoordinator:
         self._initialize()
         with self._job_lock:
             if self._active_job_id is not None:
-                raise HTTPException(status_code=409, detail="已有抓取或分析任务正在运行")
+                raise HTTPException(
+                    status_code=409,
+                    detail="已有抓取、分析或语义重算任务正在运行",
+                )
             job_id = str(uuid4())
             if not _acquire_pipeline_lock(job_id):
                 raise HTTPException(
                     status_code=409,
-                    detail="已有抓取或分析任务正在运行",
+                    detail="已有抓取、分析或语义重算任务正在运行",
                 )
             with _release_lock_on_failure(job_id):
                 with session_scope() as db:
@@ -281,7 +308,7 @@ class PipelineCoordinator:
                             self._active_job_id = existing.id
                             raise HTTPException(
                                 status_code=409,
-                                detail="已有抓取或分析任务正在运行",
+                                detail="已有抓取、分析或语义重算任务正在运行",
                             )
                     db.add(
                         Job(

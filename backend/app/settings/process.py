@@ -83,7 +83,6 @@ class SemanticSettings(BaseSettings):
     model_name: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1, max_length=200)
     threads: int = Field(default=2, ge=1, le=16)
     batch_size: int = Field(default=8, ge=1, le=256)
-    backfill_enabled: bool = True
 
     # Semantic recall thresholds.
     threshold_high: float = Field(default=0.66, ge=0.0, le=1.0)

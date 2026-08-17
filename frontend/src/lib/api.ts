@@ -13,7 +13,7 @@ import type {
 } from '../types/projects'
 import type { DailyReport, DailyReportArchiveItem, DailyResearchGap } from '../types/reports'
 import type { AnalysisPromptCatalog, Settings } from '../types/settings'
-import type { AppStatus, AuthSession, JobCalendarData } from '../types/system'
+import type { AppStatus, AuthSession, JobCalendarData, JobInfo } from '../types/system'
 import type { ResearchRoadmap, TopicTrends } from '../types/trends'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
@@ -81,6 +81,7 @@ export const api = {
     method: 'POST', body: JSON.stringify({ date }),
   }),
   status: () => request<AppStatus>('/status'),
+  jobStatus: (jobId: string) => request<JobInfo>(`/jobs/${encodeURIComponent(jobId)}`),
   jobCalendar: (month: string) => request<JobCalendarData>(`/job-calendar?month=${encodeURIComponent(month)}`),
   papers: (query: PaperQuery = {}) => {
     const params = new URLSearchParams()
@@ -120,7 +121,8 @@ export const api = {
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
   testConnection: (settings: { provider_name: string; model_name: string; api_base_url: string; api_key?: string }) =>
     request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
-  testEmbedding: () => request<Settings['embedding'] & { ok: boolean; message?: string }>('/settings/embedding/test', { method: 'POST' }),
+  testEmbedding: () => request<Omit<Settings['embedding'], 'rescore'> & { ok: boolean; message?: string }>('/settings/embedding/test', { method: 'POST' }),
+  rescoreSemantic: () => request<{ job_id: string; status: string; message: string }>('/semantic/rescore', { method: 'POST' }),
   testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
   feedback: (paperId: PaperId, actionOrPayload: FeedbackWriteAction | FeedbackPayload, note?: string) => {
     const payload: FeedbackPayload = typeof actionOrPayload === 'string'

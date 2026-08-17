@@ -2,24 +2,18 @@
 
 from __future__ import annotations
 
-import logging
 import threading
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from .database import init_db, session_scope
-from .models import Job, Paper, utcnow
+from .models import Job, utcnow
 from .services.auth import auth_settings
 from .services.jobs import RUNNING_STATUSES
-from .services.semantic import get_semantic_services
-from .services.state import active_profile
-from .settings import get_process_settings, set_setting
 
-LOG = logging.getLogger("xivpulse")
 _initialization_lock = threading.Lock()
 _initialized = False
-_embedding_backfill_started = False
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -28,57 +22,8 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-def _backfill_existing_semantic_embeddings() -> None:
-    """Populate local vectors for existing papers without invoking AI analysis."""
-
-    try:
-        recall_service = get_semantic_services().recall
-        with session_scope() as db:
-            profile = active_profile(db)
-            paper_ids = list(db.scalars(select(Paper.id).order_by(Paper.id)).all())
-            profile_id = profile.id
-        total = len(paper_ids)
-        processed = 0
-        for start in range(0, total, 128):
-            selected_ids = paper_ids[start : start + 128]
-            with session_scope() as db:
-                profile = active_profile(db)
-                topics = list(profile.topics)
-                papers = list(
-                    db.scalars(select(Paper).where(Paper.id.in_(selected_ids))).all()
-                )
-                processed += recall_service.backfill(
-                    db,
-                    papers,
-                    profile_id=profile_id,
-                    topics=topics,
-                )
-                set_setting(
-                    db,
-                    "semantic_backfill_status",
-                    {"status": "running", "processed": processed, "total": total},
-                )
-        with session_scope() as db:
-            set_setting(
-                db,
-                "semantic_backfill_status",
-                {"status": "completed", "processed": processed, "total": total},
-            )
-    except Exception as exc:
-        LOG.exception("Existing-paper semantic embedding backfill failed")
-        try:
-            with session_scope() as db:
-                set_setting(
-                    db,
-                    "semantic_backfill_status",
-                    {"status": "failed", "error": str(exc)[:1000]},
-                )
-        except Exception:
-            LOG.exception("Failed to persist embedding backfill error")
-
-
 def initialize_application() -> None:
-    global _embedding_backfill_started, _initialized
+    global _initialized
     if _initialized:
         return
     with _initialization_lock:
@@ -96,13 +41,3 @@ def initialize_application() -> None:
                     job.message = "任务超时"
                     job.completed_at = utcnow()
         _initialized = True
-        if (
-            get_process_settings().semantic.backfill_enabled
-            and not _embedding_backfill_started
-        ):
-            _embedding_backfill_started = True
-            threading.Thread(
-                target=_backfill_existing_semantic_embeddings,
-                name="semantic-embedding-backfill",
-                daemon=True,
-            ).start()

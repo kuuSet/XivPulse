@@ -21,6 +21,7 @@ router = APIRouter()
 _INCOMPLETE_RESULT_KEYS = (
     "report_incomplete",
     "semantic_degraded",
+    "semantic_rescore_failed",
     "screening_failed",
     "email_failed",
     "screening_errors",
@@ -56,6 +57,11 @@ async def sync() -> dict[str, Any]:
 @router.post("/api/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze() -> dict[str, Any]:
     return daily_pipeline.start_job("analyze")
+
+
+@router.post("/api/semantic/rescore", status_code=status.HTTP_202_ACCEPTED)
+async def semantic_rescore() -> dict[str, Any]:
+    return daily_pipeline.start_job("semantic_rescore")
 
 
 @router.get("/api/jobs/{job_id}")

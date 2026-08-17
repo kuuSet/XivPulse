@@ -38,7 +38,7 @@ export interface Settings {
     loaded: boolean
     available: boolean
     message?: string
-    backfill?: { status: string; processed?: number; total?: number; error?: string }
+    rescore: { status: string; processed?: number; total?: number; error?: string }
   }
   deep_analysis_limit: number
   deep_analysis_threshold?: number

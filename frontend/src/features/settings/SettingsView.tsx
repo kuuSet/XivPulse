@@ -24,6 +24,8 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const [candidateNames, setCandidateNames] = useState<Record<string, string>>({})
   const [methodBusy, setMethodBusy] = useState(false)
   const [embeddingTesting, setEmbeddingTesting] = useState(false)
+  const [semanticRescoring, setSemanticRescoring] = useState(false)
+  const [semanticRescoreProgress, setSemanticRescoreProgress] = useState('')
   const [emailTesting, setEmailTesting] = useState(false)
 
   const load = useCallback(async () => {
@@ -91,11 +93,39 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     setEmbeddingTesting(true)
     try {
       const result = isDemo ? { ...settings.embedding, ok: true, loaded: true, available: true } : await api.testEmbedding()
-      setSettings({ ...settings, embedding: result })
+      setSettings((current) => current ? { ...current, embedding: { ...result, rescore: current.embedding.rescore } } : current)
       onToast(result.ok ? 'success' : 'error', result.ok ? '语义模型已下载并完成预热' : (result.message ?? '语义模型不可用'))
     } catch (embeddingError) {
       onToast('error', embeddingError instanceof Error ? embeddingError.message : '语义模型预热失败')
     } finally { setEmbeddingTesting(false) }
+  }
+
+  const rescoreSemantic = async () => {
+    if (!settings) return
+    setSemanticRescoring(true)
+    setSemanticRescoreProgress('任务已排队')
+    try {
+      if (isDemo) {
+        setSettings({ ...settings, embedding: { ...settings.embedding, rescore: { status: 'completed', processed: settings.stored_paper_count, total: settings.stored_paper_count } } })
+      } else {
+        const started = await api.rescoreSemantic()
+        while (true) {
+          const job = await api.jobStatus(started.job_id)
+          setSemanticRescoreProgress(job.message || `正在重算 ${job.progress}%`)
+          if (job.status === 'failed') throw new Error(job.error || job.message || '历史语义分数重算失败')
+          if (job.status === 'completed') break
+          await new Promise((resolve) => window.setTimeout(resolve, 1500))
+        }
+        const loaded = await api.settings()
+        setSettings((current) => current ? { ...current, embedding: loaded.embedding } : current)
+      }
+      onToast('success', '历史语义分数已重新计算')
+    } catch (rescoreError) {
+      onToast('error', rescoreError instanceof Error ? rescoreError.message : '历史语义分数重算失败')
+    } finally {
+      setSemanticRescoring(false)
+      setSemanticRescoreProgress('')
+    }
   }
 
   const testEmail = async () => {
@@ -220,7 +250,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
           </FormSection>
 
           <FormSection title="处理规模与门槛" description="每次日更先用本地语义模型召回，再把所有候选分批完成摘要初筛，最后限量全文深读。">
-            <div className="embedding-status"><div><Network size={18} /><span><strong>本地语义模型</strong><small>{settings.embedding.model} · {settings.embedding.dimensions ? `${settings.embedding.dimensions} 维` : '维度待检测'} · {settings.embedding.loaded ? '已加载' : settings.embedding.available ? '等待首次加载' : '尚未下载'}{settings.embedding.backfill?.status === 'running' ? ` · 历史向量 ${settings.embedding.backfill.processed ?? 0}/${settings.embedding.backfill.total ?? 0}` : settings.embedding.backfill?.status === 'completed' ? ` · 历史向量已补齐 ${settings.embedding.backfill.total ?? 0} 篇` : ''}</small></span></div><button type="button" className="button secondary compact" disabled={embeddingTesting} onClick={() => void testEmbedding()}><RefreshCw className={embeddingTesting ? 'spin' : ''} size={14} />{embeddingTesting ? '预热中' : '下载并预热'}</button></div>
+            <div className="embedding-status"><div><Network size={18} /><span><strong>本地语义模型</strong><small>{settings.embedding.model} · {settings.embedding.dimensions ? `${settings.embedding.dimensions} 维` : '维度待检测'} · {settings.embedding.loaded ? '已加载' : settings.embedding.available ? '等待首次加载' : '尚未下载'}{semanticRescoreProgress ? ` · ${semanticRescoreProgress}` : settings.embedding.rescore.status === 'running' ? ` · 历史分数 ${settings.embedding.rescore.processed ?? 0}/${settings.embedding.rescore.total ?? 0}` : settings.embedding.rescore.status === 'completed' ? ` · 历史分数已计算 ${settings.embedding.rescore.total ?? 0} 篇` : settings.embedding.rescore.status === 'failed' ? ' · 历史分数重算失败' : ' · 历史分数待重算'}</small></span></div><div className="embedding-actions"><button type="button" className="button secondary compact" disabled={embeddingTesting || semanticRescoring} onClick={() => void testEmbedding()}><RefreshCw className={embeddingTesting ? 'spin' : ''} size={14} />{embeddingTesting ? '预热中' : '下载并预热'}</button><button type="button" className="button secondary compact" disabled={semanticRescoring || embeddingTesting} onClick={() => void rescoreSemantic()}><RefreshCw className={semanticRescoring ? 'spin' : ''} size={14} />{semanticRescoring ? '重算中' : '重新计算历史语义分数'}</button></div></div>
             <div className="budget-mode-list" role="radiogroup" aria-label="语义召回档位">
               {recallOptions.map((option) => <label key={option.id} className={settings.semantic_recall_mode === option.id ? 'selected' : ''}><input type="radio" name="semantic-recall" checked={settings.semantic_recall_mode === option.id} onChange={() => setSettings({ ...settings, semantic_recall_mode: option.id })} /><span><strong>{option.name}</strong><small>{option.detail}</small></span></label>)}
             </div>

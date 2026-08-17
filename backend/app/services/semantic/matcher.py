@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -32,6 +33,34 @@ class SemanticMatcher:
     @property
     def model_name(self) -> str:
         return self.model.model_name
+
+    def fingerprint(self, topics: Sequence[Topic]) -> str:
+        """Identify the model and enabled direction text that determine semantic scores."""
+
+        configured = [
+            {
+                "name": topic.name.strip(),
+                "aliases": _values(topic, "aliases"),
+                "keywords": _values(topic, "keywords"),
+                "context_keywords": _values(topic, "context_keywords"),
+                "text": _topic_text(topic),
+            }
+            for topic in topics
+            if topic.enabled
+        ]
+        configured.sort(
+            key=lambda item: (
+                str(item["name"]).casefold(),
+                json.dumps(item, ensure_ascii=False, sort_keys=True),
+            )
+        )
+        payload = json.dumps(
+            {"model": self.model_name, "topics": configured},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def match(
         self,

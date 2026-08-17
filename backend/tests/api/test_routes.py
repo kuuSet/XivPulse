@@ -1321,6 +1321,17 @@ def test_digest_status_and_missing_job(client: TestClient) -> None:
     assert client.get("/api/jobs/does-not-exist").status_code == 404
 
 
+def test_semantic_rescore_route_uses_shared_pipeline_lock(client: TestClient) -> None:
+    from app.workflow import daily_pipeline
+
+    daily_pipeline._active_job_id = "busy-job"
+
+    response = client.post("/api/semantic/rescore")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "已有抓取、分析或语义重算任务正在运行"
+
+
 def test_run_daily_accepts_one_complete_submission_date(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
