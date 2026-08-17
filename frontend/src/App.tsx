@@ -26,9 +26,19 @@ const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof Radar }> = [
   { id: 'settings', label: '系统设置', icon: SettingsIcon },
 ]
 
-const requestedView = new URLSearchParams(window.location.search).get('view') as View | null
-const requestedPaper = new URLSearchParams(window.location.search).get('paper')
+const initialParams = new URLSearchParams(window.location.search)
+const requestedView = initialParams.get('view') as View | null
+const requestedPaper = initialParams.get('paper')
+const requestedDate = validDate(initialParams.get('date'))
 const initialView: View = NAV_ITEMS.some((item) => item.id === requestedView) ? requestedView! : 'today'
+
+function validDate(value: string | null) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined
+}
+
+function locationDate() {
+  return validDate(new URLSearchParams(window.location.search).get('date'))
+}
 
 function App() {
   const [view, setView] = useState<View>(initialView)
@@ -62,9 +72,11 @@ function App() {
       const data = isDemo ? sampleDashboard : await api.dashboard(targetDate)
       setDashboard(data)
       setUiFontSizePt(data.settings?.ui_font_size_pt ?? 12)
-      setSelectedId((current) => data.items.some((paper) => String(paper.id) === String(current))
-        ? current
-        : data.items[0]?.id ?? null)
+      const url = new URL(window.location.href)
+      if ((url.searchParams.get('view') ?? 'today') === 'today' && data.date) {
+        url.searchParams.set('date', data.date)
+        window.history.replaceState(null, '', url)
+      }
       setDashboardState('ready')
     } catch (error) {
       setDashboard(null)
@@ -118,7 +130,7 @@ function App() {
 
   useEffect(() => {
     if (!authSession?.authenticated) return
-    void loadDashboard()
+    void loadDashboard(requestedDate)
     void loadProjects()
   }, [authSession?.authenticated, loadDashboard, loadProjects])
 
@@ -126,12 +138,15 @@ function App() {
     const restoreLocation = () => {
       const params = new URLSearchParams(window.location.search)
       const nextView = params.get('view') as View | null
-      setView(NAV_ITEMS.some((item) => item.id === nextView) ? nextView! : 'today')
+      const restoredView = NAV_ITEMS.some((item) => item.id === nextView) ? nextView! : 'today'
+      const restoredDate = validDate(params.get('date'))
+      setView(restoredView)
       setSelectedId(params.get('paper'))
+      if (restoredView === 'today' && restoredDate !== dashboard?.date) void loadDashboard(restoredDate)
     }
     window.addEventListener('popstate', restoreLocation)
     return () => window.removeEventListener('popstate', restoreLocation)
-  }, [])
+  }, [dashboard?.date, loadDashboard])
 
   useEffect(() => {
     if (isDemo || !authSession?.authenticated) return
@@ -151,7 +166,7 @@ function App() {
           && status.latest_job.id !== lastCompletedId
         ) {
           lastCompletedId = status.latest_job.id
-          if (wasBusy) void loadDashboard()
+          if (wasBusy) void loadDashboard(locationDate())
         }
         wasBusy = status.busy
       } catch {
@@ -259,14 +274,25 @@ function App() {
   }
 
   const openPaper = useCallback((id: Paper['id'], targetView: View = view) => {
+    const changedView = targetView !== view
     setView(targetView)
     setSelectedId(id)
     const url = new URL(window.location.href)
     url.searchParams.set('view', targetView)
     url.searchParams.set('paper', String(id))
     window.history.pushState(null, '', url)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    if (changedView) window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [view])
+
+  const selectDate = useCallback((date: string) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('view', 'today')
+    url.searchParams.set('date', date)
+    url.searchParams.delete('paper')
+    window.history.pushState(null, '', url)
+    setSelectedId(null)
+    void loadDashboard(date)
+  }, [loadDashboard])
 
   const closePaper = useCallback(() => {
     const url = new URL(window.location.href)
@@ -304,7 +330,7 @@ function App() {
             job={job ?? dashboard?.active_job ?? null}
             onRetry={loadDashboard}
             onRefresh={handleRefresh}
-            onDateSelect={loadDashboard}
+            onDateSelect={selectDate}
             onSelect={(id) => openPaper(id, view)}
             onCloseDetail={closePaper}
             onFeedback={handleFeedback}

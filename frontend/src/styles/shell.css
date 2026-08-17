@@ -327,6 +327,11 @@
   background: var(--paper);
 }
 
+.run-calendar.collapsed {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
 .run-calendar > header {
   display: flex;
   align-items: center;
@@ -334,6 +339,8 @@
   gap: 18px;
   margin-bottom: 14px;
 }
+
+.run-calendar.collapsed > header { margin-bottom: 0; }
 
 .run-calendar > header span { color: var(--muted); font-size: 10px; }
 .run-calendar h2 { margin: 2px 0 0; color: #26332f; font-size: 17px; }
@@ -343,6 +350,8 @@
 .calendar-controls i.completed { background: #3d956f; }
 .calendar-controls i.partial { background: #d4a72c; }
 .calendar-controls .icon-button { width: 30px; height: 30px; }
+.calendar-toggle svg:last-child { transition: transform 150ms ease; }
+.calendar-toggle svg:last-child.open { transform: rotate(180deg); }
 .calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .calendar-weekdays { margin-bottom: 5px; }
 .calendar-weekdays span { padding: 0 7px; color: var(--quiet); font-size: 9px; text-align: right; }

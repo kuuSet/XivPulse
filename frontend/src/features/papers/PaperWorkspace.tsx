@@ -43,7 +43,6 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   const [priority, setPriority] = useState(mode === 'today' ? 'recommended' : 'all')
   const [sort, setSort] = useState<PaperSort>('recommendation')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(Boolean(new URLSearchParams(window.location.search).get('paper')))
   const [linkedPaper, setLinkedPaper] = useState<Paper | null>(null)
   const [libraryPage, setLibraryPage] = useState<PaperPage | null>(null)
   const [libraryState, setLibraryState] = useState<LoadState>('idle')
@@ -146,6 +145,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   const selected = papersWithMemberships.find((paper) => String(paper.id) === String(selectedId))
     ?? (linkedPaper && String(linkedPaper.id) === String(selectedId) ? linkedPaper : null)
     ?? (selectedId === null ? papersWithMemberships[0] : null)
+  const detailOpen = new URLSearchParams(window.location.search).has('paper')
   const sortOptions: Array<[PaperSort, string]> = [
     ['recommendation', '推荐优先'],
     ['relevance', '相关度优先'],
@@ -159,8 +159,6 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   }
 
   useEffect(() => {
-    const linkedId = new URLSearchParams(window.location.search).get('paper')
-    setDetailOpen(Boolean(linkedId))
     if (mode !== 'library' || !selectedId || papersWithMemberships.some((paper) => String(paper.id) === String(selectedId))) return
     let active = true
     if (isDemo) {
@@ -198,11 +196,6 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
     const saved = await onSaveDetailedFeedback(paper, feedback)
     if (saved && mode === 'library') updateLibraryPaper(paper.id, (item) => ({ ...item, feedback, feedback_reasons: feedback.reasons ?? [] }))
     return saved
-  }
-
-  const selectPaper = (id: Paper['id']) => {
-    onSelect(id)
-    setDetailOpen(true)
   }
 
   if (mode === 'library' && libraryState === 'loading' && !libraryPage) return <WorkspaceSkeleton />
@@ -243,7 +236,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
         </section>
       )}
 
-      {mode === 'today' && <RunCalendar busy={refreshing} refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} onRun={onRefresh} onSelectDate={onDateSelect} />}
+      {mode === 'today' && <CoverageCalendar activeDate={data?.date ?? null} busy={refreshing} refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} onRun={onRefresh} onSelectDate={onDateSelect} />}
 
       <section className="paper-workbench">
         <div className={`paper-column ${mode === 'library' ? 'paginated' : ''}`}>
@@ -284,7 +277,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
                 key={paper.id}
                 paper={paper}
                 active={selected?.id === paper.id}
-                onSelect={() => selectPaper(paper.id)}
+                onSelect={() => onSelect(paper.id)}
                 onFeedback={(action) => { void savePaperFeedback(paper, action) }}
               />
             )) : <EmptyPapers filtered={Boolean(query || category !== 'all' || priority !== 'all')} />}
@@ -298,7 +291,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
 
         <div className={`detail-column ${detailOpen ? 'mobile-visible' : ''}`}>
           {selected ? (
-            <PaperDetail paper={selected} projects={projects} onProjectsChange={onProjectsChange} onToast={onToast} onClose={() => { setDetailOpen(false); onCloseDetail() }} onFeedback={(action) => { void savePaperFeedback(selected, action) }} onSaveReading={(reading) => savePaperReading(selected, reading)} onSaveDetailedFeedback={(feedback) => savePaperDetailedFeedback(selected, feedback)} />
+            <PaperDetail key={selected.id} paper={selected} projects={projects} onProjectsChange={onProjectsChange} onToast={onToast} onClose={onCloseDetail} onFeedback={(action) => { void savePaperFeedback(selected, action) }} onSaveReading={(reading) => savePaperReading(selected, reading)} onSaveDetailedFeedback={(feedback) => savePaperDetailedFeedback(selected, feedback)} />
           ) : (
             <div className="detail-placeholder"><FileText size={28} /><p>从左侧选择一篇论文查看分析</p></div>
           )}
@@ -337,13 +330,17 @@ function JobStatusBanner({ job }: { job: JobInfo }) {
   return <section className={`job-status-banner ${failed ? 'failed' : running ? 'running' : 'completed'}`} aria-live="polite"><div>{running ? <LoaderCircle className="spin" size={17} /> : failed ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}<span><strong>{running ? '每日任务进行中' : failed ? '最近一次任务失败' : '最近一次任务已完成'}</strong><small>{summary}</small></span></div><div className="job-progress"><span style={{ width: `${Math.max(running ? 4 : 0, Math.min(100, job.progress ?? 0))}%` }} /></div></section>
 }
 
-function RunCalendar({ busy, refreshToken, onRun, onSelectDate }: { busy: boolean; refreshToken: string; onRun: (date: string) => void; onSelectDate: (date: string) => void }) {
+function CoverageCalendar({ activeDate, busy, refreshToken, onRun, onSelectDate }: { activeDate: string | null; busy: boolean; refreshToken: string; onRun: (date: string) => void; onSelectDate: (date: string) => void }) {
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [month, setMonth] = useState(currentMonth)
   const [data, setData] = useState<JobCalendarData | null>(null)
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (activeDate) setMonth(activeDate.slice(0, 7))
+  }, [activeDate])
 
   useEffect(() => {
     let active = true
@@ -367,41 +364,42 @@ function RunCalendar({ busy, refreshToken, onRun, onSelectDate }: { busy: boolea
   const firstWeekday = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7
   const dayCount = new Date(year, monthNumber, 0).getDate()
   const daysByDate = new globalThis.Map(data?.days.map((day) => [day.date, day]) ?? [])
-  const selectedRecord = selectedDate ? daysByDate.get(selectedDate) : undefined
+  const selectedRecord = activeDate ? daysByDate.get(activeDate) : undefined
   const cells = [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: dayCount }, (_, index) => index + 1)]
   const monthLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(new Date(year, monthNumber - 1, 1))
   const moveMonth = (offset: number) => {
     const target = new Date(year, monthNumber - 1 + offset, 1)
     setMonth(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`)
-    setSelectedDate(null)
   }
 
   return (
-    <section className="run-calendar" aria-label="论文筛选覆盖日历">
+    <section className={`run-calendar ${open ? 'expanded' : 'collapsed'}`} aria-label="论文筛选覆盖日历">
       <header>
-        <div><span>论文筛选覆盖</span><h2>{monthLabel}</h2></div>
+        <div><span>论文日期</span><h2>{open ? monthLabel : activeDate ? formatArchiveDate(activeDate) : '选择日期'}</h2></div>
         <div className="calendar-controls">
           <span><i className="completed" />完整筛选</span>
           <span><i className="partial" />待补充</span>
-          <button className="icon-button" onClick={() => moveMonth(-1)} aria-label="上个月"><ChevronLeft size={16} /></button>
-          <button className="icon-button" onClick={() => moveMonth(1)} aria-label="下个月"><ChevronRight size={16} /></button>
+          {open && <button className="icon-button" onClick={() => moveMonth(-1)} aria-label="上个月"><ChevronLeft size={16} /></button>}
+          {open && <button className="icon-button" onClick={() => moveMonth(1)} disabled={month >= currentMonth} aria-label="下个月"><ChevronRight size={16} /></button>}
+          <button className="button secondary compact calendar-toggle" aria-expanded={open} aria-label={open ? '收起日期日历' : '展开日期日历'} onClick={() => setOpen((value) => !value)}><CalendarDays size={14} />{open ? '收起' : '选择日期'}<ChevronDown className={open ? 'open' : ''} size={14} /></button>
         </div>
       </header>
-      <div className="calendar-weekdays" aria-hidden="true">{['一', '二', '三', '四', '五', '六', '日'].map((day) => <span key={day}>{day}</span>)}</div>
-      <div className="calendar-grid">
-        {cells.map((day, index) => {
-          if (day === null) return <span className="calendar-empty" key={`empty-${index}`} />
-          const date = `${month}-${String(day).padStart(2, '0')}`
-          const record = daysByDate.get(date)
-          const unavailable = !data || date > data.latest_available_date
-          const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；当前语义候选 ${record.candidates}，AI 初筛 ${record.screened}，待初筛 ${record.pending_screening}` : '尚未筛选，点击后可以补跑'
-          return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === selectedDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => { setSelectedDate(date); onSelectDate(date) }} title={title} key={date}><strong>{day}</strong>{record && <small>候选 {record.candidates}</small>}</button>
-        })}
-      </div>
-      {selectedDate && data && <div className={`calendar-detail ${selectedRecord?.status ?? 'missing'}`}>
-        <div><span>{formatArchiveDate(selectedDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord?.pending_screening ? '有新的语义候选待初筛' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 语义候选 ${selectedRecord.candidates} · AI 初筛 ${selectedRecord.screened} · 待初筛 ${selectedRecord.pending_screening} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
-        {selectedRecord?.status !== 'completed' && <button className="button primary compact" disabled={busy} onClick={() => onRun(selectedDate)}><RefreshCw className={busy ? 'spin' : ''} size={14} />{busy ? '任务进行中' : selectedRecord ? '继续补跑' : '补跑这一天'}</button>}
-        <button className="icon-button" onClick={() => setSelectedDate(null)} aria-label="关闭日期详情"><X size={15} /></button>
+      {open && <div className="calendar-body">
+        <div className="calendar-weekdays" aria-hidden="true">{['一', '二', '三', '四', '五', '六', '日'].map((day) => <span key={day}>{day}</span>)}</div>
+        <div className="calendar-grid">
+          {cells.map((day, index) => {
+            if (day === null) return <span className="calendar-empty" key={`empty-${index}`} />
+            const date = `${month}-${String(day).padStart(2, '0')}`
+            const record = daysByDate.get(date)
+            const unavailable = !data || date > data.latest_available_date
+            const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；当前语义候选 ${record.candidates}，AI 初筛 ${record.screened}，待初筛 ${record.pending_screening}` : '尚未筛选，点击后可以补跑'
+            return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === activeDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => { setOpen(false); onSelectDate(date) }} title={title} key={date}><strong>{day}</strong>{record && <small>候选 {record.candidates}</small>}</button>
+          })}
+        </div>
+        {activeDate && activeDate.startsWith(month) && data && <div className={`calendar-detail ${selectedRecord?.status ?? 'missing'}`}>
+          <div><span>{formatArchiveDate(activeDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord?.pending_screening ? '有新的语义候选待初筛' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 语义候选 ${selectedRecord.candidates} · AI 初筛 ${selectedRecord.screened} · 待初筛 ${selectedRecord.pending_screening} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
+          {selectedRecord?.status !== 'completed' && <button className="button primary compact" disabled={busy} onClick={() => onRun(activeDate)}><RefreshCw className={busy ? 'spin' : ''} size={14} />{busy ? '任务进行中' : selectedRecord ? '继续补跑' : '补跑这一天'}</button>}
+        </div>}
       </div>}
       {error && <p className="calendar-error">{error}</p>}
     </section>

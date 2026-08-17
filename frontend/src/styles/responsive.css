@@ -161,6 +161,9 @@
   .metric-band { width: 100%; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .run-calendar { padding: 13px 10px 12px; }
   .run-calendar > header { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .run-calendar.collapsed > header { align-items: center; flex-direction: row; }
+  .run-calendar.collapsed .calendar-controls { width: auto; }
+  .run-calendar.collapsed .calendar-controls > span { display: none; }
   .calendar-controls { width: 100%; gap: 7px; }
   .calendar-controls > span { margin-right: auto; font-size: 8px; }
   .calendar-controls > span + span { margin-right: 0; }

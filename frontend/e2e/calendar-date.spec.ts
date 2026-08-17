@@ -61,11 +61,77 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
   const titles = page.locator('.paper-list h2')
   await expect(titles).toHaveText(['Paper for August 14'])
 
+  await expect(page.locator('.calendar-grid')).toHaveCount(0)
+  await page.getByRole('button', { name: '展开日期日历' }).click()
   await page.locator('.calendar-day strong').getByText('13', { exact: true }).click()
   await expect(titles).toHaveText(['Paper for August 13'])
+  await expect(page).toHaveURL(/date=2026-08-13/)
   expect(requestedDates).toContain('2026-08-13')
 
+  await page.getByRole('button', { name: '展开日期日历' }).click()
   await page.locator('.calendar-day strong').getByText('14', { exact: true }).click()
   await expect(titles).toHaveText(['Paper for August 14'])
+  await expect(page).toHaveURL(/date=2026-08-14/)
   expect(requestedDates).toContain('2026-08-14')
+
+  await page.goBack()
+  await expect(titles).toHaveText(['Paper for August 13'])
+  await page.reload()
+  await expect(titles).toHaveText(['Paper for August 13'])
+})
+
+test('opening a paper preserves the workspace position and resets only the reader', async ({ page }) => {
+  const paper = (id: number) => ({
+    id,
+    arxiv_id: `2608.2000${id}`,
+    title: `Scroll test paper ${id}`,
+    authors: ['Test Author'],
+    affiliations: [],
+    categories: ['cs.AI'],
+    abstract: `Long abstract for paper ${id}. `.repeat(300),
+    submitted_at: '2026-08-14T12:00:00Z',
+    abs_url: `https://arxiv.org/abs/2608.2000${id}`,
+    pdf_url: `https://arxiv.org/pdf/2608.2000${id}`,
+    effective_score: 90 - id,
+    score_source: 'ai',
+    match_reasons: ['Test topic'],
+  })
+  await page.route('**/api/dashboard*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        date: '2026-08-14',
+        total_papers: 2,
+        semantic_candidate_papers: 2,
+        screened_papers: 2,
+        high_priority_papers: 2,
+        items: [paper(1), paper(2)],
+        topic_stats: [],
+        profile: { watched_authors: [], watched_organizations: [] },
+      }),
+    })
+  })
+  await page.route('**/api/job-calendar*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ month: '2026-08', latest_available_date: '2026-08-16', days: [] }),
+    })
+  })
+
+  await page.goto('/?view=today')
+  await page.locator('.paper-row').first().click()
+  await expect(page.locator('.detail-column')).toHaveClass(/mobile-visible/)
+  const workbench = page.locator('.paper-workbench')
+  await workbench.scrollIntoViewIfNeeded()
+  const windowScroll = await page.evaluate(() => window.scrollY)
+  const reader = page.locator('.detail-scroll')
+  await reader.evaluate((element) => { element.scrollTop = element.scrollHeight })
+  expect(await reader.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+
+  await page.locator('.paper-row').nth(1).click()
+  await expect(page).toHaveURL(/paper=2/)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(windowScroll, 0)
+  expect(await reader.evaluate((element) => element.scrollTop)).toBe(0)
 })
