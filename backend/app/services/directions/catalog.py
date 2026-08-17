@@ -46,4 +46,3 @@ __all__ = [
     "SPECIALTY_DIRECTION_CATALOG",
     "direction_catalog_payload",
 ]
-

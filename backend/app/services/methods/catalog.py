@@ -216,4 +216,3 @@ __all__ = [
     "method_catalog_payload",
     "normalize_method_key",
 ]
-
