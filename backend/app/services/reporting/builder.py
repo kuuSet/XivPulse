@@ -166,7 +166,6 @@ def _highlight(record: _PaperSignal) -> dict[str, Any]:
         "analysis_available": record.analysis is not None,
     }
 
-
 def _reading_queue(records: Sequence[_PaperSignal], limit: int) -> list[dict[str, Any]]:
     priority = {"must_read": 0, "read": 1, "skim": 2, "skip": 3}
     ordered = sorted(
@@ -665,5 +664,4 @@ def build_daily_research_report(
             "可核查线索，不将摘要未提及的信息视为论文事实。"
         ),
     }
-
 

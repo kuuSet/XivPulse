@@ -88,4 +88,3 @@ def build_topic_trends(
         "daily": daily,
         "weekly": weekly,
     }
-
