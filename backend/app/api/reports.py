@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 from ..settings import load_runtime_settings
 from ..database import SessionLocal, get_db
 from ..models import DailyResearchReport, Digest, Paper, PaperMatch
-from ..services.analytics import build_research_roadmap, build_topic_trends
-from ..services.daily_reports import (
+from ..services.reporting.roadmap import build_research_roadmap
+from ..services.reporting.service import (
     persist_daily_report,
     report_snapshot,
     send_daily_report_email,
     synthesize_daily_report,
 )
+from ..services.reporting.trends import build_topic_trends
 from ..services.direction_taxonomy import direction_taxonomy_fingerprint
 from ..services.state import active_profile
 from .presenters.common import _as_utc

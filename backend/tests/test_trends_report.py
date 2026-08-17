@@ -5,11 +5,9 @@ from datetime import UTC, date, datetime
 import pytest
 from app.database import Base, make_engine
 from app.models import Analysis, Digest, Paper, PaperMatch, Profile, Topic
-from app.services.analytics import (
-    build_daily_research_report,
-    build_research_roadmap,
-    build_topic_trends,
-)
+from app.services.reporting.builder import build_daily_research_report
+from app.services.reporting.roadmap import build_research_roadmap
+from app.services.reporting.trends import build_topic_trends
 from app.services.direction_taxonomy import stamp_direction_attribution
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -207,7 +205,7 @@ def test_default_trends_keep_latest_complete_day_until_daily_update(
     )
     analytics_session.commit()
     monkeypatch.setattr(
-        "app.services.analytics._target_day",
+        "app.services.reporting.trends._target_day",
         lambda value, timezone: date(2026, 8, 13) if value is None else value,
     )
 

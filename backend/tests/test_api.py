@@ -366,7 +366,7 @@ def test_server_auth_login_cookie_and_logout(
 async def test_email_delivery_is_idempotent_for_automatic_report(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services import daily_reports
+    from app.services.reporting import service as daily_reports
 
     sent_subjects: list[str] = []
 
@@ -554,9 +554,9 @@ def _saved_synthesis_report(report_date: date) -> dict[str, object]:
 async def test_daily_ai_synthesis_is_persisted_and_counted(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services import daily_reports
+    from app.services.reporting import service as daily_reports
     from app.services.provider import GenerationResult, TokenUsage
-    from app.services.report_synthesis import DailyReportSynthesis, SynthesisThread
+    from app.services.reporting.synthesis import DailyReportSynthesis, SynthesisThread
 
     report_date = date(2026, 8, 14)
     with database.SessionLocal() as session:
@@ -638,7 +638,7 @@ async def test_daily_ai_synthesis_is_persisted_and_counted(
 def test_daily_ai_synthesis_without_key_does_not_call_provider(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services import daily_reports
+    from app.services.reporting import service as daily_reports
 
     report_date = date(2026, 8, 13)
     with database.SessionLocal() as session:
@@ -1135,7 +1135,7 @@ def test_trends_roadmap_and_daily_report_use_requested_date(client: TestClient) 
 def test_daily_report_snapshot_is_stable_refreshable_and_listed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services import daily_reports
+    from app.services.reporting import service as daily_reports
 
     builds: list[int] = []
 
@@ -1242,7 +1242,7 @@ def test_pipeline_report_stage_uses_configured_timezone_and_upserts(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.models import DailyResearchReport
-    from app.services import daily_reports
+    from app.services.reporting import service as daily_reports
 
     report_day = date(2026, 7, 4)
     timezone_calls: list[str] = []

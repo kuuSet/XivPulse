@@ -2,7 +2,7 @@
 
 from .pipeline import PipelineCoordinator
 from .runtime import initialize_application
-from .services.daily_reports import finalize_daily_stage
+from .services.reporting.service import finalize_daily_stage
 from .services.paper_analysis import analyze_papers
 from .services.paper_sync import sync_papers
 

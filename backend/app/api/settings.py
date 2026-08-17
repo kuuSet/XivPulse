@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..settings import delete_setting, load_runtime_settings, set_setting
-from ..services.analytics import current_date_in_timezone
-from ..services.daily_reports import persist_daily_report, send_daily_report_email
+from ..services.reporting.records import current_date_in_timezone
+from ..services.reporting.service import persist_daily_report, send_daily_report_email
 from ..services.prompt_catalog import (
     MAX_EDITABLE_PROMPT_CHARS,
     PROMPT_TEMPLATE_IDS,

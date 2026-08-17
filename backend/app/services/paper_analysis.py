@@ -13,7 +13,7 @@ from sqlalchemy.orm import joinedload
 from ..settings import load_runtime_settings
 from ..database import SessionLocal, session_scope
 from ..models import Analysis, Paper, PaperMatch, Profile, ScreeningQueueItem, utcnow
-from .analytics import current_date_in_timezone
+from .reporting.records import current_date_in_timezone
 from .analyzer import PaperAnalyzer
 from .direction_matching import canonical_requested_direction_names
 from .direction_taxonomy import stamp_direction_attribution

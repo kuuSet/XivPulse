@@ -9,8 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .analyzer import analysis_budget
-from .provider import (
+from ..analyzer import analysis_budget
+from ..provider import (
     GenerationResult,
     OpenAICompatibleAdapter,
     ProviderProtocolError,
