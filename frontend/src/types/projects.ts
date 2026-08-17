@@ -1,8 +1,8 @@
 import type { Paper, ReadingState } from './papers'
 
-export type ProjectStatus = 'active' | 'paused' | 'completed'
+type ProjectStatus = 'active' | 'paused' | 'completed'
 
-export interface ProjectPaperSummary {
+interface ProjectPaperSummary {
   id: Paper['id']
   arxiv_id: string
   title: string

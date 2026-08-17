@@ -25,7 +25,7 @@ export interface TopicTrendItem {
   series?: Array<{ period: string; count: number }>
 }
 
-export interface TopicTrendPeriod {
+interface TopicTrendPeriod {
   granularity?: 'day' | 'week'
   start_date: string
   end_date: string
@@ -52,9 +52,9 @@ export interface TopicTrends {
   periods?: string[]
 }
 
-export type RoadmapNodeStatus = 'emerging' | 'active' | 'established'
+type RoadmapNodeStatus = 'emerging' | 'active' | 'established'
 
-export interface RoadmapNode {
+interface RoadmapNode {
   id: string
   label: string
   sources?: string[]
@@ -70,7 +70,7 @@ export interface RoadmapNode {
   cluster_id?: string
 }
 
-export interface RoadmapRelation {
+interface RoadmapRelation {
   source: string
   target: string
   type?: string
@@ -80,7 +80,7 @@ export interface RoadmapRelation {
   paper_ids?: Array<Paper['id']>
 }
 
-export interface RoadmapCluster {
+interface RoadmapCluster {
   id: string
   label: string
   description?: string

@@ -1,4 +1,4 @@
-export interface AnalysisPromptTemplate {
+interface AnalysisPromptTemplate {
   id: string
   name: string
   description: string
@@ -66,7 +66,7 @@ export interface Settings {
   public_url: string
 }
 
-export interface TokenUsageTotals {
+interface TokenUsageTotals {
   record_count: number
   usage_available_count: number
   usage_missing_count: number
@@ -77,7 +77,7 @@ export interface TokenUsageTotals {
   total_tokens: number
 }
 
-export interface TokenUsageSummary extends TokenUsageTotals {
+interface TokenUsageSummary extends TokenUsageTotals {
   by_kind: Record<string, TokenUsageTotals>
   latest: null | {
     analysis_id: number

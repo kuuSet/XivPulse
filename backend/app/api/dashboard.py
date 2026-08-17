@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from ..settings import load_runtime_settings
 from ..database import get_db
 from ..models import (
     Analysis,
@@ -27,6 +26,7 @@ from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.jobs import RUNNING_STATUSES
 from ..services.semantic.embedding import RECALL_THRESHOLDS, recall_mode
 from ..services.state import active_profile
+from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.jobs import _job_wire
 from .presenters.papers import _paper_wire, _query_papers

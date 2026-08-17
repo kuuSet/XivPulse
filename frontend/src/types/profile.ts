@@ -20,7 +20,7 @@ export interface DirectionCatalogItem extends BackendTopic {
   parent_name?: string | null
 }
 
-export interface DirectionCatalogSource {
+interface DirectionCatalogSource {
   name: string
   url: string
   role: string

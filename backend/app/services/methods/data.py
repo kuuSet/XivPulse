@@ -3,10 +3,7 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
-from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 

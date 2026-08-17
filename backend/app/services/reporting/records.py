@@ -13,24 +13,21 @@ import math
 import re
 import unicodedata
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
-from itertools import combinations
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ...models import Analysis, Digest, Paper, PaperMatch, Profile, Topic
+from ...models import Analysis, Paper, PaperMatch, Profile, Topic
 from ..directions.matching import canonical_requested_direction_names, direction_evidence
 from ..directions.taxonomy import (
     direction_taxonomy_fingerprint,
     has_current_direction_attribution,
 )
-from ..methods.catalog import match_method_labels
-from ..organizations import paper_organizations
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_TREND_LIMIT = 12

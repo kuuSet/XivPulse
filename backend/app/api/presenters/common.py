@@ -7,8 +7,7 @@ import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
-from ...models import Analysis, Paper, Profile, Topic
-from ...services.directions.matching import matched_direction_names
+from ...models import Analysis, Paper
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -43,17 +42,6 @@ def _direction_key(value: object) -> str:
     return re.sub(r"[\s_-]+", "", normalized).casefold()
 
 
-def _enabled_direction_names(profile: Profile) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for topic in profile.topics:
-        if not topic.enabled:
-            continue
-        for name in (topic.name, *topic.aliases):
-            if key := _direction_key(name):
-                result[key] = topic.name
-    return result
-
-
 def _canonical_directions(values: Any, names_by_key: dict[str, str]) -> list[str]:
     if not isinstance(values, list | tuple | set):
         return []
@@ -68,13 +56,6 @@ def _canonical_directions(values: Any, names_by_key: dict[str, str]) -> list[str
             seen.add(key)
             result.append(canonical)
     return result
-
-
-def _configured_keyword_directions(paper: Paper, topics: list[Topic]) -> list[str]:
-    """Derive direction attribution from current configured keyword evidence."""
-
-    text = f"{paper.title}\n{paper.abstract}"
-    return matched_direction_names(text, topics)
 
 
 def _clean_tags(value: Any, *, limit: int = 50) -> list[str]:

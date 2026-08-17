@@ -3,7 +3,7 @@ export interface TopicStat {
   count: number
 }
 
-export type JobState = 'queued' | 'running' | 'completed' | 'failed' | string
+type JobState = 'queued' | 'running' | 'completed' | 'failed' | string
 
 export interface JobInfo {
   id: string
@@ -26,7 +26,7 @@ export interface AppStatus {
   latest_job?: JobInfo | null
 }
 
-export interface JobCalendarDay {
+interface JobCalendarDay {
   date: string
   status: 'completed' | 'partial'
   fetched: number

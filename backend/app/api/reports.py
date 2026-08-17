@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..settings import load_runtime_settings
 from ..database import SessionLocal, get_db
 from ..models import DailyResearchReport, Digest, Paper, PaperMatch
+from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.reporting.roadmap import build_research_roadmap
 from ..services.reporting.service import (
     persist_daily_report,
@@ -21,8 +21,8 @@ from ..services.reporting.service import (
     synthesize_daily_report,
 )
 from ..services.reporting.trends import build_topic_trends
-from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.state import active_profile
+from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.papers import _paper_wire, _query_papers
 from .presenters.reports import _digest_wire

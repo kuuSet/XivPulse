@@ -9,9 +9,9 @@ from typing import Any
 from ..methods.catalog import match_method_labels
 from .records import (
     _EVIDENCE_TERMS,
-    _PaperSignal,
     _clean_phrase,
     _key,
+    _PaperSignal,
     _payload,
     _payload_list,
 )

@@ -9,13 +9,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..settings import load_runtime_settings
-from ..database import SessionLocal, session_scope
-from ..domain.paper import Paper
-from ..models import Topic
 from ..arxiv.affiliations import fetch_affiliations
 from ..arxiv.fetch import fetch_daily
 from ..arxiv.repository import PaperRepository
+from ..database import SessionLocal, session_scope
+from ..domain.paper import Paper
+from ..models import Topic
+from ..settings import load_runtime_settings
 from .semantic.embedding import match_papers as semantic_match_papers
 from .semantic.embedding import recall_mode
 from .semantic.recall import SemanticMatcher, recall_papers

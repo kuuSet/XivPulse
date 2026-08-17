@@ -12,16 +12,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..settings import delete_setting, load_runtime_settings, set_setting
-from ..services.reporting.records import current_date_in_timezone
-from ..services.reporting.service import persist_daily_report, send_daily_report_email
 from ..services.prompt_catalog import (
     MAX_EDITABLE_PROMPT_CHARS,
     PROMPT_TEMPLATE_IDS,
     prompt_catalog_payload,
 )
+from ..services.reporting.records import current_date_in_timezone
+from ..services.reporting.service import persist_daily_report, send_daily_report_email
 from ..services.semantic.embedding import SemanticEmbeddingError, embedding_status
 from ..services.state import active_profile
+from ..settings import delete_setting, load_runtime_settings, set_setting
 from .system_views import _settings_wire
 
 router = APIRouter()

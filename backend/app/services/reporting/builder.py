@@ -17,13 +17,13 @@ from .records import (
     DAILY_QUALITY_SCORE_THRESHOLD,
     DEFAULT_TIMEZONE,
     DEFAULT_TREND_LIMIT,
-    _PaperSignal,
     _as_timezone,
     _clean_phrase,
     _day_bounds,
     _key,
     _load_records,
     _mean,
+    _PaperSignal,
     _payload,
     _payload_list,
     _period_payload,
@@ -91,29 +91,6 @@ def _limitation_items(record: _PaperSignal) -> list[tuple[str, str]]:
             "现有分析未明确记录局限，需要阅读全文核查泛化边界、失败案例与复现条件。",
             "coverage_check",
         )
-    ]
-
-
-def _aggregate_limitations(records: Sequence[_PaperSignal]) -> list[dict[str, Any]]:
-    papers: defaultdict[tuple[str, str], set[int]] = defaultdict(set)
-    display: dict[tuple[str, str], str] = {}
-    for record in records:
-        for text, basis in _limitation_items(record):
-            item_key = (_key(text), basis)
-            display.setdefault(item_key, text)
-            papers[item_key].add(record.paper.id)
-    keys = sorted(
-        papers,
-        key=lambda value: (-len(papers[value]), display[value].casefold(), value[1]),
-    )
-    return [
-        {
-            "text": display[value],
-            "count": len(papers[value]),
-            "paper_ids": sorted(papers[value]),
-            "basis": value[1],
-        }
-        for value in keys[:10]
     ]
 
 
@@ -664,4 +641,3 @@ def build_daily_research_report(
             "可核查线索，不将摘要未提及的信息视为论文事实。"
         ),
     }
-

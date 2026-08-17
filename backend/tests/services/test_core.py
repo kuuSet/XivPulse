@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import app.settings.process as settings_module
 import arxiv
 import httpx
 import pytest
-from app.settings import ProviderSettings, load_runtime_settings, set_setting
-from app.database import init_db, make_engine
-from app.domain.paper import Paper as PaperDocument
-from app.models import Paper, PaperVersion, Profile
-from app.schemas import ScreeningResult
-from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.arxiv.affiliations import fetch_affiliations
 from app.arxiv.download import limited_bytes
 from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
+from app.database import init_db, make_engine
+from app.domain.paper import Paper as PaperDocument
+from app.models import Paper, PaperVersion, Profile
+from app.schemas import ScreeningResult
+from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
 from app.services.directions.catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -43,6 +43,7 @@ from app.services.prompt_catalog import (
     prompt_catalog_payload,
 )
 from app.services.provider import OpenAICompatibleAdapter
+from app.settings import ProviderSettings, load_runtime_settings, set_setting
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session

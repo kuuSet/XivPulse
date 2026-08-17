@@ -8,10 +8,10 @@ from typing import Any
 from sqlalchemy import Integer, desc, func, select
 from sqlalchemy.orm import Session
 
-from ..settings import load_runtime_settings, setting_value
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..services.semantic.embedding import RECALL_THRESHOLDS, embedding_status, recall_mode
+from ..settings import load_runtime_settings, setting_value
 from .presenters.common import _as_utc
 
 

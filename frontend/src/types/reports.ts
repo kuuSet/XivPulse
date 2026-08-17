@@ -1,7 +1,7 @@
 import type { Paper } from './papers'
 import type { RepresentativePaper, TrendDirection } from './trends'
 
-export interface DailyTopicInsight {
+interface DailyTopicInsight {
   topic_id?: string
   topic: string
   paper_count: number
@@ -11,7 +11,7 @@ export interface DailyTopicInsight {
   representative_papers?: RepresentativePaper[]
 }
 
-export interface DailyNotablePaper {
+interface DailyNotablePaper {
   paper_id: Paper['id']
   arxiv_id?: string
   title: string
@@ -44,7 +44,7 @@ export interface DailyResearchGap {
   papers?: RepresentativePaper[]
 }
 
-export interface DailyReadingQueueItem {
+interface DailyReadingQueueItem {
   rank: number
   paper_id: Paper['id']
   arxiv_id?: string
@@ -56,7 +56,7 @@ export interface DailyReadingQueueItem {
   reason?: string
 }
 
-export interface DailyAiSynthesis {
+interface DailyAiSynthesis {
   status: 'ready' | 'not_configured' | 'insufficient_data' | 'disabled' | 'error' | string
   headline?: string
   overall_assessment?: string

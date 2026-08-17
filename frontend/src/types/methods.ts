@@ -1,4 +1,4 @@
-export interface MethodCatalogItem {
+interface MethodCatalogItem {
   slug: string
   group: string
   name: string

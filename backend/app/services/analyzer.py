@@ -8,16 +8,13 @@ from dataclasses import dataclass
 from html import escape
 from typing import Any, Literal
 
-from sqlalchemy.orm import Session
-
-from ..models import Analysis, Paper, Profile, Topic
+from ..models import Paper, Profile, Topic
 from ..schemas import DeepAnalysisResult, ScreeningResult
 from .directions.matching import (
     canonical_requested_direction_names,
     direction_evidence,
     terms,
 )
-from .directions.taxonomy import stamp_direction_attribution
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompt_catalog import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,
@@ -86,16 +83,6 @@ def _paper_value(paper: Paper | Mapping[str, Any], name: str, default: Any = "")
             return paper[name]
         return paper.get(f"{name}_json", default)
     return getattr(paper, name, getattr(paper, f"{name}_json", default))
-
-
-def _has_configured_term(text: str, term: object) -> bool:
-    phrase = str(term).strip()
-    if not phrase:
-        return False
-    if re.fullmatch(r"[A-Za-z0-9_+.-]+", phrase):
-        pattern = rf"(?<![A-Za-z0-9]){re.escape(phrase)}(?![A-Za-z0-9])"
-        return re.search(pattern, text, re.I) is not None
-    return phrase.casefold() in text.casefold()
 
 
 def _profile_value(profile: Profile | Mapping[str, Any], name: str, default: Any = "") -> Any:
@@ -242,78 +229,6 @@ class PaperAnalyzer:
             self.deep_analysis_prompt,
             stage,
         )
-
-    async def screen_and_store(
-        self,
-        session: Session,
-        paper: Paper,
-        profile: Profile,
-        topics: Sequence[Topic] | None = None,
-    ) -> Analysis:
-        active_topics = list(topics if topics is not None else profile.topics)
-        generated = await self.screen_with_metadata(paper, profile, active_topics)
-        data = generated.data
-        payload = stamp_direction_attribution(data.model_dump(), active_topics)
-        payload["_analysis_prompt"] = generated.prompt_metadata
-        analysis = Analysis(
-            paper_id=paper.id,
-            profile_id=profile.id,
-            kind="screening",
-            status="completed",
-            provider=generated.provider,
-            model=generated.model,
-            transport=generated.transport,
-            content_source="abstract",
-            summary=data.reason,
-            verdict="relevant" if data.relevant else "not_relevant",
-            relevance_score=data.relevance_score,
-            tags_json=data.tags,
-            payload_json=payload,
-            **generated.usage.analysis_fields(self.budget.mode),
-        )
-        session.add(analysis)
-        session.flush()
-        return analysis
-
-    async def deep_analyze_and_store(
-        self,
-        session: Session,
-        paper: Paper,
-        profile: Profile,
-        topics: Sequence[Topic] | None = None,
-        *,
-        include_fulltext: bool = True,
-    ) -> Analysis:
-        generated, fulltext = await self.deep_analyze_with_metadata(
-            paper, profile, topics, include_fulltext=include_fulltext
-        )
-        data = generated.data
-        payload = data.model_dump()
-        payload["_analysis_prompt"] = generated.prompt_metadata
-        analysis = Analysis(
-            paper_id=paper.id,
-            profile_id=profile.id,
-            kind="deep",
-            status="completed",
-            provider=generated.provider,
-            model=generated.model,
-            transport=generated.transport,
-            content_source=fulltext.source if fulltext.content else "abstract",
-            summary=data.summary,
-            verdict=data.verdict,
-            relevance_score=data.relevance_score,
-            novelty_score=data.novelty_score,
-            rigor_score=data.rigor_score,
-            impact_score=data.impact_score,
-            strengths_json=data.strengths,
-            weaknesses_json=data.weaknesses,
-            tags_json=data.tags,
-            payload_json=payload,
-            **generated.usage.analysis_fields(self.budget.mode),
-        )
-        session.add(analysis)
-        session.flush()
-        return analysis
 
     @staticmethod
     def _mock_screen(

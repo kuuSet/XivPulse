@@ -12,8 +12,8 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from ..settings import ProviderSettings, get_process_settings
 from ..schemas import ProviderTestResult
+from ..settings import ProviderSettings, get_process_settings
 
 TModel = TypeVar("TModel", bound=BaseModel)
 

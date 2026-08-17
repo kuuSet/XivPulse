@@ -18,7 +18,7 @@ import type { ResearchRoadmap, TopicTrends } from '../types/trends'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
 
-export class ApiError extends Error {
+class ApiError extends Error {
   status: number
 
   constructor(message: string, status: number) {

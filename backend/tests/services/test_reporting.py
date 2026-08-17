@@ -7,10 +7,10 @@ from datetime import UTC, date, datetime
 import pytest
 from app.database import Base, make_engine
 from app.models import Analysis, Digest, Paper, PaperMatch, Profile, Topic
+from app.services.directions.taxonomy import stamp_direction_attribution
 from app.services.reporting.builder import build_daily_research_report
 from app.services.reporting.roadmap import build_research_roadmap
 from app.services.reporting.trends import build_topic_trends
-from app.services.directions.taxonomy import stamp_direction_attribution
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

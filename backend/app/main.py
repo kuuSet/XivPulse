@@ -20,8 +20,8 @@ from .api.profile import router as profile_router
 from .api.projects import router as projects_router
 from .api.reports import router as reports_router
 from .api.settings import router as settings_router
-from .settings import get_process_settings
 from .runtime import initialize_application
+from .settings import get_process_settings
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
