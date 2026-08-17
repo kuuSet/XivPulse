@@ -59,13 +59,12 @@ class ProviderSettings(BaseSettings):
         return value.rstrip("/")
 
     @property
-    def mock_mode(self) -> bool:
-        return not bool(self.api_key)
+    def configured(self) -> bool:
+        return bool(self.api_key)
 
     def public_dict(self) -> dict[str, Any]:
         payload = self.model_dump()
-        payload["api_key_configured"] = not self.mock_mode
-        payload["mock_mode"] = self.mock_mode
+        payload["api_key_configured"] = self.configured
         return payload
 
 

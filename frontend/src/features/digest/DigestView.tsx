@@ -233,7 +233,7 @@ function StructuredReport({ report, papers }: { report: DailyReport; papers: Pap
               <article key={String(item.paper_id)}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
                 <div>
-                  <div><strong>{Math.round(item.score ?? paper?.relevance_score ?? 0)} 分</strong><em>{item.recommendation ?? '重点关注'}</em></div>
+                  <div><strong>{Math.round(item.score ?? paper?.effective_score ?? 0)} 分</strong><em>{item.recommendation ?? '重点关注'}</em></div>
                   {organizations.length > 0 && <div className="report-organizations">{organizations.map((organization) => <OrganizationBadge key={organization} name={organization} />)}</div>}
                   <h4>{item.title}</h4>
                   <p>{item.summary ?? paper?.summary ?? item.why_it_matters ?? ''}</p>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar
 from urllib.parse import urlparse
@@ -78,10 +78,9 @@ class ProviderProtocolError(ProviderError):
 @dataclass(slots=True)
 class GenerationResult[TModel: BaseModel]:
     data: TModel
-    transport: Literal["responses", "chat", "mock"]
+    transport: Literal["responses", "chat"]
     provider: str
     model: str
-    mocked: bool = False
     usage: TokenUsage = field(default_factory=TokenUsage)
     prompt_metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -246,11 +245,7 @@ class OpenAICompatibleAdapter:
         self.settings = settings or get_process_settings().provider
         self.base_url = _safe_base_url(self.settings.api_base_url)
         self._client = http_client
-        self.last_transport: Literal["responses", "chat", "mock"] = "mock"
-
-    @property
-    def mock_mode(self) -> bool:
-        return self.settings.mock_mode
+        self.last_transport: Literal["responses", "chat"] = self.settings.api_protocol
 
     async def generate_json(
         self,
@@ -260,7 +255,6 @@ class OpenAICompatibleAdapter:
         response_model: type[TModel],
         schema_name: str | None = None,
         max_output_tokens: int = 3000,
-        mock_factory: Callable[[], TModel] | None = None,
     ) -> TModel:
         result = await self.generate_json_with_metadata(
             system_prompt=system_prompt,
@@ -268,7 +262,6 @@ class OpenAICompatibleAdapter:
             response_model=response_model,
             schema_name=schema_name,
             max_output_tokens=max_output_tokens,
-            mock_factory=mock_factory,
         )
         return result.data
 
@@ -280,19 +273,9 @@ class OpenAICompatibleAdapter:
         response_model: type[TModel],
         schema_name: str | None = None,
         max_output_tokens: int = 3000,
-        mock_factory: Callable[[], TModel] | None = None,
     ) -> GenerationResult[TModel]:
-        if self.mock_mode:
-            if mock_factory is None:
-                raise ProviderError("No API key is configured and no mock result was supplied")
-            self.last_transport = "mock"
-            return GenerationResult(
-                data=mock_factory(),
-                transport="mock",
-                provider="mock",
-                model="mock",
-                mocked=True,
-            )
+        if not self.settings.configured:
+            raise ProviderError("No API key is configured")
 
         schema_name = schema_name or _schema_name(response_model)
         schema = _strict_json_schema(response_model)
@@ -444,13 +427,13 @@ class OpenAICompatibleAdapter:
             ) from exc
 
     async def test_connection(self) -> ProviderTestResult:
-        if self.mock_mode:
+        if not self.settings.configured:
             return ProviderTestResult(
-                ok=True,
-                provider_name="mock",
-                model="mock",
-                transport="mock",
-                message="未检测到 API key，当前使用本地演示分析。",
+                ok=False,
+                provider_name=self.settings.provider_name,
+                model=self.settings.model_name,
+                transport=self.settings.api_protocol,
+                message="未配置 API Key。",
             )
 
         class Ping(BaseModel):

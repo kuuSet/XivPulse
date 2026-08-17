@@ -13,7 +13,8 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
     submitted_at: `2026-08-${day}T12:00:00Z`,
     abs_url: `https://arxiv.org/abs/2608.100${day}`,
     pdf_url: `https://arxiv.org/pdf/2608.100${day}`,
-    relevance_score: 90,
+    effective_score: 90,
+    score_source: 'ai',
     match_reasons: ['Test topic'],
   })
   await page.route('**/api/dashboard*', async (route) => {
@@ -26,6 +27,7 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
       body: JSON.stringify({
         date: date ?? '2026-08-14',
         total_papers: 1,
+        semantic_candidate_papers: 1,
         screened_papers: 1,
         high_priority_papers: 1,
         items: [paper(day)],

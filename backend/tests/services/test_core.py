@@ -16,7 +16,8 @@ from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
 from app.database import init_db, make_engine
-from app.domain.paper import Paper as PaperDocument, as_utc
+from app.domain.paper import Paper as PaperDocument
+from app.domain.paper import as_utc
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
@@ -27,6 +28,8 @@ from app.services.directions.catalog import (
 )
 from app.services.directions.matching import (
     contains_term,
+    direction_evidence,
+    matched_direction_names,
     verified_requested_direction_names,
 )
 from app.services.methods.catalog import (
@@ -42,7 +45,7 @@ from app.services.prompt_catalog import (
     SCREENING_SYSTEM_PROMPT,
     prompt_catalog_payload,
 )
-from app.services.provider import OpenAICompatibleAdapter
+from app.services.provider import OpenAICompatibleAdapter, ProviderError
 from app.settings import ProviderSettings, load_runtime_settings, set_setting
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -667,10 +670,10 @@ def test_direction_context_anchor_blocks_cross_domain_keyword_collision() -> Non
         "abstract": "A robot policy for whole-body control.",
     }
 
-    unrelated_screen = PaperAnalyzer._mock_screen(unrelated, topics)
-    robotics_screen = PaperAnalyzer._mock_screen(robotics, topics)
-    assert unrelated_screen.matched_topics == []
-    assert robotics_screen.matched_topics == ["Robot Learning"]
+    unrelated_text = f"{unrelated['title']}\n{unrelated['abstract']}"
+    robotics_text = f"{robotics['title']}\n{robotics['abstract']}"
+    assert direction_evidence(unrelated_text, topics[0]).matched is False
+    assert direction_evidence(robotics_text, topics[0]).matched is True
 
 
 def test_multiword_terms_use_boundaries_and_unrelated_exclusions_do_not_penalize() -> None:
@@ -703,12 +706,11 @@ def test_multiword_terms_use_boundaries_and_unrelated_exclusions_do_not_penalize
         "categories": ["cs.RO"],
         "published_at": datetime(2026, 8, 12, tzinfo=UTC),
     }
-    screen = PaperAnalyzer._mock_screen(paper, topics)
-    assert screen.matched_topics == ["VLA"]
-    assert "排除词" not in screen.reason
+    text = f"{paper['title']}\n{paper['abstract']}"
+    assert matched_direction_names(text, topics) == ["VLA"]
 
 
-def test_mock_screening_does_not_turn_category_into_a_direction() -> None:
+def test_direction_matching_does_not_turn_category_into_evidence() -> None:
     topics = [
         {
             "name": "Robot Navigation",
@@ -724,9 +726,8 @@ def test_mock_screening_does_not_turn_category_into_a_direction() -> None:
         "categories": ["cs.RO"],
     }
 
-    result = PaperAnalyzer._mock_screen(paper, topics)
-    assert result.matched_topics == []
-    assert result.tags == []
+    text = f"{paper['title']}\n{paper['abstract']}"
+    assert matched_direction_names(text, topics) == []
 
 
 def test_compatible_provider_unit_interval_scores_are_normalized() -> None:
@@ -1107,33 +1108,18 @@ async def test_responses_falls_back_to_chat_and_mock_never_calls_http() -> None:
     assert adapter.last_transport == "chat"
 
     def must_not_call(_: httpx.Request) -> httpx.Response:
-        raise AssertionError("mock mode must remain offline")
+        raise AssertionError("an unconfigured provider must remain offline")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(must_not_call)) as client:
-        mock_adapter = OpenAICompatibleAdapter(
+        adapter = OpenAICompatibleAdapter(
             _provider_settings(api_key=None), http_client=client
         )
-        analyzer = PaperAnalyzer(mock_adapter)
-        result = await analyzer.deep_analyze(
-            {
-                "title": "Embodied Agent",
-                "abstract": "A robot learning method.",
-                "authors": ["A"],
-                "categories": ["cs.RO"],
-            },
-            {"description": "robotics"},
-            [
-                {
-                    "name": "Robotics",
-                    "enabled": True,
-                    "keywords": ["robot learning"],
-                    "negative_keywords": [],
-                    "arxiv_categories": ["cs.RO"],
-                }
-            ],
-        )
-    assert result.relevance_score > 0
-    assert "演示" in result.verdict
+        with pytest.raises(ProviderError, match="No API key"):
+            await adapter.generate_json(
+                system_prompt="Return JSON.",
+                user_prompt="screen",
+                response_model=ScreeningResult,
+            )
 
 
 @pytest.mark.asyncio

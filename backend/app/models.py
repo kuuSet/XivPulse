@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -271,7 +272,7 @@ class PaperMatch(Base):
     semantic_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     semantic_topics_json: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
     semantic_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
-    relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    screening_relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str] = mapped_column(Text, default="")
     screened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -294,6 +295,20 @@ class PaperMatch(Base):
             for name, score in dict(self.semantic_topics_json or {}).items()
             if isinstance(score, int | float)
         }
+
+    @property
+    def effective_score(self) -> float:
+        if self.screening_relevance_score is not None:
+            return max(0.0, min(100.0, self.screening_relevance_score))
+        return max(0.0, min(100.0, (self.semantic_score or 0.0) * 100))
+
+    @property
+    def score_source(self) -> str:
+        return "ai" if self.screening_relevance_score is not None else "semantic"
+
+    @classmethod
+    def effective_score_expression(cls):
+        return func.coalesce(cls.screening_relevance_score, cls.semantic_score * 100, 0)
 
 
 class PaperEmbedding(TimestampMixin, Base):
@@ -344,9 +359,9 @@ class Analysis(Base):
     )
     kind: Mapped[str] = mapped_column(String(20), default="screening", index=True)
     status: Mapped[str] = mapped_column(String(20), default="completed", index=True)
-    provider: Mapped[str] = mapped_column(String(80), default="mock")
-    model: Mapped[str] = mapped_column(String(120), default="mock")
-    transport: Mapped[str] = mapped_column(String(30), default="mock")
+    provider: Mapped[str] = mapped_column(String(80), default="unknown")
+    model: Mapped[str] = mapped_column(String(120), default="unknown")
+    transport: Mapped[str] = mapped_column(String(30), default="unknown")
     content_source: Mapped[str] = mapped_column(String(20), default="abstract")
     budget_mode: Mapped[str] = mapped_column(String(20), default="balanced", index=True)
     usage_available: Mapped[bool] = mapped_column(Boolean, default=False)

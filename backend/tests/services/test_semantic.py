@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 import fastembed
@@ -55,7 +54,7 @@ def test_embedding_model_loads_once_and_detects_dimensions(
     assert model.dimensions == 2
 
 
-def test_recall_service_bulk_loads_matches_and_queues() -> None:
+def test_recall_service_bulk_loads_matches_without_creating_ai_queue() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     statements: list[str] = []
@@ -110,15 +109,14 @@ def test_recall_service_bulk_loads_matches_and_queues() -> None:
                 papers,
                 profile_id=profile.id,
                 topics=list(profile.topics),
-                report_date=date(2026, 8, 16),
                 mode="high",
             )
         finally:
             event.remove(engine, "before_cursor_execute", count_selects)
 
-    assert result.queued == 3
+    assert result.candidates == 3
     assert len(result.enrichment_ids) == 3
-    assert len(statements) == 2
+    assert len(statements) == 1
 
 
 def test_semantic_fingerprint_tracks_only_score_inputs() -> None:

@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ...models import Analysis, Paper, PaperMatch, Profile, Topic
+from ...settings import get_process_settings, load_runtime_settings
 from ..directions.matching import canonical_requested_direction_names, direction_evidence
 from ..directions.taxonomy import (
     direction_taxonomy_fingerprint,
@@ -135,7 +136,7 @@ def _mean(values: Iterable[float | None]) -> float | None:
 
 
 def _score(match: PaperMatch) -> float:
-    number = _number(match.relevance_score)
+    number = _number(match.effective_score)
     return round(max(0.0, min(100.0, number)), 1) if number is not None else 0.0
 
 
@@ -268,6 +269,10 @@ def _labels(
 
 
 def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
+    settings = load_runtime_settings(session)
+    semantic_threshold = get_process_settings().semantic.threshold(
+        settings.semantic_recall_mode
+    )
     profile = session.scalar(
         select(Profile)
         .where(Profile.id == profile_id)
@@ -294,7 +299,10 @@ def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
 
     matches = session.scalars(
         select(PaperMatch)
-        .where(PaperMatch.profile_id == profile_id)
+        .where(
+            PaperMatch.profile_id == profile_id,
+            PaperMatch.semantic_score >= semantic_threshold,
+        )
         .options(selectinload(PaperMatch.paper).selectinload(Paper.analyses))
         .execution_options(populate_existing=True)
         .order_by(PaperMatch.paper_id)

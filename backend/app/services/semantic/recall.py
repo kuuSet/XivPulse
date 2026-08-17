@@ -1,15 +1,14 @@
-"""Semantic recall policy and screening queue persistence."""
+"""Semantic recall and candidate selection."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import Paper, PaperMatch, ScreeningQueueItem, Topic
+from ...models import Paper, PaperMatch, Topic
 from ...settings import RecallMode, SemanticSettings
 from .matcher import SemanticMatch, SemanticMatcher
 from .model import SemanticEmbeddingError
@@ -17,7 +16,7 @@ from .model import SemanticEmbeddingError
 
 @dataclass(frozen=True, slots=True)
 class RecallResult:
-    queued: int
+    candidates: int
     enrichment_ids: list[str]
     semantic_error: str | None
 
@@ -41,7 +40,6 @@ class RecallService:
         *,
         profile_id: int,
         topics: Sequence[Topic],
-        report_date: date,
         mode: RecallMode,
     ) -> RecallResult:
         matches = self._paper_matches(session, papers, profile_id)
@@ -71,48 +69,13 @@ class RecallService:
             ):
                 candidates.append((paper, match))
 
-        queues = self._queue_items(session, candidates, profile_id)
         enrichment_candidates: list[tuple[float, str]] = []
         for paper, match in candidates:
-            queue = queues.get(paper.id)
-            if queue is None:
-                queue = ScreeningQueueItem(
-                    paper_id=paper.id,
-                    profile_id=profile_id,
-                    report_date=report_date,
-                )
-                session.add(queue)
-            elif queue.status == "failed":
-                queue.status = "queued"
-                queue.attempts = 0
-                queue.last_error = None
-            queue.recall_mode = mode
-            queue.semantic_score = match.semantic_score
-            queue.semantic_topics_json = dict(match.semantic_topics_json or {})
             if not paper.affiliations:
                 enrichment_candidates.append((match.semantic_score or 0.0, paper.arxiv_id))
 
         enrichment_ids = [arxiv_id for _, arxiv_id in sorted(enrichment_candidates, reverse=True)]
         return RecallResult(len(candidates), enrichment_ids, semantic_error)
-
-    @staticmethod
-    def _queue_items(
-        session: Session,
-        candidates: Sequence[tuple[Paper, PaperMatch]],
-        profile_id: int,
-    ) -> dict[int, ScreeningQueueItem]:
-        paper_ids = [paper.id for paper, _ in candidates]
-        if not paper_ids:
-            return {}
-        return {
-            item.paper_id: item
-            for item in session.scalars(
-                select(ScreeningQueueItem).where(
-                    ScreeningQueueItem.profile_id == profile_id,
-                    ScreeningQueueItem.paper_id.in_(paper_ids),
-                )
-            ).all()
-        }
 
     def _paper_matches(
         self,
@@ -148,9 +111,6 @@ class RecallService:
         match.semantic_model = self.matcher.model_name if semantic is not None else None
         if match.screened_at is not None:
             return
-        match.relevance_score = (
-            round(100 * max(0.0, min(1.0, semantic.score)), 2) if semantic is not None else 0
-        )
         if (
             semantic is not None
             and semantic.score >= self.settings.threshold(mode)

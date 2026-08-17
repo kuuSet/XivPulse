@@ -54,12 +54,7 @@ def _paper_wire(
     analysis = _latest_analysis(paper, "deep", profile_id=profile_id) or _latest_analysis(
         paper, profile_id=profile_id
     )
-    score = match.relevance_score if match and match.relevance_score is not None else 0
-    relevance = (
-        analysis.relevance_score
-        if analysis and analysis.relevance_score is not None
-        else (match.relevance_score if match else 0)
-    )
+    score = match.effective_score if match else 0
     novelty = analysis.novelty_score if analysis else None
     rigor = analysis.rigor_score if analysis else None
     priority = "high" if score >= 80 else "medium" if score >= 60 else "low"
@@ -111,7 +106,13 @@ def _paper_wire(
         "abs_url": paper.abs_url,
         "pdf_url": paper.pdf_url,
         "html_url": paper.html_url,
-        "relevance_score": round(float(relevance or 0), 1),
+        "screening_relevance_score": (
+            round(float(match.screening_relevance_score), 1)
+            if match is not None and match.screening_relevance_score is not None
+            else None
+        ),
+        "effective_score": round(float(score), 1),
+        "score_source": match.score_source if match is not None else "semantic",
         "semantic_score": round(float(match.semantic_score), 4)
         if match is not None and match.semantic_score is not None
         else None,

@@ -20,7 +20,6 @@ export interface AnalysisPromptCatalog {
 export interface Settings {
   provider_name: string
   model_name: string
-  mock_mode?: boolean
   api_base_url: string
   api_protocol?: string
   api_key_configured: boolean

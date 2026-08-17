@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
@@ -12,7 +11,6 @@ from ..models import Paper, Profile, Topic
 from ..schemas import DeepAnalysisResult, ScreeningResult
 from .directions.matching import (
     canonical_requested_direction_names,
-    direction_evidence,
     terms,
 )
 from .fulltext import FullTextDocument, FullTextFetcher
@@ -151,7 +149,6 @@ class PaperAnalyzer:
             response_model=ScreeningResult,
             schema_name="paper_screening",
             max_output_tokens=self.budget.screening_output_tokens,
-            mock_factory=lambda: self._mock_screen(paper, topics),
         )
         generated.prompt_metadata = self.prompt_metadata("screening")
         verified_topics = canonical_requested_direction_names(
@@ -185,9 +182,7 @@ class PaperAnalyzer:
     ) -> tuple[GenerationResult[DeepAnalysisResult], FullTextDocument]:
         topics = list(topics if topics is not None else _profile_value(profile, "topics", []))
         fulltext = FullTextDocument("", "unavailable", None)
-        # Mock mode is deliberately offline-friendly. The abstract still gives a
-        # complete demo response, while configured providers use HTML/PDF evidence.
-        if include_fulltext and not self.adapter.mock_mode:
+        if include_fulltext:
             if isinstance(paper, Paper):
                 fulltext_target: Paper | str | None = paper
             else:
@@ -217,7 +212,6 @@ class PaperAnalyzer:
             response_model=DeepAnalysisResult,
             schema_name="deep_paper_analysis",
             max_output_tokens=self.budget.deep_output_tokens,
-            mock_factory=lambda: self._mock_deep(paper, topics),
         )
         result.prompt_metadata = self.prompt_metadata("deep")
         return result, fulltext
@@ -229,91 +223,6 @@ class PaperAnalyzer:
             self.deep_analysis_prompt,
             stage,
         )
-
-    @staticmethod
-    def _mock_screen(
-        paper: Paper | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]],
-    ) -> ScreeningResult:
-        title = str(_paper_value(paper, "title"))
-        abstract = str(_paper_value(paper, "abstract"))
-        text = f"{title}\n{abstract}"
-        matched_topics: list[str] = []
-        matched_keywords: list[str] = []
-        excluded: list[str] = []
-        for topic in topics:
-            if isinstance(topic, Mapping):
-                if not topic.get("enabled", True):
-                    continue
-                name = str(topic.get("name", "未命名主题"))
-            else:
-                if not topic.enabled:
-                    continue
-                name = topic.name
-            evidence = direction_evidence(text, topic)
-            if evidence.matched:
-                matched_topics.append(name)
-                matched_keywords.extend(evidence.keywords)
-            if evidence.keywords:
-                excluded.extend(evidence.exclusions)
-        score = min(95.0, 12.0 + 18.0 * len(set(matched_topics)) + 8.0 * len(set(matched_keywords)))
-        score = max(0.0, score - 20.0 * len(set(excluded)))
-        relevant = score >= 35.0
-        first_sentence = (
-            re.split(r"(?<=[.!?。！？])\s+", abstract.strip())[0] if abstract.strip() else title
-        )
-        contributions = [first_sentence[:300]] if first_sentence else ["摘要未提供可核查的贡献描述"]
-        reason = (
-            f"本地演示初筛命中 {len(set(matched_topics))} 个研究方向、"
-            f"{len(set(matched_keywords))} 个关键词。"
-        )
-        if excluded:
-            reason += f" 同时命中排除词：{'、'.join(dict.fromkeys(excluded))}。"
-        return ScreeningResult(
-            relevant=relevant,
-            relevance_score=round(score, 2),
-            reason=reason,
-            matched_topics=list(dict.fromkeys(matched_topics)),
-            key_contributions=contributions,
-            tags=list(dict.fromkeys(matched_keywords))[:8],
-        )
-
-    def _mock_deep(
-        self,
-        paper: Paper | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]],
-    ) -> DeepAnalysisResult:
-        screening = self._mock_screen(paper, topics)
-        title = str(_paper_value(paper, "title"))
-        abstract = str(_paper_value(paper, "abstract"))
-        summary = abstract.strip()[:700] or f"{title}（摘要暂缺）"
-        base = screening.relevance_score
-        recommendation: Literal["must_read", "read", "skim", "skip"]
-        if base >= 75:
-            recommendation = "read"
-        elif base >= 45:
-            recommendation = "skim"
-        else:
-            recommendation = "skip"
-        return DeepAnalysisResult(
-            summary=summary,
-            problem=f"论文围绕“{title}”所描述的问题展开；当前结论仅基于 arXiv 元数据与摘要。",
-            key_contributions=screening.key_contributions,
-            methods=["演示模式未读取全文，方法细节需配置 API 后核验"],
-            evidence=["当前仅有摘要证据，未核验实验表格、消融或附录"],
-            strengths=["研究方向与研究画像存在可解释的关键词匹配"] if screening.relevant else [],
-            weaknesses=["演示模式不能形成可靠的学术质量判断"],
-            limitations=["未调用外部模型", "未基于全文核验作者主张"],
-            relevance_score=base,
-            novelty_score=50.0,
-            rigor_score=45.0,
-            impact_score=50.0,
-            recommendation=recommendation,
-            verdict="这是可运行的本地演示评价；配置模型 API 后再据全文形成正式判断。",
-            follow_up_questions=["论文是否在真实机器人上验证？", "是否提供代码、数据与关键消融？"],
-            tags=screening.tags,
-        )
-
 
 __all__ = [
     "ANALYSIS_BUDGETS",

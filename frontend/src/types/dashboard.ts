@@ -6,6 +6,7 @@ import type { JobInfo, TopicStat } from './system'
 export interface DashboardData {
   date: string
   total_papers: number
+  semantic_candidate_papers: number
   screened_papers: number
   high_priority_papers: number
   processing_summary?: {
@@ -23,6 +24,7 @@ export interface DashboardData {
     screening_current_batch?: number
     screening_total_batches?: number
     report_incomplete?: boolean
+    ai_configured: boolean
     deep_analysis_limit: number
     deep_analysis_threshold: number
   }

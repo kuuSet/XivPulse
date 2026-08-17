@@ -68,7 +68,7 @@ export function buildReportText(report: DailyReport, papers: Paper[]) {
     '## 代表论文', '',
     ...report.highlight_papers.flatMap((item, index) => {
       const paper = papers.find((candidate) => String(candidate.id) === String(item.paper_id))
-      return [`### ${index + 1}. ${item.title}`, '', `- 推荐分：${Math.round(item.score ?? paper?.relevance_score ?? 0)}`, `- arXiv：${item.arxiv_id ?? paper?.arxiv_id ?? ''}`, '', item.summary ?? paper?.summary ?? item.why_it_matters ?? '', '', item.why_it_matters ? `研究意义：${item.why_it_matters}` : '', '']
+      return [`### ${index + 1}. ${item.title}`, '', `- 推荐分：${Math.round(item.score ?? paper?.effective_score ?? 0)}`, `- arXiv：${item.arxiv_id ?? paper?.arxiv_id ?? ''}`, '', item.summary ?? paper?.summary ?? item.why_it_matters ?? '', '', item.why_it_matters ? `研究意义：${item.why_it_matters}` : '', '']
     }),
     '## 共同方法', '', ...methods, '', '## 共同证据', '', ...evidence, '',
     '## 推荐阅读队列', '', ...report.suggested_reading_queue.map((item) => `${item.rank}. **${item.title}** · ${READING_QUEUE_LABELS[item.priority] ?? item.priority}${item.estimated_minutes ? ` · ${item.estimated_minutes} 分钟` : ''}\n   ${item.next_action ?? item.reason ?? ''}`), '',

@@ -7,7 +7,7 @@ import logging
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import joinedload
 
 from ..database import SessionLocal, session_scope
@@ -55,6 +55,35 @@ async def analyze_papers(
                 Paper.last_seen_at >= datetime.now(UTC) - timedelta(days=7)
             )
         )
+        if not settings.provider.configured:
+            unscreened_papers = select(PaperMatch.paper_id).where(
+                PaperMatch.profile_id == profile.id,
+                PaperMatch.screened_at.is_(None),
+            )
+            db.execute(
+                delete(ScreeningQueueItem).where(
+                    ScreeningQueueItem.profile_id == profile.id,
+                    ScreeningQueueItem.paper_id.in_(unscreened_papers),
+                )
+            )
+            db.commit()
+            return {
+                "ai_configured": False,
+                "screening_skipped": "not_configured",
+                "screened": 0,
+                "screening_queue_total": 0,
+                "screening_completed": 0,
+                "screening_failed": 0,
+                "screening_batches": 0,
+                "screening_total_batches": 0,
+                "report_incomplete": False,
+                "screening_report_dates": [],
+                "eligible": 0,
+                "threshold": threshold,
+                "analyzed": 0,
+                "screening_errors": [],
+                "analysis_errors": [],
+            }
         recent_matches = (
             db.scalars(
                 select(PaperMatch)
@@ -262,7 +291,7 @@ async def analyze_papers(
                 stored_match = db.get(PaperMatch, match.id)
                 if stored_match is None:
                     continue
-                stored_match.relevance_score = result.relevance_score
+                stored_match.screening_relevance_score = result.relevance_score
                 stored_match.screened_at = utcnow()
                 ai_directions = canonical_requested_direction_names(
                     result.matched_topics,
@@ -283,8 +312,8 @@ async def analyze_papers(
                         profile_id=match.profile_id,
                         kind="screening",
                         status="completed",
-                        provider=provider_settings.provider_name,
-                        model=provider_settings.model_name,
+                        provider=generated.provider,
+                        model=generated.model,
                         transport=generated.transport,
                         content_source="abstract",
                         summary=result.reason,
@@ -344,7 +373,7 @@ async def analyze_papers(
                 )
                 .where(
                     PaperMatch.profile_id == profile.id,
-                    PaperMatch.relevance_score >= threshold,
+                    PaperMatch.screening_relevance_score >= threshold,
                     PaperMatch.screened_at.is_not(None),
                     paper_date_condition,
                     ~PaperMatch.paper.has(
@@ -362,7 +391,7 @@ async def analyze_papers(
         matches = sorted(
             matches,
             key=lambda match: (
-                -(match.relevance_score or 0.0),
+                -(match.screening_relevance_score or 0.0),
                 -(match.semantic_score or 0.0),
                 match.id,
             ),
@@ -388,8 +417,8 @@ async def analyze_papers(
                     profile_id=match.profile_id,
                     kind="deep",
                     status="completed",
-                    provider=provider_settings.provider_name,
-                    model=provider_settings.model_name,
+                    provider=generated.provider,
+                    model=generated.model,
                     transport=generated.transport,
                     content_source=fulltext.source if fulltext.content else "abstract",
                     summary=payload.get("summary", ""),
@@ -405,11 +434,9 @@ async def analyze_papers(
                     **generated.usage.analysis_fields(budget_mode),
                 )
             )
-            stored_match = db.scalar(select(PaperMatch).where(PaperMatch.id == match.id))
-            if stored_match is not None:
-                stored_match.relevance_score = result.relevance_score
         count += 1
     return {
+        "ai_configured": True,
         "analyzed": count,
         "screened": screened,
         "screening_queue_total": screening_queue_total,

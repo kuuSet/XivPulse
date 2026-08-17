@@ -14,6 +14,7 @@ from ..models import Feedback, FeedbackReason, Paper, PaperMatch, PaperReadingSt
 from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.library import sync_favorites_membership
 from ..services.state import active_profile
+from ..settings import get_process_settings, load_runtime_settings
 from .presenters.common import _clean_tags
 from .presenters.papers import _paper_wire, _query_papers
 from .presenters.projects import _reading_wire
@@ -64,10 +65,14 @@ def papers(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    score = func.coalesce(PaperMatch.relevance_score, 0)
+    settings = load_runtime_settings(db)
+    semantic_threshold = get_process_settings().semantic.threshold(
+        settings.semantic_recall_mode
+    )
+    score = PaperMatch.effective_score_expression()
     conditions = [
         PaperMatch.profile_id == profile.id,
-        PaperMatch.screened_at.is_not(None),
+        PaperMatch.semantic_score >= semantic_threshold,
         score >= min_score,
     ]
     if q:
@@ -125,7 +130,7 @@ def papers(
     if sort == "time":
         ordering = (desc(Paper.published_at), desc(score), Paper.id)
     elif sort == "relevance":
-        ordering = (desc(PaperMatch.relevance_score), desc(Paper.published_at), Paper.id)
+        ordering = (desc(score), desc(Paper.published_at), Paper.id)
     else:
         ordering = (desc(score), desc(Paper.published_at), Paper.id)
     statement = statement.order_by(*ordering).offset(offset).limit(limit)
@@ -135,7 +140,7 @@ def papers(
         .join(PaperMatch, PaperMatch.paper_id == Paper.id)
         .where(
             PaperMatch.profile_id == profile.id,
-            PaperMatch.screened_at.is_not(None),
+            PaperMatch.semantic_score >= semantic_threshold,
         )
     ).all()
     available_categories = sorted(
@@ -163,7 +168,7 @@ def papers(
         "pages": max(1, (total + limit - 1) // limit),
         "has_previous": offset > 0,
         "has_next": offset + len(result) < total,
-        "scope": "screened",
+        "scope": "candidates",
         "categories": available_categories,
     }
 

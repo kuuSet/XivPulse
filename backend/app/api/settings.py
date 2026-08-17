@@ -158,11 +158,11 @@ async def test_provider(
     model_name = payload.model_name or settings.provider.model_name
     if not key:
         return {
-            "ok": True,
-            "message": "未配置 API Key，当前将使用本地演示分析",
-            "provider_name": "mock",
-            "model": "mock",
-            "transport": "mock",
+            "ok": False,
+            "message": "请先配置 API Key。未配置时只运行本地语义匹配。",
+            "provider_name": settings.provider.provider_name,
+            "model": model_name,
+            "transport": settings.provider.api_protocol,
         }
     try:
         from ..services.provider import OpenAICompatibleAdapter

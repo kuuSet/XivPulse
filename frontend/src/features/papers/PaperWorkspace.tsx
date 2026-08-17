@@ -105,7 +105,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
     return [...source]
       .filter((paper) => {
         if (category !== 'all' && !paper.categories.includes(category)) return false
-        if (priority === 'recommended' && paper.relevance_score < 80) return false
+        if (priority === 'recommended' && paper.score_source === 'ai' && paper.effective_score < 80) return false
         if (priority === 'saved' && paper.feedback?.action !== 'save') return false
         if (priority === 'unread' && getReading(paper).state !== 'unread') return false
         if (!normalized) return true
@@ -116,7 +116,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
       })
       .sort((a, b) => {
         if (sort === 'time') return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
-        if (sort === 'relevance') return b.relevance_score - a.relevance_score
+        if (sort === 'relevance') return b.effective_score - a.effective_score
         if (sort === 'watched_authors') {
           const priorityDifference = Number(matchesWatchedAuthor(b, watchedAuthors)) - Number(matchesWatchedAuthor(a, watchedAuthors))
           if (priorityDifference) return priorityDifference
@@ -125,7 +125,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
           const priorityDifference = Number(matchesWatchedOrganization(b, watchedOrganizations)) - Number(matchesWatchedOrganization(a, watchedOrganizations))
           if (priorityDifference) return priorityDifference
         }
-        return b.relevance_score - a.relevance_score
+        return b.effective_score - a.effective_score
       })
   }, [data, libraryPage, mode, query, category, priority, sort])
 
@@ -218,7 +218,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
             {mode === 'today' ? <><CalendarDays size={14} /> {formatFullDate(data?.date)}</> : <><Library size={14} /> 本地论文索引</>}
           </div>
           <h1>{mode === 'today' ? '今日论文' : '论文库'}</h1>
-          <p>{mode === 'today' ? '已按你的研究画像筛选并排序今日更新。' : '检索和回看所有已经完成摘要初筛的论文。'}</p>
+          <p>{mode === 'today' ? '已按你的研究画像筛选并排序今日更新。' : '检索和回看本地语义筛选出的论文。'}</p>
         </div>
         <button className="button primary" onClick={() => onRefresh()} disabled={refreshing}>
           <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
@@ -231,9 +231,10 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
       {mode === 'today' && data && (
         <section className="metric-band" aria-label="今日统计">
           <Metric label="本次拉取" value={data.processing_summary?.latest_fetched_count ?? data.total_papers} note="最近一次完整日更" />
-          <Metric label="摘要初筛" value={data.processing_summary?.latest_screened_count ?? data.screened_papers} note={data.processing_summary?.screening_queue_total ? `候选 ${data.processing_summary.screening_queue_total} · 失败 ${data.processing_summary.screening_failed ?? 0}` : `队列待处理 ${data.processing_summary?.pending_screening_count ?? 0} 篇`} />
+          <Metric label="语义候选" value={data.semantic_candidate_papers} note={`相似度门槛 ${Math.round((data.processing_summary?.screening_semantic_threshold ?? 0) * 100)}%`} />
+          <Metric label="AI 初筛" value={data.processing_summary?.latest_screened_count ?? data.screened_papers} note={data.processing_summary?.ai_configured ? `待处理 ${data.processing_summary.pending_screening_count} · 失败 ${data.processing_summary.screening_failed ?? 0}` : '未配置 API Key，已跳过'} />
           <Metric label="全文深读" value={data.processing_summary?.latest_deep_analyzed_count ?? 0} note={`达标待深读 ${data.processing_summary?.pending_deep_count ?? 0} 篇`} accent />
-          <Metric label="重点推荐" value={data.high_priority_papers} note="今日 80 分以上" />
+          <Metric label="重点推荐" value={data.high_priority_papers} note={data.processing_summary?.ai_configured ? 'AI 初筛 80 分以上' : '配置 AI 后生成'} />
           <div className="update-summary">
             <span>上次更新</span>
             <strong>{data.processing_summary?.latest_update_at ? formatDateTime(data.processing_summary.latest_update_at) : '尚无完整日更'}</strong>
@@ -430,14 +431,14 @@ function SelectControl({ value, onChange, options, label, icon }: { value: strin
 }
 
 function PaperListItem({ paper, active, onSelect, onFeedback }: { paper: Paper; active: boolean; onSelect: () => void; onFeedback: (action: FeedbackAction) => void }) {
-  const score = Math.round(paper.relevance_score)
+  const score = Math.round(paper.effective_score)
   const saved = paper.feedback?.action === 'save'
   const dismissed = paper.feedback?.action === 'dismiss' || paper.feedback?.action === 'skip'
   const matchSignals = paperMatchSignals(paper, 2)
   return (
     <article className={`paper-row ${active ? 'active' : ''} ${dismissed ? 'dismissed' : ''}`} onClick={onSelect} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') onSelect() }}>
       <div className="paper-row-top">
-        <div className={`score-pill ${score >= 90 ? 'excellent' : score >= 80 ? 'good' : ''}`}><strong>{score}</strong><span>推荐</span></div>
+        <div className={`score-pill ${score >= 90 ? 'excellent' : score >= 80 ? 'good' : ''}`}><strong>{score}</strong><span>{paper.score_source === 'ai' ? 'AI 初筛' : '语义相似'}</span></div>
         <div className="paper-identifiers">
           {(paper.notable_organizations ?? []).slice(0, 2).map((organization) => <OrganizationBadge key={organization} name={organization} />)}
           {paper.categories.slice(0, 2).map((category) => <span className="category-tag" key={category}>{category}</span>)}
@@ -563,11 +564,11 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
     } finally { setClassificationBusy('') }
   }
   const scores = [
-    ['相关', analysis.relevance_score ?? paper.relevance_score, '#2d6a4f'],
+    ['相关', analysis.relevance_score ?? paper.effective_score, '#2d6a4f'],
     ['新颖', analysis.novelty_score ?? paper.novelty_score, '#9a6700'],
     ['方法', analysis.method_score ?? paper.quality_score, '#325ea8'],
     ['证据', analysis.evidence_score ?? paper.quality_score, '#7c4d9e'],
-    ['潜力', analysis.potential_score ?? paper.relevance_score, '#b54747'],
+    ['潜力', analysis.potential_score ?? paper.effective_score, '#b54747'],
   ] as Array<[string, number | null | undefined, string]>
   const analysisSignals = paperAnalysisSignals(paper, analysis)
   const semanticSignals = (paper.semantic_candidate_topics ?? []).slice(0, 4).map((item) => `${item.name} ${Math.round(item.score * 100)}%`)

@@ -21,7 +21,7 @@ from ...models import (
     ScreeningQueueItem,
     utcnow,
 )
-from ...settings import load_runtime_settings
+from ...settings import get_process_settings, load_runtime_settings
 from ..jobs import update_job_progress
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ..methods.catalog import clean_custom_methods
@@ -47,13 +47,20 @@ def _as_utc(value: datetime | None) -> datetime | None:
 def create_digest(digest_date: date | None = None) -> dict[str, Any]:
     with session_scope() as db:
         profile = active_profile(db)
+        settings = load_runtime_settings(db)
+        semantic_threshold = get_process_settings().semantic.threshold(
+            settings.semantic_recall_mode
+        )
         matches = db.scalars(
             select(PaperMatch)
-            .where(PaperMatch.profile_id == profile.id)
-            .order_by(desc(PaperMatch.relevance_score))
+            .where(
+                PaperMatch.profile_id == profile.id,
+                PaperMatch.semantic_score >= semantic_threshold,
+            )
+            .order_by(desc(PaperMatch.effective_score_expression()))
             .limit(20)
         ).all()
-        timezone_name = load_runtime_settings(db).schedule_timezone
+        timezone_name = settings.schedule_timezone
         today = digest_date or current_date_in_timezone(timezone_name)
         digest = db.scalar(
             select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == today)
@@ -256,7 +263,7 @@ async def synthesize_daily_report(
         ):
             return {"report_synthesis_status": "ready", "report_date": report_date.isoformat()}
         provider_settings = settings.provider
-        if provider_settings.mock_mode:
+        if not provider_settings.configured:
             report["ai_synthesis"] = _synthesis_state(
                 previous, status_name="not_configured", source_hash=source_hash
             )

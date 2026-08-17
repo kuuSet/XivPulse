@@ -52,9 +52,13 @@ SessionLocal = make_session_factory(engine)
 def init_db(bind: Engine | None = None, *, seed: bool = True) -> Engine:
     from . import models  # noqa: F401
     from .database_defaults import seed_defaults
+    from .schema_migrations import remove_mock_analyses, upgrade_schema
 
     target = bind or engine
+    score_schema_upgraded = upgrade_schema(target)
     Base.metadata.create_all(target)
+    if score_schema_upgraded:
+        remove_mock_analyses(target)
     if seed:
         factory = make_session_factory(target)
         with factory() as session:

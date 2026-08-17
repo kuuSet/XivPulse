@@ -33,10 +33,9 @@ def _settings_wire(db: Session) -> dict[str, Any]:
     return {
         "provider_name": provider_settings.provider_name,
         "model_name": provider_settings.model_name,
-        "mock_mode": provider_settings.mock_mode,
         "api_base_url": provider_settings.api_base_url,
         "api_protocol": provider_settings.api_protocol,
-        "api_key_configured": not provider_settings.mock_mode,
+        "api_key_configured": provider_settings.configured,
         "ui_font_size_pt": settings.ui_font_size_pt,
         "schedule_time": settings.schedule_time,
         "schedule_timezone": settings.schedule_timezone,

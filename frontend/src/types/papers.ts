@@ -72,7 +72,9 @@ export interface Paper {
   abs_url: string
   pdf_url: string
   html_url?: string | null
-  relevance_score: number
+  screening_relevance_score?: number | null
+  effective_score: number
+  score_source: 'semantic' | 'ai'
   quality_score?: number | null
   novelty_score?: number | null
   priority?: string
@@ -106,6 +108,6 @@ export interface PaperPage {
   pages: number
   has_previous: boolean
   has_next: boolean
-  scope: 'screened'
+  scope: 'candidates'
   categories: string[]
 }

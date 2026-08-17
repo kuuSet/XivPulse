@@ -111,7 +111,8 @@ def _insert_paper(
                 profile_id=profile.id,
                 matched_topics_json=["具身智能"],
                 matched_keywords_json=["robot learning"],
-                relevance_score=92,
+                semantic_score=0.92,
+                screening_relevance_score=92 if screened else None,
                 reason="与具身智能画像高度相关",
                 screened_at=datetime.now(UTC) if screened else None,
             )
@@ -206,7 +207,9 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
     from app.services import paper_analysis
     from app.services import provider as provider_module
 
-    assert client.put("/api/settings", json={"screening_batch_size": 30}).status_code == 200
+    assert client.put(
+        "/api/settings", json={"screening_batch_size": 30, "api_key": "test-key"}
+    ).status_code == 200
     with database.SessionLocal() as session:
         profile = session.query(Profile).filter(Profile.active.is_(True)).one()
         direction = profile.topics[0].name
@@ -245,7 +248,7 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
                     key_contributions=[],
                     tags=[],
                 ),
-                transport="mock",
+                transport="responses",
                 provider="test",
                 model="test",
             )
@@ -269,6 +272,8 @@ async def test_analysis_does_not_hide_constructor_errors(
 ) -> None:
     from app.services import paper_analysis
 
+    assert client.put("/api/settings", json={"api_key": "test-key"}).status_code == 200
+
     class BrokenAnalyzer:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             raise TypeError("broken analyzer constructor")
@@ -280,12 +285,65 @@ async def test_analysis_does_not_hide_constructor_errors(
 
 
 @pytest.mark.asyncio
+async def test_analysis_without_api_key_keeps_semantic_score_and_writes_no_mock_data(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import paper_analysis
+    from app.settings import load_runtime_settings
+
+    with database.SessionLocal() as session:
+        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        paper = Paper(
+            arxiv_id="2608.00001",
+            title="Semantic-only candidate",
+            published_at=datetime.now(UTC),
+        )
+        session.add(paper)
+        session.flush()
+        match = PaperMatch(paper_id=paper.id, profile_id=profile.id, semantic_score=0.81)
+        session.add(match)
+        session.flush()
+        session.add(
+            ScreeningQueueItem(
+                paper_id=paper.id,
+                profile_id=profile.id,
+                report_date=date.today(),
+                semantic_score=0.81,
+            )
+        )
+        settings = load_runtime_settings(session)
+        semantic_only = settings.model_copy(
+            update={"provider": settings.provider.model_copy(update={"api_key": None})}
+        )
+        match_id = match.id
+        session.commit()
+
+    monkeypatch.setattr(paper_analysis, "load_runtime_settings", lambda _db: semantic_only)
+    result = await paper_analysis.analyze_papers(limit=0)
+
+    assert result["screening_skipped"] == "not_configured"
+    assert result["screened"] == 0
+    with database.SessionLocal() as session:
+        match = session.get(PaperMatch, match_id)
+        assert match is not None
+        assert match.semantic_score == pytest.approx(0.81)
+        assert match.screening_relevance_score is None
+        assert match.screened_at is None
+        assert match.effective_score == pytest.approx(81)
+        assert session.query(Analysis).count() == 0
+        assert session.query(ScreeningQueueItem).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_screening_retries_and_keeps_final_failure_in_queue(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.schemas import ScreeningResult
     from app.services import paper_analysis
     from app.services import provider as provider_module
+
+    assert client.put("/api/settings", json={"api_key": "test-key"}).status_code == 200
 
     attempts: dict[str, int] = {}
     with database.SessionLocal() as session:
@@ -329,7 +387,7 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
                     key_contributions=[],
                     tags=[],
                 ),
-                transport="mock",
+                transport="responses",
                 provider="test",
                 model="test",
             )
@@ -500,7 +558,7 @@ def test_dashboard_returns_only_the_requested_date(client: TestClient) -> None:
                     paper_id=paper.id,
                     profile_id=profile.id,
                     semantic_score=0.8,
-                    relevance_score=90,
+                    screening_relevance_score=90,
                     screened_at=datetime(2026, 8, day, 13, tzinfo=UTC),
                 )
             )
@@ -522,7 +580,7 @@ def test_dashboard_returns_only_the_requested_date(client: TestClient) -> None:
     assert august_13["date"] == "2026-08-13"
     assert [paper["title"] for paper in august_13["items"]] == ["Paper for August 13"]
     assert august_13["processing_summary"]["latest_fetched_count"] == 13
-    assert august_13["processing_summary"]["latest_screened_count"] == 3
+    assert august_13["processing_summary"]["latest_screened_count"] == 1
 
     missing = client.get("/api/dashboard?date=2026-08-12").json()
     assert missing["total_papers"] == 0
@@ -876,8 +934,8 @@ def test_dashboard_exposes_latest_daily_processing_counts(client: TestClient) ->
 
     summary = client.get("/api/dashboard").json()["processing_summary"]
     assert summary["latest_fetched_count"] == 612
-    assert summary["latest_screened_count"] == 26
-    assert summary["latest_deep_analyzed_count"] == 5
+    assert summary["latest_screened_count"] == 0
+    assert summary["latest_deep_analyzed_count"] == 0
     assert summary["pending_screening_count"] >= 0
     assert summary["pending_deep_count"] >= 0
 
@@ -937,7 +995,8 @@ def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
     detail = client.get(f"/api/papers/{paper_id}")
     assert detail.status_code == 200
     assert detail.json()["title"] == "An Embodied AI Paper"
-    assert detail.json()["relevance_score"] == 92
+    assert detail.json()["effective_score"] == 92
+    assert detail.json()["score_source"] == "ai"
     assert detail.json()["affiliations"] == [
         "NVIDIA Research",
         "Carnegie Mellon University",
@@ -951,7 +1010,20 @@ def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
     assert feedback.json()["action"] == "skip"
 
 
-def test_paper_library_only_returns_screened_papers_with_pagination(
+def test_semantic_candidate_exposes_score_and_source_without_ai(client: TestClient) -> None:
+    paper_id = _insert_paper(screened=False)
+
+    detail = client.get(f"/api/papers/{paper_id}")
+
+    assert detail.status_code == 200
+    assert detail.json()["semantic_score"] == pytest.approx(0.92)
+    assert detail.json()["screening_relevance_score"] is None
+    assert detail.json()["effective_score"] == pytest.approx(92)
+    assert detail.json()["score_source"] == "semantic"
+    assert client.get("/api/papers").json()["items"][0]["id"] == paper_id
+
+
+def test_paper_library_returns_semantic_candidates_with_pagination(
     client: TestClient,
 ) -> None:
     first_id = _insert_paper(
@@ -964,7 +1036,7 @@ def test_paper_library_only_returns_screened_papers_with_pagination(
         title="Screened Robot Paper Two",
         screened=True,
     )
-    _insert_paper(
+    third_id = _insert_paper(
         arxiv_id="2608.10003",
         title="Unscreened Robot Paper",
         screened=False,
@@ -972,20 +1044,26 @@ def test_paper_library_only_returns_screened_papers_with_pagination(
 
     first_page = client.get("/api/papers", params={"limit": 1, "offset": 0})
     assert first_page.status_code == 200
-    assert first_page.json()["total"] == 2
+    assert first_page.json()["total"] == 3
     assert first_page.json()["count"] == 1
     assert first_page.json()["page"] == 1
-    assert first_page.json()["pages"] == 2
+    assert first_page.json()["pages"] == 3
     assert first_page.json()["has_next"] is True
-    assert first_page.json()["scope"] == "screened"
+    assert first_page.json()["scope"] == "candidates"
 
     second_page = client.get("/api/papers", params={"limit": 1, "offset": 1})
     assert second_page.status_code == 200
     assert second_page.json()["page"] == 2
     assert second_page.json()["has_previous"] is True
-    assert {first_page.json()["items"][0]["id"], second_page.json()["items"][0]["id"]} == {
+    third_page = client.get("/api/papers", params={"limit": 1, "offset": 2})
+    assert {
+        first_page.json()["items"][0]["id"],
+        second_page.json()["items"][0]["id"],
+        third_page.json()["items"][0]["id"],
+    } == {
         first_id,
         second_id,
+        third_id,
     }
 
 
@@ -1422,6 +1500,7 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
                     paper_id=paper.id,
                     profile_id=profile.id,
                     semantic_score=score,
+                    screening_relevance_score=90 if screened else None,
                     screened_at=datetime(2026, 8, 1, 13, tzinfo=UTC) if screened else None,
                 )
             )
@@ -1498,13 +1577,13 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
         "days": [
             {
                 "date": "2026-08-01",
-                "status": "partial",
+                "status": "completed",
                 "fetched": 12,
                 "candidates": 2,
                 "screened": 1,
-                "pending_screening": 1,
-                "analyzed": 2,
-                "message": "有 1 篇当前语义候选等待 AI 初筛",
+                "pending_screening": 0,
+                "analyzed": 0,
+                "message": "语义筛选已完成；未配置 AI 初筛",
             },
             {
                 "date": "2026-08-02",
@@ -1513,8 +1592,8 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
                 "candidates": 6,
                 "screened": 6,
                 "pending_screening": 0,
-                "analyzed": 3,
-                "message": "任务完整完成",
+                "analyzed": 0,
+                "message": "语义筛选已完成；未配置 AI 初筛",
             },
             {
                 "date": "2026-08-03",
@@ -1574,7 +1653,6 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
             matched_keywords_json=[configured_keyword],
             lexical_score=90,
             semantic_score=0.9,
-            relevance_score=90,
         )
         session.add(match)
         session.commit()
@@ -1594,12 +1672,13 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
                     key_contributions=["Contribution"],
                     tags=["foundation model", "cs.RO", "free-form tag"],
                 ),
-                transport="mock",
+                transport="responses",
                 provider="test",
                 model="test",
             )
 
     monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakePaperAnalyzer)
+    assert client.put("/api/settings", json={"api_key": "test-key"}).status_code == 200
 
     result = await paper_analysis.analyze_papers(limit=0)
     assert result["screened"] == 1
@@ -1607,7 +1686,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
     with database.SessionLocal() as session:
         stored_match = session.get(PaperMatch, match_id)
         assert stored_match is not None
-        assert stored_match.relevance_score == 91
+        assert stored_match.screening_relevance_score == 91
         assert stored_match.matched_topics_json == [formal_direction]
         assert stale_legal_direction not in stored_match.matched_topics_json
         assert stored_match.matched_keywords_json == [configured_keyword]
@@ -1626,6 +1705,8 @@ async def test_targeted_daily_analysis_does_not_process_other_dates(
     from app.schemas import ScreeningResult
     from app.services import paper_analysis
     from app.services import provider as provider_module
+
+    assert client.put("/api/settings", json={"api_key": "test-key"}).status_code == 200
 
     target_date = date(2026, 8, 13)
     other_date = date(2026, 8, 14)
@@ -1656,7 +1737,6 @@ async def test_targeted_daily_analysis_does_not_process_other_dates(
                     paper_id=paper.id,
                     profile_id=profile.id,
                     semantic_score=0.9,
-                    relevance_score=90,
                 )
             )
             queue = ScreeningQueueItem(
@@ -1684,7 +1764,7 @@ async def test_targeted_daily_analysis_does_not_process_other_dates(
                     key_contributions=[],
                     tags=[],
                 ),
-                transport="mock",
+                transport="responses",
                 provider="test",
                 model="test",
             )
@@ -1771,7 +1851,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         recall_service=recall,
     )
     assert result["fetched"] == 2
-    assert result["queued"] == 1
+    assert result["semantic_candidates"] == 1
     assert result["fetch_date"] == "2026-08-14"
     assert stages == ["fetch", "recall", "enrich"]
     with database.SessionLocal() as session:
@@ -1781,12 +1861,10 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         }
         assert matches["2608.08888"].lexical_score == 0
         assert matches["2608.08888"].semantic_score == pytest.approx(0.2)
-        assert matches["2608.08888"].relevance_score == pytest.approx(20)
+        assert matches["2608.08888"].effective_score == pytest.approx(20)
         assert matches["2608.08889"].semantic_score == pytest.approx(0.8)
-        assert matches["2608.08889"].relevance_score == pytest.approx(80)
-        queue_item = session.query(ScreeningQueueItem).one()
-        assert queue_item.paper.arxiv_id == "2608.08889"
-        assert queue_item.report_date == fetch_date
+        assert matches["2608.08889"].effective_score == pytest.approx(80)
+        assert session.query(ScreeningQueueItem).count() == 0
 
 
 def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
@@ -1851,7 +1929,7 @@ async def test_watched_organizations_bound_affiliation_enrichment_to_100(
         ),
     )
 
-    assert result["queued"] == 101
+    assert result["semantic_candidates"] == 101
     assert len(enriched_ids) == 100
 
 
@@ -1906,7 +1984,7 @@ async def test_watched_author_does_not_bypass_unavailable_semantic_model(
     assert result["fetched"] == 1
     assert result["semantic_degraded"] is True
     assert result["semantic_error"] == "model download unavailable"
-    assert result["queued"] == 0
+    assert result["semantic_candidates"] == 0
     with database.SessionLocal() as session:
         match = session.query(PaperMatch).one()
         assert match.semantic_score is None

@@ -82,7 +82,6 @@ async def sync_papers(
             stored.papers,
             profile_id=options.profile_id,
             topics=options.topics,
-            report_date=target_date,
             mode=options.recall_mode,
         )
 
@@ -95,7 +94,7 @@ async def sync_papers(
 
     return {
         "fetched": len(papers),
-        "queued": recalled.queued,
+        "semantic_candidates": recalled.candidates,
         "semantic_recall_mode": options.recall_mode,
         "semantic_degraded": recalled.semantic_error is not None,
         "semantic_error": recalled.semantic_error,

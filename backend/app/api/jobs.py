@@ -9,7 +9,7 @@ from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Job, Paper, PaperMatch
+from ..models import Analysis, Job, Paper, PaperMatch
 from ..services.jobs import RUNNING_STATUSES
 from ..services.paper_sync import latest_complete_submission_date
 from ..services.state import active_profile
@@ -106,6 +106,7 @@ def job_calendar(
     )
     profile = active_profile(db)
     settings = load_runtime_settings(db)
+    ai_configured = settings.provider.configured
     threshold = get_process_settings().semantic.threshold(settings.semantic_recall_mode)
     paper_day = func.coalesce(Paper.published_at, Paper.first_seen_at)
     rows = db.execute(
@@ -116,7 +117,7 @@ def job_calendar(
                 case(
                     (
                         (PaperMatch.semantic_score >= threshold)
-                        & PaperMatch.screened_at.is_not(None),
+                        & PaperMatch.screening_relevance_score.is_not(None),
                         1,
                     ),
                     else_=0,
@@ -134,6 +135,21 @@ def job_calendar(
     current_by_date = {
         str(day): {"candidates": int(candidates or 0), "screened": int(screened or 0)}
         for day, candidates, screened in rows
+    }
+    deep_by_date = {
+        str(day): int(count or 0)
+        for day, count in db.execute(
+            select(func.date(paper_day), func.count(Analysis.id))
+            .join(Paper, Paper.id == Analysis.paper_id)
+            .where(
+                Analysis.profile_id == profile.id,
+                Analysis.kind == "deep",
+                Analysis.status == "completed",
+                paper_day >= month_start,
+                paper_day < month_end,
+            )
+            .group_by(func.date(paper_day))
+        ).all()
     }
 
     latest_by_date: dict[str, Job] = {}
@@ -154,14 +170,16 @@ def job_calendar(
             if current is not None
             else int(result.get("screening_queue_total", screened) or 0)
         )
-        pending_screening = max(0, candidates - screened)
+        pending_screening = max(0, candidates - screened) if ai_configured else 0
         job_complete = (
             job.status == "completed"
             and not job.error
             and not any(result.get(key) for key in _INCOMPLETE_RESULT_KEYS)
         )
         complete = job_complete and pending_screening == 0
-        if job_complete and pending_screening:
+        if job_complete and not ai_configured:
+            message = "语义筛选已完成；未配置 AI 初筛"
+        elif job_complete and pending_screening:
             message = f"有 {pending_screening} 篇当前语义候选等待 AI 初筛"
         elif complete:
             message = "任务完整完成"
@@ -177,7 +195,7 @@ def job_calendar(
                 "candidates": candidates,
                 "screened": screened,
                 "pending_screening": pending_screening,
-                "analyzed": int(result.get("analyzed", 0) or 0),
+                "analyzed": deep_by_date.get(day, 0),
                 "message": message,
             }
         )

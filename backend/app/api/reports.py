@@ -22,7 +22,7 @@ from ..services.reporting.service import (
 )
 from ..services.reporting.trends import build_topic_trends
 from ..services.state import active_profile
-from ..settings import load_runtime_settings
+from ..settings import get_process_settings, load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.papers import _paper_wire, _query_papers
 from .presenters.reports import _digest_wire
@@ -40,12 +40,19 @@ def digest_preview(
         select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == day)
     )
     if digest is None:
+        settings = load_runtime_settings(db)
+        semantic_threshold = get_process_settings().semantic.threshold(
+            settings.semantic_recall_mode
+        )
         papers = (
             db.scalars(
                 _query_papers(db)
                 .join(PaperMatch, PaperMatch.paper_id == Paper.id)
-                .where(PaperMatch.profile_id == profile.id)
-                .order_by(desc(PaperMatch.relevance_score))
+                .where(
+                    PaperMatch.profile_id == profile.id,
+                    PaperMatch.semantic_score >= semantic_threshold,
+                )
+                .order_by(desc(PaperMatch.effective_score_expression()))
                 .limit(10)
             )
             .unique()
