@@ -33,7 +33,7 @@ export interface Settings {
   semantic_recall_presets: Record<string, { semantic_threshold: number }>
   embedding: {
     model: string
-    dimensions: number
+    dimensions: number | null
     cache_dir: string
     loaded: boolean
     available: boolean

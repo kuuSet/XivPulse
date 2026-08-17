@@ -1,13 +1,21 @@
 """Public settings boundary for the application."""
 
-from .process import ProcessSettings, ProviderSettings, get_process_settings
+from .process import (
+    ProcessSettings,
+    ProviderSettings,
+    RecallMode,
+    SemanticSettings,
+    get_process_settings,
+)
 from .runtime import RuntimeSettings, load_runtime_settings
 from .store import delete_setting, set_setting, setting_value
 
 __all__ = [
     "ProcessSettings",
     "ProviderSettings",
+    "RecallMode",
     "RuntimeSettings",
+    "SemanticSettings",
     "delete_setting",
     "get_process_settings",
     "load_runtime_settings",

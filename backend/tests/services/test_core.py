@@ -111,6 +111,26 @@ def test_process_settings_derive_storage_from_one_data_directory(
     assert settings.model_cache == data_dir.resolve() / "model-cache"
 
 
+def test_process_settings_load_semantic_group_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XIVPULSE_SEMANTIC_MODEL_NAME", "test-embedding-model")
+    monkeypatch.setenv("XIVPULSE_SEMANTIC_THREADS", "1")
+    monkeypatch.setenv("XIVPULSE_SEMANTIC_BATCH_SIZE", "4")
+    monkeypatch.setenv("XIVPULSE_SEMANTIC_THRESHOLD_HIGH", "0.61")
+
+    semantic = settings_module._build_process_settings().semantic
+
+    assert semantic.model_name == "test-embedding-model"
+    assert semantic.threads == 1
+    assert semantic.batch_size == 4
+    assert semantic.thresholds == {
+        "high": 0.61,
+        "balanced": 0.68,
+        "precise": 0.70,
+    }
+
+
 def test_environment_key_fallback_and_secrets_are_hidden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -132,6 +152,11 @@ def test_invalid_settings_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
         settings_module._build_process_settings()
 
     monkeypatch.delenv("XIVPULSE_API_TIMEOUT_SECONDS")
+    monkeypatch.setenv("XIVPULSE_SEMANTIC_THREADS", "0")
+    with pytest.raises(ValidationError, match="threads"):
+        settings_module._build_process_settings()
+
+    monkeypatch.delenv("XIVPULSE_SEMANTIC_THREADS")
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     with Session(engine) as session:

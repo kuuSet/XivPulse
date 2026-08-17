@@ -15,10 +15,8 @@ from ..arxiv.repository import PaperRepository
 from ..database import SessionLocal, session_scope
 from ..domain.paper import Paper
 from ..models import Topic
-from ..settings import load_runtime_settings
-from .semantic.embedding import match_papers as semantic_match_papers
-from .semantic.embedding import recall_mode
-from .semantic.recall import SemanticMatcher, recall_papers
+from ..settings import RecallMode, load_runtime_settings
+from .semantic import RecallService, get_semantic_services
 from .state import active_profile
 
 
@@ -29,7 +27,7 @@ class _SyncOptions:
     author_watchlist: list[str]
     fetch_limit: int
     batch_size: int
-    recall_mode: str
+    recall_mode: RecallMode
 
 
 def latest_complete_submission_date(now: datetime | None = None) -> date:
@@ -46,7 +44,7 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
             author_watchlist=list(settings.watched_authors),
             fetch_limit=settings.arxiv_fetch_limit,
             batch_size=settings.screening_batch_size,
-            recall_mode=recall_mode(settings.semantic_recall_mode),
+            recall_mode=settings.semantic_recall_mode,
         )
 
 
@@ -56,7 +54,7 @@ async def sync_papers(
     session_factory: sessionmaker[Session] | None = None,
     paper_fetcher: Callable[..., Awaitable[list[Paper]]] | None = None,
     affiliation_fetcher: Callable[..., Awaitable[dict[str, list[str]]]] | None = None,
-    semantic_matcher: SemanticMatcher | None = None,
+    recall_service: RecallService | None = None,
     date_provider: Callable[[], date] = latest_complete_submission_date,
 ) -> dict[str, Any]:
     factory = session_factory or SessionLocal
@@ -77,7 +75,7 @@ async def sync_papers(
 
     with session_scope(factory) as db:
         stored = PaperRepository(db).upsert(papers)
-        recalled = recall_papers(
+        recalled = (recall_service or get_semantic_services().recall).recall(
             db,
             stored.papers,
             profile_id=options.profile_id,
@@ -86,7 +84,6 @@ async def sync_papers(
             report_date=target_date,
             batch_size=options.batch_size,
             mode=options.recall_mode,
-            matcher=semantic_matcher or semantic_match_papers,
         )
 
     affiliations = await (affiliation_fetcher or fetch_affiliations)(

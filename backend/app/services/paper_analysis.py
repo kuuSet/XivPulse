@@ -20,8 +20,7 @@ from .jobs import update_job_progress
 from .prompt_catalog import resolve_prompt_settings
 from .provider import OpenAICompatibleAdapter, ProviderError
 from .reporting.records import current_date_in_timezone
-from .semantic.embedding import is_candidate as is_semantic_candidate
-from .semantic.embedding import recall_mode
+from .semantic import get_semantic_services
 from .state import active_profile
 
 LOG = logging.getLogger("xivpulse")
@@ -40,7 +39,8 @@ async def analyze_papers(
         limit = int(limit if limit is not None else settings.deep_analysis_limit)
         threshold = settings.deep_analysis_threshold
         screening_batch_size = max(1, settings.screening_batch_size)
-        selected_recall_mode = recall_mode(settings.semantic_recall_mode)
+        selected_recall_mode = settings.semantic_recall_mode
+        recall_service = get_semantic_services().recall
         today = report_date or current_date_in_timezone(settings.schedule_timezone)
         paper_date_condition = (
             PaperMatch.paper.has(
@@ -85,9 +85,9 @@ async def analyze_papers(
                 for author in match.paper.authors
                 for watched_name in watched_authors
             )
-            if match.paper_id in existing_queue_keys or not is_semantic_candidate(
-                semantic_score=match.semantic_score,
-                mode=selected_recall_mode,
+            if match.paper_id in existing_queue_keys or not recall_service.is_candidate(
+                match.semantic_score,
+                selected_recall_mode,
                 watched_author=watched,
             ):
                 continue

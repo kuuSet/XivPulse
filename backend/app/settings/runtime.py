@@ -11,7 +11,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from .process import ProcessSettings, ProviderSettings, get_process_settings
+from .process import ProcessSettings, ProviderSettings, RecallMode, get_process_settings
 from .store import load_setting_values
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ class RuntimeSettings(BaseSettings):
 
     # Candidate screening and semantic recall.
     screening_batch_size: int = Field(default=30, ge=0, le=500)
-    semantic_recall_mode: Literal["high", "balanced", "precise"] = "high"
+    semantic_recall_mode: RecallMode = "high"
 
     # Full-text analysis selection.
     deep_analysis_limit: int = Field(default=5, ge=0, le=100)

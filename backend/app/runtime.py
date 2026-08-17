@@ -9,12 +9,10 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from .database import init_db, session_scope
-from .models import Job, Paper, PaperMatch, utcnow
+from .models import Job, Paper, utcnow
 from .services.auth import auth_settings
-from .services.directions.matching import canonical_requested_direction_names
 from .services.jobs import RUNNING_STATUSES
-from .services.semantic.embedding import MODEL_ID as SEMANTIC_MODEL_ID
-from .services.semantic.embedding import match_papers as semantic_match_papers
+from .services.semantic import get_semantic_services
 from .services.state import active_profile
 from .settings import get_process_settings, set_setting
 
@@ -34,6 +32,7 @@ def _backfill_existing_semantic_embeddings() -> None:
     """Populate local vectors for existing papers without invoking AI analysis."""
 
     try:
+        recall_service = get_semantic_services().recall
         with session_scope() as db:
             profile = active_profile(db)
             paper_ids = list(db.scalars(select(Paper.id).order_by(Paper.id)).all())
@@ -48,25 +47,12 @@ def _backfill_existing_semantic_embeddings() -> None:
                 papers = list(
                     db.scalars(select(Paper).where(Paper.id.in_(selected_ids))).all()
                 )
-                results = semantic_match_papers(db, papers, topics)
-                matches = db.scalars(
-                    select(PaperMatch).where(
-                        PaperMatch.profile_id == profile_id,
-                        PaperMatch.paper_id.in_(selected_ids),
-                    )
-                ).all()
-                for match in matches:
-                    semantic = results.get(match.paper_id)
-                    if semantic is not None:
-                        match.semantic_score = semantic.score
-                        match.semantic_topics_json = semantic.topic_scores
-                        match.semantic_model = SEMANTIC_MODEL_ID
-                    match.matched_topics_json = canonical_requested_direction_names(
-                        match.matched_topics,
-                        topics,
-                        relevant=True,
-                    )
-                processed += len(selected_ids)
+                processed += recall_service.backfill(
+                    db,
+                    papers,
+                    profile_id=profile_id,
+                    topics=topics,
+                )
                 set_setting(
                     db,
                     "semantic_backfill_status",
@@ -111,7 +97,7 @@ def initialize_application() -> None:
                     job.completed_at = utcnow()
         _initialized = True
         if (
-            get_process_settings().semantic_backfill_enabled
+            get_process_settings().semantic.backfill_enabled
             and not _embedding_backfill_started
         ):
             _embedding_backfill_started = True

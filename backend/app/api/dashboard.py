@@ -24,9 +24,8 @@ from ..models import (
 )
 from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.jobs import RUNNING_STATUSES
-from ..services.semantic.embedding import RECALL_THRESHOLDS, recall_mode
 from ..services.state import active_profile
-from ..settings import load_runtime_settings
+from ..settings import get_process_settings, load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.jobs import _job_wire
 from .presenters.papers import _paper_wire, _query_papers
@@ -178,9 +177,9 @@ def dashboard(
             "pending_screening_count": pending_screening,
             "pending_deep_count": pending_deep,
             "screening_limit": current_settings.screening_batch_size,
-            "screening_semantic_threshold": RECALL_THRESHOLDS[
-                recall_mode(current_settings.semantic_recall_mode)
-            ],
+            "screening_semantic_threshold": get_process_settings().semantic.threshold(
+                current_settings.semantic_recall_mode
+            ),
             "screening_queue_total": int(latest_result.get("screening_queue_total", 0) or 0),
             "screening_completed": int(latest_result.get("screening_completed", 0) or 0),
             "screening_failed": int(latest_result.get("screening_failed", 0) or 0),

@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -49,12 +50,21 @@ def client(monkeypatch: pytest.MonkeyPatch):
     import app.pipeline as pipeline_module
     import app.runtime as runtime
     from app.services import paper_sync
+    from app.services.semantic import RecallService
+    from app.settings import SemanticSettings
     from app.workflow import daily_pipeline
 
+    class EmptyMatcher:
+        model_name = "test-embedding-model"
+
+        def match(self, *_args: object) -> dict[int, object]:
+            return {}
+
+    recall = RecallService(EmptyMatcher(), SemanticSettings())  # type: ignore[arg-type]
     monkeypatch.setattr(
         paper_sync,
-        "semantic_match_papers",
-        lambda _db, _papers, _topics: {},
+        "get_semantic_services",
+        lambda: SimpleNamespace(recall=recall),
     )
     monkeypatch.setattr(runtime, "_initialized", True)
     monkeypatch.setattr(daily_pipeline, "_active_job_id", None)
@@ -111,24 +121,47 @@ def _insert_paper(
 
 
 def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, tmp_path: Path
 ) -> None:
-    from app.services.semantic import embedding as semantic
+    from app.services.semantic import EmbeddingModel, RecallService, SemanticMatcher
+    from app.settings import SemanticSettings
 
-    embedding_calls: list[list[str]] = []
+    embedding_calls: list[tuple[str, list[str]]] = []
 
     class FakeEmbedding:
-        def embed(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
-            assert batch_size == semantic.EMBEDDING_BATCH_SIZE
-            embedding_calls.append(texts)
-            if texts and texts[0].startswith(semantic.QUERY_INSTRUCTION):
-                return [
-                    [1.0, 0.0, *([0.0] * 382)] if index == 0 else [0.0, 1.0, *([0.0] * 382)]
-                    for index, _ in enumerate(texts)
-                ]
+        def query_embed(
+            self,
+            texts: list[str],
+            *,
+            batch_size: int,
+            normalize: bool,
+        ) -> list[list[float]]:
+            assert batch_size == 8
+            assert normalize is True
+            embedding_calls.append(("query", texts))
+            return [
+                [1.0, 0.0, *([0.0] * 382)]
+                if index == 0
+                else [0.0, 1.0, *([0.0] * 382)]
+                for index, _ in enumerate(texts)
+            ]
+
+        def passage_embed(
+            self,
+            texts: list[str],
+            *,
+            batch_size: int,
+            normalize: bool,
+        ) -> list[list[float]]:
+            assert batch_size == 8
+            assert normalize is True
+            embedding_calls.append(("passage", texts))
             return [[0.78, 0.0, 0.6258, *([0.0] * 381)] for _ in texts]
 
-    monkeypatch.setattr(semantic, "_model", FakeEmbedding())
+    settings = SemanticSettings()
+    model = EmbeddingModel(settings, tmp_path, backend=FakeEmbedding())
+    matcher = SemanticMatcher(model)
+    recall = RecallService(matcher, settings)
     with database.SessionLocal() as session:
         profile = session.query(Profile).filter(Profile.active.is_(True)).one()
         paper = Paper(
@@ -141,30 +174,30 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
         )
         session.add(paper)
         session.flush()
-        results = semantic.match_papers(session, [paper], profile.topics)
-        cached_results = semantic.match_papers(session, [paper], profile.topics)
+        results = matcher.match(session, [paper], profile.topics)
+        cached_results = matcher.match(session, [paper], profile.topics)
         session.commit()
         assert results[paper.id].score == pytest.approx(0.78)
         assert cached_results[paper.id].score == pytest.approx(0.78)
         assert session.query(PaperEmbedding).filter_by(paper_id=paper.id).count() == 1
         assert len(embedding_calls) == 3
-        assert all(text.isascii() for text in embedding_calls[0])
-        assert not embedding_calls[1][0].startswith("passage:")
-        assert semantic.is_candidate(
-            semantic_score=semantic.RECALL_THRESHOLDS["high"],
-            mode="high",
+        assert all(text.isascii() for text in embedding_calls[0][1])
+        assert embedding_calls[1][0] == "passage"
+        assert recall.is_candidate(
+            settings.threshold_high,
+            "high",
         )
-        assert not semantic.is_candidate(
-            semantic_score=semantic.RECALL_THRESHOLDS["high"] - 0.01,
-            mode="high",
+        assert not recall.is_candidate(
+            settings.threshold_high - 0.01,
+            "high",
         )
-        assert not semantic.is_candidate(
-            semantic_score=0.1,
-            mode="precise",
+        assert not recall.is_candidate(
+            0.1,
+            "precise",
         )
-        assert semantic.is_candidate(
-            semantic_score=0.1,
-            mode="precise",
+        assert recall.is_candidate(
+            0.1,
+            "precise",
             watched_author=True,
         )
 
@@ -1590,7 +1623,8 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient,
 ) -> None:
     from app.services.paper_sync import sync_papers
-    from app.services.semantic.embedding import SemanticMatch
+    from app.services.semantic import RecallService, SemanticMatch
+    from app.settings import SemanticSettings
 
     stages: list[str] = []
     records = [
@@ -1627,25 +1661,32 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
         stages.append("enrich")
         return {}
 
-    def semantic_results(
-        _session: object, papers: list[Paper], _topics: object
-    ) -> dict[int, SemanticMatch]:
-        stages.append("recall")
-        assert all(paper.id is not None for paper in papers)
-        return {
-            paper.id: SemanticMatch(
-                score=0.2 if paper.arxiv_id == "2608.08888" else 0.8,
-                topic_scores={"VLA": 0.2 if paper.arxiv_id == "2608.08888" else 0.8},
-            )
-            for paper in papers
-        }
+    class FakeMatcher:
+        model_name = "test-embedding-model"
+
+        def match(
+            self, _session: object, papers: list[Paper], _topics: object
+        ) -> dict[int, SemanticMatch]:
+            stages.append("recall")
+            assert all(paper.id is not None for paper in papers)
+            return {
+                paper.id: SemanticMatch(
+                    score=0.2 if paper.arxiv_id == "2608.08888" else 0.8,
+                    topic_scores={
+                        "VLA": 0.2 if paper.arxiv_id == "2608.08888" else 0.8
+                    },
+                )
+                for paper in papers
+            }
+
+    recall = RecallService(FakeMatcher(), SemanticSettings())  # type: ignore[arg-type]
 
     result = await sync_papers(
         target_date=fetch_date,
         session_factory=database.SessionLocal,
         paper_fetcher=fetch_papers,
         affiliation_fetcher=fetch_paper_affiliations,
-        semantic_matcher=semantic_results,
+        recall_service=recall,
     )
     assert result["fetched"] == 2
     assert result["queued"] == 1
@@ -1679,8 +1720,8 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     client: TestClient,
 ) -> None:
     from app.services.paper_sync import sync_papers
-    from app.services.semantic.embedding import SemanticEmbeddingError
-    from app.settings import set_setting
+    from app.services.semantic import RecallService, SemanticEmbeddingError
+    from app.settings import SemanticSettings, set_setting
 
     record = PaperDocument(
         arxiv_id="2608.09991",
@@ -1701,8 +1742,11 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     ) -> dict[str, list[str]]:
         return {}
 
-    def unavailable(*_args: object, **_kwargs: object) -> dict[int, object]:
-        raise SemanticEmbeddingError("model download unavailable")
+    class UnavailableMatcher:
+        model_name = "test-embedding-model"
+
+        def match(self, *_args: object) -> dict[int, object]:
+            raise SemanticEmbeddingError("model download unavailable")
 
     with database.SessionLocal() as session:
         set_setting(session, "watched_authors", ["Researcher"])
@@ -1712,7 +1756,10 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
         session_factory=database.SessionLocal,
         paper_fetcher=fetch_papers,
         affiliation_fetcher=fetch_paper_affiliations,
-        semantic_matcher=unavailable,
+        recall_service=RecallService(  # type: ignore[arg-type]
+            UnavailableMatcher(),
+            SemanticSettings(),
+        ),
         date_provider=lambda: date(2026, 8, 14),
     )
 

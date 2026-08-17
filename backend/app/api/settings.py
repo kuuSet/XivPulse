@@ -19,9 +19,9 @@ from ..services.prompt_catalog import (
 )
 from ..services.reporting.records import current_date_in_timezone
 from ..services.reporting.service import persist_daily_report, send_daily_report_email
-from ..services.semantic.embedding import SemanticEmbeddingError, embedding_status
+from ..services.semantic import get_semantic_services
 from ..services.state import active_profile
-from ..settings import delete_setting, load_runtime_settings, set_setting
+from ..settings import RecallMode, delete_setting, load_runtime_settings, set_setting
 from .system_views import _settings_wire
 
 router = APIRouter()
@@ -50,7 +50,7 @@ class SettingsPayload(BaseModel):
 
     # Candidate screening and semantic recall.
     screening_batch_size: int | None = Field(default=None, ge=0, le=500)
-    semantic_recall_mode: Literal["high", "balanced", "precise"] | None = None
+    semantic_recall_mode: RecallMode | None = None
 
     # Full-text analysis selection.
     deep_analysis_limit: int | None = Field(default=None, ge=0, le=100)
@@ -191,11 +191,7 @@ async def test_provider(
 
 @router.post("/api/settings/embedding/test")
 async def test_embedding_model() -> dict[str, Any]:
-    try:
-        result = await asyncio.to_thread(embedding_status, warm=True)
-        return {"ok": True, **result}
-    except (SemanticEmbeddingError, OSError, ValueError) as exc:
-        return {"ok": False, "message": str(exc), **embedding_status()}
+    return await asyncio.to_thread(get_semantic_services().model.status, warm=True)
 
 
 @router.post("/api/settings/email/test")
