@@ -7,10 +7,9 @@ import sys
 
 
 async def main() -> int:
-    from app.main import initialize_application, run_daily_pipeline
+    from app.workflow import daily_pipeline
 
-    initialize_application()
-    result = await run_daily_pipeline(trigger="scheduled-task")
+    result = await daily_pipeline.run_daily(trigger="scheduled-task")
     if not result.get("accepted", False):
         print("A daily job is already running.", file=sys.stderr)
         return 2

@@ -113,3 +113,20 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
     )
 
     assert await coordinator.execute("analyze", job_id="job-1") == {"analyzed": 1}
+
+
+@pytest.mark.asyncio
+async def test_windows_runner_uses_shared_daily_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import workflow
+
+    from scripts import run_daily
+
+    async def run_daily_once(*, trigger: str) -> dict[str, Any]:
+        assert trigger == "scheduled-task"
+        return {"accepted": True, "success": True, "fetched": 3, "analyzed": 2}
+
+    monkeypatch.setattr(workflow.daily_pipeline, "run_daily", run_daily_once)
+
+    assert await run_daily.main() == 0
