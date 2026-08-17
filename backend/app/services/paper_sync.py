@@ -16,9 +16,9 @@ from ..models import Topic
 from ..arxiv.affiliations import fetch_affiliations
 from ..arxiv.fetch import fetch_daily
 from ..arxiv.repository import PaperRepository
-from .paper_recall import SemanticMatcher, recall_papers
-from .semantic import match_papers as semantic_match_papers
-from .semantic import recall_mode
+from .semantic.embedding import match_papers as semantic_match_papers
+from .semantic.embedding import recall_mode
+from .semantic.recall import SemanticMatcher, recall_papers
 from .state import active_profile
 
 

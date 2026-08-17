@@ -33,7 +33,7 @@ from ..services.prompt_catalog import (
     PROMPT_TEMPLATE_IDS,
     prompt_catalog_payload,
 )
-from ..services.semantic import SemanticEmbeddingError, embedding_status
+from ..services.semantic.embedding import SemanticEmbeddingError, embedding_status
 from ..services.state import active_profile, clean_string_list
 from .presenters import _profile_wire
 from .system_views import _settings_wire

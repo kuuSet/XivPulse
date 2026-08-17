@@ -25,7 +25,7 @@ from ..models import (
 )
 from ..services.direction_taxonomy import direction_taxonomy_fingerprint
 from ..services.jobs import RUNNING_STATUSES
-from ..services.semantic import RECALL_THRESHOLDS, recall_mode
+from ..services.semantic.embedding import RECALL_THRESHOLDS, recall_mode
 from ..services.state import active_profile
 from .presenters import _as_utc, _digest_wire, _job_wire, _paper_wire, _profile_wire, _query_papers
 from .system_views import _provider_public_status, _settings_wire

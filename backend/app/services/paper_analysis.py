@@ -20,8 +20,8 @@ from .direction_taxonomy import stamp_direction_attribution
 from .jobs import update_job_progress
 from .prompt_catalog import resolve_prompt_settings
 from .provider import OpenAICompatibleAdapter, ProviderError
-from .semantic import is_candidate as is_semantic_candidate
-from .semantic import recall_mode
+from .semantic.embedding import is_candidate as is_semantic_candidate
+from .semantic.embedding import recall_mode
 from .state import active_profile
 
 LOG = logging.getLogger("xivpulse")

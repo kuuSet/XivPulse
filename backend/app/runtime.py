@@ -14,8 +14,8 @@ from .models import Job, Paper, PaperMatch, utcnow
 from .services.auth import auth_settings
 from .services.direction_matching import canonical_requested_direction_names
 from .services.jobs import RUNNING_STATUSES
-from .services.semantic import MODEL_ID as SEMANTIC_MODEL_ID
-from .services.semantic import match_papers as semantic_match_papers
+from .services.semantic.embedding import MODEL_ID as SEMANTIC_MODEL_ID
+from .services.semantic.embedding import match_papers as semantic_match_papers
 from .services.state import active_profile
 
 LOG = logging.getLogger("xivpulse")

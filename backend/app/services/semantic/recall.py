@@ -9,8 +9,8 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Paper, PaperMatch, ScreeningQueueItem, Topic
-from .semantic import (
+from ...models import Paper, PaperMatch, ScreeningQueueItem, Topic
+from .embedding import (
     MODEL_ID,
     RECALL_THRESHOLDS,
     SemanticEmbeddingError,

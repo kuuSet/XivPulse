@@ -111,7 +111,7 @@ def _insert_paper(
 def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app.services import semantic
+    from app.services.semantic import embedding as semantic
 
     embedding_calls: list[list[str]] = []
 
@@ -1588,7 +1588,7 @@ async def test_sync_uses_semantic_recall_without_keyword_scoring(
     client: TestClient,
 ) -> None:
     from app.services.paper_sync import sync_papers
-    from app.services.semantic import SemanticMatch
+    from app.services.semantic.embedding import SemanticMatch
 
     stages: list[str] = []
     records = [
@@ -1678,7 +1678,7 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
 ) -> None:
     from app.settings import set_setting
     from app.services.paper_sync import sync_papers
-    from app.services.semantic import SemanticEmbeddingError
+    from app.services.semantic.embedding import SemanticEmbeddingError
 
     record = PaperDocument(
         arxiv_id="2608.09991",

@@ -13,8 +13,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..settings import get_process_settings
-from ..models import Paper, PaperEmbedding, Topic
+from ...models import Paper, PaperEmbedding, Topic
+from ...settings import get_process_settings
 
 MODEL_ID = "BAAI/bge-small-en-v1.5"
 MODEL_DIMENSIONS = 384
