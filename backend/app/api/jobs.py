@@ -13,7 +13,7 @@ from ..models import Job
 from ..services.jobs import RUNNING_STATUSES
 from ..services.paper_sync import latest_complete_submission_date
 from ..workflow import daily_pipeline
-from .presenters import _job_wire
+from .presenters.jobs import _job_wire
 from .system_views import _provider_public_status
 
 router = APIRouter()

@@ -14,7 +14,9 @@ from ..models import Feedback, FeedbackReason, Paper, PaperMatch, PaperReadingSt
 from ..services.direction_taxonomy import direction_taxonomy_fingerprint
 from ..services.library import sync_favorites_membership
 from ..services.state import active_profile
-from .presenters import _clean_tags, _paper_wire, _query_papers, _reading_wire
+from .presenters.common import _clean_tags
+from .presenters.papers import _paper_wire, _query_papers
+from .presenters.projects import _reading_wire
 
 router = APIRouter()
 

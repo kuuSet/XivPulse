@@ -18,7 +18,8 @@ from ..services.library import (
     set_saved_feedback,
 )
 from ..services.state import active_profile
-from .presenters import _clean_tags, _project_membership_wire, _project_wire
+from .presenters.common import _clean_tags
+from .presenters.projects import _project_membership_wire, _project_wire
 
 router = APIRouter()
 

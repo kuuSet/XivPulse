@@ -12,7 +12,7 @@ from ..settings import load_runtime_settings, setting_value
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..services.semantic.embedding import RECALL_THRESHOLDS, embedding_status, recall_mode
-from .presenters import _as_utc
+from .presenters.common import _as_utc
 
 
 def _settings_wire(db: Session) -> dict[str, Any]:
