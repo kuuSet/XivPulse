@@ -168,7 +168,7 @@ powershell -ExecutionPolicy Bypass -File .\install_task.ps1
 
 ## 数据与隐私
 
-本地源码运行默认使用 `data/xivpulse.db`。从旧版本升级且已有 `data/arxiv_daily.db` 时，程序会继续使用原数据库，不会自动迁移或清空历史数据。
+本地源码运行默认使用 `data/xivpulse.db`。
 
 SQLite 中保存论文元数据、摘要、模型分析、Token 记录、反馈、阅读状态、分类库、设置和每日研究报告。应用不会长期保存论文 PDF 或 HTML 全文。当前版本不会自动清理历史数据，数据会持续积累，直到用户自行备份或删除数据库。
 
