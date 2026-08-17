@@ -55,14 +55,16 @@ function App() {
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3200)
   }, [])
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (targetDate?: string) => {
     setDashboardState('loading')
     setDashboardError('')
     try {
-      const data = isDemo ? sampleDashboard : await api.dashboard()
+      const data = isDemo ? sampleDashboard : await api.dashboard(targetDate)
       setDashboard(data)
       setUiFontSizePt(data.settings?.ui_font_size_pt ?? 12)
-      setSelectedId((current) => current ?? data.items[0]?.id ?? null)
+      setSelectedId((current) => data.items.some((paper) => String(paper.id) === String(current))
+        ? current
+        : data.items[0]?.id ?? null)
       setDashboardState('ready')
     } catch (error) {
       setDashboard(null)
@@ -302,6 +304,7 @@ function App() {
             job={job ?? dashboard?.active_job ?? null}
             onRetry={loadDashboard}
             onRefresh={handleRefresh}
+            onDateSelect={loadDashboard}
             onSelect={(id) => openPaper(id, view)}
             onCloseDetail={closePaper}
             onFeedback={handleFeedback}

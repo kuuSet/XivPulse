@@ -95,7 +95,7 @@ def dashboard(
         db.scalars(
             _query_papers(db)
             .join(PaperMatch, PaperMatch.paper_id == Paper.id)
-            .where(PaperMatch.profile_id == profile.id)
+            .where(PaperMatch.profile_id == profile.id, day_condition)
             .order_by(desc(PaperMatch.relevance_score), desc(Paper.published_at))
             .limit(100)
         )
@@ -104,12 +104,6 @@ def dashboard(
     )
     profile_topics = list(profile.topics)
     taxonomy_fingerprint = direction_taxonomy_fingerprint(profile_topics)
-    day_papers = [
-        paper
-        for paper in papers
-        if start <= (_as_utc(paper.published_at or paper.first_seen_at) or start) < end
-    ]
-    visible = day_papers or papers
     items = [
         _paper_wire(
             paper,
@@ -117,14 +111,21 @@ def dashboard(
             topics=profile_topics,
             taxonomy_fingerprint=taxonomy_fingerprint,
         )
-        for paper in visible
+        for paper in papers
     ]
     topics = Counter(direction for item in items for direction in item["matched_topics"])
-    latest_daily_job = db.scalar(
+    daily_jobs = db.scalars(
         select(Job)
         .where(Job.kind == "daily", Job.status == "completed")
         .order_by(desc(Job.completed_at), desc(Job.created_at))
-    )
+    ).all()
+    latest_daily_job = daily_jobs[0] if daily_jobs and target_date is None else None
+    if target_date is not None:
+        for job in daily_jobs:
+            job_date = job.result.get("fetch_date") or job.result.get("report_date")
+            if job_date == day.isoformat():
+                latest_daily_job = job
+                break
     latest_result = latest_daily_job.result if latest_daily_job is not None else {}
     current_settings = load_runtime_settings(db)
     recent_cutoff = utcnow() - timedelta(days=7)
@@ -164,7 +165,7 @@ def dashboard(
     )
     return {
         "date": day,
-        "total_papers": fetched_today or len(visible),
+        "total_papers": fetched_today or len(papers),
         "screened_papers": screened_today,
         "high_priority_papers": high_priority_today,
         "processing_summary": {
@@ -196,7 +197,7 @@ def dashboard(
         "stats": {
             "fetched_today": fetched_today,
             "relevant_today": high_priority_today,
-            "analyzed_today": sum(1 for paper in visible if paper.analyses),
+            "analyzed_today": sum(1 for paper in papers if paper.analyses),
             "saved_total": db.scalar(
                 select(func.count()).select_from(Feedback).where(Feedback.action == "save")
             )

@@ -23,6 +23,7 @@ interface PaperWorkspaceProps {
   job: JobInfo | null
   onRetry: () => void
   onRefresh: (date?: string) => void
+  onDateSelect: (date: string) => void
   onSelect: (id: Paper['id']) => void
   onCloseDetail: () => void
   onFeedback: (paper: Paper, action: FeedbackAction) => Promise<boolean>
@@ -36,7 +37,7 @@ interface PaperWorkspaceProps {
 type PaperSort = 'recommendation' | 'relevance' | 'time' | 'watched_authors' | 'watched_organizations'
 
 export function PaperWorkspace(props: PaperWorkspaceProps) {
-  const { mode, data, state, error, selectedId, refreshing, job, onRetry, onRefresh, onSelect, onCloseDetail, onFeedback, onSaveReading, onSaveDetailedFeedback, projects, onProjectsChange, onToast } = props
+  const { mode, data, state, error, selectedId, refreshing, job, onRetry, onRefresh, onDateSelect, onSelect, onCloseDetail, onFeedback, onSaveReading, onSaveDetailedFeedback, projects, onProjectsChange, onToast } = props
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [priority, setPriority] = useState(mode === 'today' ? 'recommended' : 'all')
@@ -241,7 +242,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
         </section>
       )}
 
-      {mode === 'today' && <RunCalendar busy={refreshing} refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} onRun={onRefresh} />}
+      {mode === 'today' && <RunCalendar busy={refreshing} refreshToken={job?.status === 'completed' || job?.status === 'failed' ? job.id : ''} onRun={onRefresh} onSelectDate={onDateSelect} />}
 
       <section className="paper-workbench">
         <div className={`paper-column ${mode === 'library' ? 'paginated' : ''}`}>
@@ -335,7 +336,7 @@ function JobStatusBanner({ job }: { job: JobInfo }) {
   return <section className={`job-status-banner ${failed ? 'failed' : running ? 'running' : 'completed'}`} aria-live="polite"><div>{running ? <LoaderCircle className="spin" size={17} /> : failed ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}<span><strong>{running ? '每日任务进行中' : failed ? '最近一次任务失败' : '最近一次任务已完成'}</strong><small>{summary}</small></span></div><div className="job-progress"><span style={{ width: `${Math.max(running ? 4 : 0, Math.min(100, job.progress ?? 0))}%` }} /></div></section>
 }
 
-function RunCalendar({ busy, refreshToken, onRun }: { busy: boolean; refreshToken: string; onRun: (date: string) => void }) {
+function RunCalendar({ busy, refreshToken, onRun, onSelectDate }: { busy: boolean; refreshToken: string; onRun: (date: string) => void; onSelectDate: (date: string) => void }) {
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [month, setMonth] = useState(currentMonth)
@@ -393,7 +394,7 @@ function RunCalendar({ busy, refreshToken, onRun }: { busy: boolean; refreshToke
           const record = daysByDate.get(date)
           const unavailable = !data || date > data.latest_available_date
           const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；当前语义候选 ${record.candidates}，AI 初筛 ${record.screened}，待初筛 ${record.pending_screening}` : '尚未筛选，点击后可以补跑'
-          return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === selectedDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => setSelectedDate(date)} title={title} key={date}><strong>{day}</strong>{record && <small>候选 {record.candidates}</small>}</button>
+          return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === selectedDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => { setSelectedDate(date); onSelectDate(date) }} title={title} key={date}><strong>{day}</strong>{record && <small>候选 {record.candidates}</small>}</button>
         })}
       </div>
       {selectedDate && data && <div className={`calendar-detail ${selectedRecord?.status ?? 'missing'}`}>

@@ -484,6 +484,51 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert dashboard["settings"]["schedule_time"] == "13:30"
 
 
+def test_dashboard_returns_only_the_requested_date(client: TestClient) -> None:
+    with database.SessionLocal() as session:
+        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        for day, suffix in ((13, "13"), (14, "14")):
+            paper = Paper(
+                arxiv_id=f"2608.100{suffix}",
+                title=f"Paper for August {day}",
+                published_at=datetime(2026, 8, day, 12, tzinfo=UTC),
+            )
+            session.add(paper)
+            session.flush()
+            session.add(
+                PaperMatch(
+                    paper_id=paper.id,
+                    profile_id=profile.id,
+                    semantic_score=0.8,
+                    relevance_score=90,
+                    screened_at=datetime(2026, 8, day, 13, tzinfo=UTC),
+                )
+            )
+            session.add(
+                Job(
+                    kind="daily",
+                    status="completed",
+                    completed_at=datetime(2026, 8, day, 14, tzinfo=UTC),
+                    result_json={
+                        "fetch_date": f"2026-08-{day}",
+                        "fetched": day,
+                        "screened": day - 10,
+                    },
+                )
+            )
+        session.commit()
+
+    august_13 = client.get("/api/dashboard?date=2026-08-13").json()
+    assert august_13["date"] == "2026-08-13"
+    assert [paper["title"] for paper in august_13["items"]] == ["Paper for August 13"]
+    assert august_13["processing_summary"]["latest_fetched_count"] == 13
+    assert august_13["processing_summary"]["latest_screened_count"] == 3
+
+    missing = client.get("/api/dashboard?date=2026-08-12").json()
+    assert missing["total_papers"] == 0
+    assert missing["items"] == []
+
+
 def test_budget_token_usage_and_method_candidate_review(client: TestClient) -> None:
     with database.SessionLocal() as session:
         profile = session.query(Profile).filter(Profile.active.is_(True)).one()

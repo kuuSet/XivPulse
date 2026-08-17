@@ -86,6 +86,11 @@ class PaperRepository:
                 self.session.add(paper)
                 self.session.flush()
                 result.inserted += 1
+            source_upgrade = (
+                not created
+                and paper_data.source == "atom"
+                and paper.ingestion_source != "atom"
+            )
 
             existing_version = self.session.scalar(
                 select(PaperVersion).where(
@@ -113,13 +118,28 @@ class PaperRepository:
                 )
                 self.session.add(existing_version)
                 result.versions_added += 1
+            elif source_upgrade:
+                existing_version.title = paper_data.title
+                existing_version.abstract = paper_data.abstract
+                existing_version.authors_json = paper_data.authors
+                if paper_data.affiliations:
+                    existing_version.affiliations = paper_data.affiliations
+                existing_version.categories_json = paper_data.categories
+                existing_version.abs_url = paper_data.abs_url
+                existing_version.html_url = paper_data.html_url
+                existing_version.pdf_url = paper_data.pdf_url
+                existing_version.published_at = paper_data.published_at
+                existing_version.arxiv_updated_at = paper_data.updated_at
+                existing_version.raw_json = paper_data.as_dict()
             elif (
                 paper_data.affiliations
                 and existing_version.affiliations != paper_data.affiliations
             ):
                 existing_version.affiliations = paper_data.affiliations
 
-            should_update = not created and paper_data.version > paper.latest_version
+            should_update = not created and (
+                source_upgrade or paper_data.version > paper.latest_version
+            )
             if paper_data.affiliations and paper.affiliations != paper_data.affiliations:
                 paper.affiliations = paper_data.affiliations
             record_updated = as_utc(paper_data.updated_at)
@@ -134,6 +154,8 @@ class PaperRepository:
                 )
             if should_update:
                 for name, value in values.items():
+                    if name == "affiliations_json" and not paper_data.affiliations:
+                        continue
                     setattr(paper, name, value)
                 result.updated += 1
             elif not created:

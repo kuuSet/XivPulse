@@ -16,7 +16,7 @@ from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
 from app.database import init_db, make_engine
-from app.domain.paper import Paper as PaperDocument
+from app.domain.paper import Paper as PaperDocument, as_utc
 from app.models import Paper, PaperVersion, Profile
 from app.schemas import ScreeningResult
 from app.services.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer
@@ -280,6 +280,43 @@ def test_parse_dedupe_and_version_upsert() -> None:
         assert latest_version is not None
         latest_version.affiliations = ["NVIDIA Research"]
         assert latest_version.affiliations == ["NVIDIA Research"]
+
+
+def test_atom_metadata_replaces_legacy_rss_dates() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    init_db(engine, seed=False)
+    with Session(engine) as session:
+        rss = PaperDocument(
+            arxiv_id="2608.12670",
+            version=1,
+            title="Legacy RSS paper",
+            published_at=datetime(2026, 8, 14, 4, tzinfo=UTC),
+            updated_at=datetime(2026, 8, 14, 4, tzinfo=UTC),
+            source="rss",
+        )
+        atom = PaperDocument(
+            arxiv_id="2608.12670",
+            version=1,
+            title="Authoritative Atom paper",
+            published_at=datetime(2026, 8, 13, 0, 9, 26, tzinfo=UTC),
+            updated_at=datetime(2026, 8, 13, 0, 9, 26, tzinfo=UTC),
+            source="atom",
+        )
+
+        PaperRepository(session).upsert([rss])
+        session.commit()
+        result = PaperRepository(session).upsert([atom])
+        session.commit()
+
+        paper = session.scalar(select(Paper).where(Paper.arxiv_id == atom.arxiv_id))
+        assert paper is not None
+        version = session.scalar(select(PaperVersion).where(PaperVersion.paper_id == paper.id))
+        assert version is not None
+        assert result.updated == 1
+        assert paper.title == atom.title
+        assert as_utc(paper.published_at) == atom.published_at
+        assert paper.ingestion_source == "atom"
+        assert as_utc(version.published_at) == atom.published_at
 
 
 class _FakeArxivMetadataClient:
