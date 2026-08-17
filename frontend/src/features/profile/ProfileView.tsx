@@ -203,18 +203,34 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
       </section>
       <div className="form-layout profile-form-layout">
         <div className="form-main">
-          <FormSection title="关注列表" description="研究方向决定语义召回；作者和机构用于“今日论文”中的关注项排序。">
+          <FormSection title="关注标签" description="研究方向决定论文的语义召回范围。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
                 {profile.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" key={topic.id ?? `new-${index}`}>
                   {englishDirectionLabel(topic)}
                   <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
                 </span>)}
-                {profile.watched_authors.map((author, index) => <span className="interest-tag author" key={`author-${author}`}><UserRound size={12} />{author}<button type="button" onClick={() => removeNamedWatch('watched_authors', index)} aria-label={`删除作者 ${author}`} title="删除作者"><X size={13} /></button></span>)}
-                {profile.watched_organizations.map((organization, index) => <span className="interest-tag organization" key={`organization-${organization}`}><Building2 size={12} />{organization}<button type="button" onClick={() => removeNamedWatch('watched_organizations', index)} aria-label={`删除机构 ${organization}`} title="删除机构"><X size={13} /></button></span>)}
-                <button className="interest-add-tag" type="button" onClick={() => setPickerOpen(true)} aria-label="添加关注项" title="添加关注项"><Plus size={16} /></button>
+                <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('topic'); setPickerOpen(true) }} aria-label="添加关注标签" title="添加关注标签"><Plus size={16} /></button>
               </div>
-              <p>建议保留 3–12 个边界清晰的研究方向；所有修改都会自动保存。</p>
+              <p>建议保留 3–12 个边界清晰的研究方向。</p>
+            </div>
+          </FormSection>
+          <FormSection title="关注作者" description="用于在“今日论文”中将这些作者的论文优先显示。">
+            <div className="interest-tag-editor">
+              <div className="interest-tags">
+                {profile.watched_authors.map((author, index) => <span className="interest-tag author" key={`author-${author}`}><UserRound size={12} />{author}<button type="button" onClick={() => removeNamedWatch('watched_authors', index)} aria-label={`删除作者 ${author}`} title="删除作者"><X size={13} /></button></span>)}
+                <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('author'); setPickerOpen(true) }} aria-label="添加关注作者" title="添加关注作者"><Plus size={16} /></button>
+              </div>
+              <p>使用论文中的完整作者姓名进行精确匹配。</p>
+            </div>
+          </FormSection>
+          <FormSection title="关注机构" description="用于在“今日论文”中将这些机构的论文优先显示。">
+            <div className="interest-tag-editor">
+              <div className="interest-tags">
+                {profile.watched_organizations.map((organization, index) => <span className="interest-tag organization" key={`organization-${organization}`}><Building2 size={12} />{organization}<button type="button" onClick={() => removeNamedWatch('watched_organizations', index)} aria-label={`删除机构 ${organization}`} title="删除机构"><X size={13} /></button></span>)}
+                <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('organization'); setPickerOpen(true) }} aria-label="添加关注机构" title="添加关注机构"><Plus size={16} /></button>
+              </div>
+              <p>使用论文 affiliation 中的完整机构词组进行匹配。</p>
             </div>
           </FormSection>
           <details className="form-section optional-section">
@@ -226,9 +242,8 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
           </details>
         </div>
       </div>
-      {pickerOpen && <Modal title="添加关注项" onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
+      {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
         <div className="interest-picker">
-          <div className="interest-picker-tabs">{(['topic', 'author', 'organization'] as WatchKind[]).map((kind) => <button className={pickerKind === kind ? 'active' : ''} type="button" onClick={() => { setPickerKind(kind); setCatalogQuery('') }} key={kind}>{kind === 'topic' ? 'Research topic' : kind === 'author' ? 'Author' : 'Organization'}</button>)}</div>
           <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (pickerKind !== 'topic') addNamedWatch() } }} placeholder={pickerKind === 'topic' ? 'Search presets or type a new interest' : pickerKind === 'author' ? 'Type an author name' : 'Type an organization name'} />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
           {catalogQuery.trim() && <button className={`interest-custom-option ${pickerKind === 'topic' && !isEnglishDirectionLabel(catalogQuery) ? 'invalid' : ''}`} type="button" onClick={pickerKind === 'topic' ? addCustomTopic : addNamedWatch}>
             <Plus size={15} />

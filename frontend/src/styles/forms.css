@@ -97,9 +97,6 @@
 .interest-tag-editor > p { margin: 0; color: var(--quiet); font-size: 8px; }
 
 .interest-picker { display: grid; gap: 12px; padding: 16px 18px 18px; }
-.interest-picker-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.interest-picker-tabs button { min-height: 32px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: #fff; cursor: pointer; font-size: 9px; }
-.interest-picker-tabs button.active { border-color: #82ad9a; color: #245c45; background: var(--green-soft); font-weight: 700; }
 .interest-picker > .search-box { width: 100%; }
 .interest-custom-option { display: flex; width: 100%; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid #a9c9b9; border-radius: 6px; color: #275c46; background: var(--green-soft); cursor: pointer; text-align: left; }
 .interest-custom-option.invalid { border-color: #dec6a0; color: #765816; background: #fff8e7; }
