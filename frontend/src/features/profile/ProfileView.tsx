@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
 import { sampleProfile } from '../../sample'
-import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Profile } from '../../types'
+import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Profile } from '../../types/profile'
 import type { LoadState, Toast } from '../../app/types'
 import { Modal, FormSection, TagEditor, WorkspaceSkeleton, PageError } from '../../shared/ui'
 
@@ -249,4 +249,3 @@ function demoDirectionCatalog(profile: Profile): DirectionCatalog {
   }))
   return { version: 'demo', updated_at: '', groups, count: items.length, items, sources: [], scope_note: '演示模式仅展示当前画像中的方向。' }
 }
-

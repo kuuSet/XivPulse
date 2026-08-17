@@ -1,4 +1,4 @@
-import type { FeedbackReason, ReadingState } from '../types'
+import type { FeedbackReason, ReadingState } from '../types/papers'
 
 export const READING_STATE_OPTIONS: Array<[ReadingState, string]> = [
   ['unread', '未读'], ['queued', '待读队列'], ['reading', '阅读中'], ['read', '已读'], ['reproduce', '准备复现'], ['cited', '已引用'], ['archived', '已归档'],

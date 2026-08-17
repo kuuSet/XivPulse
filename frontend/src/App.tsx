@@ -10,7 +10,10 @@ import { api } from './lib/api'
 import { BRAND_LOGO, isDemo } from './lib/runtime'
 import { sampleDashboard, sampleProjects } from './sample'
 import { applyReading, getReading } from './shared/format'
-import type { AuthSession, DashboardData, Feedback, FeedbackAction, Paper, ReadingData, ResearchProject, JobInfo } from './types'
+import type { DashboardData } from './types/dashboard'
+import type { Feedback, FeedbackAction, Paper, ReadingData } from './types/papers'
+import type { ResearchProject } from './types/projects'
+import type { AuthSession, JobInfo } from './types/system'
 import type { LoadState, Toast, View } from './app/types'
 
 const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof Radar }> = [

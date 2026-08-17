@@ -3,7 +3,8 @@ import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
 import { samplePromptCatalog, sampleSettings } from '../../sample'
-import type { AnalysisPromptCatalog, Settings, MethodCandidate, MethodCatalog } from '../../types'
+import type { MethodCandidate, MethodCatalog } from '../../types/methods'
+import type { AnalysisPromptCatalog, Settings } from '../../types/settings'
 import type { LoadState, Toast } from '../../app/types'
 import { FormSection, WorkspaceSkeleton, PageError } from '../../shared/ui'
 import { formatDateTime, formatBytes, formatInteger } from '../../shared/format'
@@ -303,4 +304,3 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     </div>
   )
 }
-

@@ -1,4 +1,5 @@
-import type { DailyReport, Paper, ReadingData } from '../types'
+import type { Paper, ReadingData } from '../types/papers'
+import type { DailyReport } from '../types/reports'
 import { READING_QUEUE_LABELS } from './options'
 
 export function getReading(paper: Paper): ReadingData {

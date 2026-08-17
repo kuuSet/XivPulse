@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
 import { sampleRoadmap, sampleTrends } from '../../sample'
-import type { ResearchRoadmap, TopicTrendItem, TopicTrends } from '../../types'
+import type { ResearchRoadmap, TopicTrendItem, TopicTrends } from '../../types/trends'
 import type { LoadState, Toast } from '../../app/types'
 import { WorkspaceSkeleton, PageError } from '../../shared/ui'
 
@@ -141,4 +141,3 @@ function inferClusters(roadmap: ResearchRoadmap) {
   const statusMeta = [{ id: 'emerging', label: '新兴研究方向', color: '#b5662d' }, { id: 'active', label: '活跃研究方向', color: '#1f7a5a' }, { id: 'established', label: '稳定研究方向', color: '#4267a9' }]
   return statusMeta.map((meta) => ({ ...meta, description: '', node_ids: roadmap.nodes.filter((node) => node.status === meta.id).map((node) => node.id) })).filter((cluster) => cluster.node_ids.length)
 }
-

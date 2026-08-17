@@ -1,28 +1,20 @@
 import type {
   BackendProfile,
-  AnalysisPromptCatalog,
-  AppStatus,
-  AuthSession,
-  DailyReport,
-  DailyReportArchiveItem,
-  DailyResearchGap,
   DirectionCatalog,
-  DashboardData,
-  FeedbackReason,
-  FeedbackWriteAction,
-  JobCalendarData,
   Profile,
+} from '../types/profile'
+import type { DashboardData } from '../types/dashboard'
+import type { MethodCandidates, MethodCatalog } from '../types/methods'
+import type { FeedbackReason, FeedbackWriteAction, Paper, PaperPage, ReadingData } from '../types/papers'
+import type {
   ProjectDraft,
   ProjectMembership,
-  ReadingData,
   ResearchProject,
-  ResearchRoadmap,
-  Settings,
-  MethodCatalog,
-  MethodCandidates,
-  PaperPage,
-  TopicTrends,
-} from '../types'
+} from '../types/projects'
+import type { DailyReport, DailyReportArchiveItem, DailyResearchGap } from '../types/reports'
+import type { AnalysisPromptCatalog, Settings } from '../types/settings'
+import type { AppStatus, AuthSession, JobCalendarData } from '../types/system'
+import type { ResearchRoadmap, TopicTrends } from '../types/trends'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
 
@@ -98,7 +90,7 @@ export const api = {
     const suffix = params.size ? `?${params.toString()}` : ''
     return request<PaperPage>(`/papers${suffix}`)
   },
-  paper: (paperId: PaperId) => request<import('../types').Paper>(`/papers/${encodeId(paperId)}`),
+  paper: (paperId: PaperId) => request<Paper>(`/papers/${encodeId(paperId)}`),
   authSession: () => request<AuthSession>('/auth/session'),
   login: (username: string, password: string) => request<AuthSession>('/auth/login', {
     method: 'POST', body: JSON.stringify({ username, password }),

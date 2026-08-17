@@ -1,4 +1,9 @@
-import type { AnalysisPromptCatalog, DailyReport, DashboardData, Profile, ResearchProject, ResearchRoadmap, Settings, TopicTrends } from './types'
+import type { DashboardData } from './types/dashboard'
+import type { Profile } from './types/profile'
+import type { ResearchProject } from './types/projects'
+import type { DailyReport } from './types/reports'
+import type { AnalysisPromptCatalog, Settings } from './types/settings'
+import type { ResearchRoadmap, TopicTrends } from './types/trends'
 
 export const sampleDashboard: DashboardData = {
   date: new Date().toISOString().slice(0, 10),
