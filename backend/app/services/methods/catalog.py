@@ -2,20 +2,52 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from ..state import clean_string_list
-from .data import (
-    METHOD_CANDIDATE_MIN_PAPERS,
-    METHOD_CANDIDATE_WINDOW_DAYS,
-    METHOD_CATALOG,
-    METHOD_CATALOG_VERSION,
-    MethodTerm,
-)
+
+
+@dataclass(frozen=True)
+class MethodTerm:
+    slug: str
+    group: str
+    name: str
+    aliases: tuple[str, ...]
+    context_terms: tuple[str, ...] = ()
+    exclusions: tuple[str, ...] = ()
+    description: str = ""
+    source: str = "built_in"
+
+    def wire(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _method(value: Mapping[str, Any]) -> MethodTerm:
+    name = str(value["name"])
+    return MethodTerm(
+        slug=str(value["slug"]),
+        group=str(value["group"]),
+        name=name,
+        aliases=tuple(dict.fromkeys((name, *(str(item) for item in value.get("aliases", []))))),
+        context_terms=tuple(str(item) for item in value.get("context_terms", [])),
+        exclusions=tuple(str(item) for item in value.get("exclusions", [])),
+        description=str(value.get("description", "")),
+        source=str(value.get("source", "built_in")),
+    )
+
+
+_CATALOG = json.loads(Path(__file__).with_name("catalog.json").read_text(encoding="utf-8"))
+METHOD_CATALOG_VERSION = str(_CATALOG["version"])
+METHOD_CANDIDATE_WINDOW_DAYS = int(_CATALOG["candidate_discovery"]["window_days"])
+METHOD_CANDIDATE_MIN_PAPERS = int(_CATALOG["candidate_discovery"]["min_papers"])
+METHOD_CATALOG = tuple(_method(item) for item in _CATALOG["items"])
 
 
 def normalize_method_key(value: object) -> str:
@@ -130,7 +162,6 @@ def discover_method_candidates(
     custom_values: Iterable[Mapping[str, Any]] | None = None,
     dismissed: Iterable[str] = (),
     min_papers: int = METHOD_CANDIDATE_MIN_PAPERS,
-
 ) -> list[dict[str, Any]]:
     known = {
         normalize_method_key(alias)
@@ -196,10 +227,7 @@ def method_catalog_payload(
         "custom_count": len(items) - len(METHOD_CATALOG),
         "groups": groups,
         "items": [item.wire() for item in items],
-        "scope_note": (
-            "广泛覆盖主要稳定 AI 方法族，不包含任务、数据集、产品名或论文贡献长句；"
-            "新候选必须跨论文重复并经用户审核后才能进入日报。"
-        ),
+        "scope_note": _CATALOG["scope_note"],
     }
 
 

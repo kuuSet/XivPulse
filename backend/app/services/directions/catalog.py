@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
-from .data import (
-    CATALOG_SOURCES,
-    CATALOG_VERSION,
-    CORE_DIRECTION_CATALOG,
-    DIRECTION_CATALOG,
-    SPECIALTY_DIRECTION_CATALOG,
-)
+_CATALOG = json.loads(Path(__file__).with_name("catalog.json").read_text(encoding="utf-8"))
+CATALOG_VERSION = str(_CATALOG["version"])
+
+
+def _direction(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "aliases": [],
+        "context_keywords": [],
+        "negative_keywords": [],
+        "weight": 1.0,
+        "enabled": True,
+        "level": "main",
+        "parent_slug": None,
+        **value,
+    }
+
+
+DIRECTION_CATALOG = tuple(_direction(item) for item in _CATALOG["items"])
 
 
 def direction_catalog_payload() -> dict[str, Any]:
@@ -24,25 +37,19 @@ def direction_catalog_payload() -> dict[str, Any]:
         items.append(item)
     return {
         "version": CATALOG_VERSION,
-        "updated_at": "2026-08-14",
+        "updated_at": _CATALOG["updated_at"],
         "groups": groups,
         "count": len(DIRECTION_CATALOG),
-        "main_count": len(CORE_DIRECTION_CATALOG),
-        "specialty_count": len(SPECIALTY_DIRECTION_CATALOG),
+        "main_count": sum(item["level"] == "main" for item in DIRECTION_CATALOG),
+        "specialty_count": sum(item["level"] == "specialty" for item in DIRECTION_CATALOG),
         "items": items,
-        "sources": [dict(source) for source in CATALOG_SOURCES],
-        "scope_note": (
-            "目录分为稳定主干与精确专题；专题隶属于主干，但添加后仍是独立关注方向。"
-            "单一方法、数据集、榜单、论文分区、产品名或短期热词不会成为方向。"
-        ),
+        "sources": _CATALOG["sources"],
+        "scope_note": _CATALOG["scope_note"],
     }
 
 
 __all__ = [
-    "CATALOG_SOURCES",
     "CATALOG_VERSION",
-    "CORE_DIRECTION_CATALOG",
     "DIRECTION_CATALOG",
-    "SPECIALTY_DIRECTION_CATALOG",
     "direction_catalog_payload",
 ]
