@@ -110,15 +110,14 @@ def test_recall_service_bulk_loads_matches_and_queues() -> None:
                 papers,
                 profile_id=profile.id,
                 topics=list(profile.topics),
-                author_watchlist=[],
                 report_date=date(2026, 8, 16),
-                batch_size=3,
                 mode="high",
             )
         finally:
             event.remove(engine, "before_cursor_execute", count_selects)
 
     assert result.queued == 3
+    assert len(result.enrichment_ids) == 3
     assert len(statements) == 2
 
 

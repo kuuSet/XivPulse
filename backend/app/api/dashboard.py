@@ -191,11 +191,7 @@ def dashboard(
         },
         "items": items,
         "topic_stats": [{"topic": name, "count": count} for name, count in topics.most_common()],
-        "profile": _profile_wire(
-            profile,
-            deep_threshold,
-            list(current_settings.watched_authors),
-        ),
+        "profile": _profile_wire(profile, current_settings),
         "settings": _settings_wire(db),
         "stats": {
             "fetched_today": fetched_today,

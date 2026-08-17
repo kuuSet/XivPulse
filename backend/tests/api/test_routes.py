@@ -195,11 +195,7 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
             0.1,
             "precise",
         )
-        assert recall.is_candidate(
-            0.1,
-            "precise",
-            watched_author=True,
-        )
+        assert not recall.is_candidate(0.1, "precise")
 
 
 @pytest.mark.asyncio
@@ -264,6 +260,79 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
     with database.SessionLocal() as session:
         assert session.query(ScreeningQueueItem).filter_by(status="completed").count() == 65
         assert session.query(Analysis).filter_by(kind="screening").count() == 65
+
+
+@pytest.mark.asyncio
+async def test_watched_author_and_organization_rank_screening_candidates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.schemas import ScreeningResult
+    from app.services import paper_analysis
+    from app.services import provider as provider_module
+    from app.settings import set_setting
+
+    screened_order: list[str] = []
+    with database.SessionLocal() as session:
+        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        direction = profile.topics[0].name
+        set_setting(session, "screening_batch_size", 1)
+        set_setting(session, "watched_authors", ["Jane Doe"])
+        set_setting(session, "watched_organizations", ["NVIDIA"])
+        set_setting(session, "prioritize_watched_authors", True)
+        set_setting(session, "prioritize_watched_organizations", True)
+        candidates = [
+            ("both", ["Jane Doe"], ["NVIDIA Research"], 0.7),
+            ("author", ["Jane Doe"], ["Other Lab"], 0.8),
+            ("neither", ["John Doe"], ["Other Lab"], 0.9),
+        ]
+        for index, (title, authors, affiliations, score) in enumerate(candidates):
+            paper = Paper(
+                arxiv_id=f"2608.3000{index}",
+                title=title,
+                abstract="Priority ordering candidate.",
+                authors_json=authors,
+                affiliations_json=affiliations,
+                categories_json=["cs.AI"],
+                primary_category="cs.AI",
+                last_seen_at=datetime.now(UTC),
+            )
+            session.add(paper)
+            session.flush()
+            session.add(
+                PaperMatch(
+                    paper_id=paper.id,
+                    profile_id=profile.id,
+                    semantic_score=score,
+                )
+            )
+        session.commit()
+
+    class FakePaperAnalyzer:
+        def __init__(self, _adapter: object, **_options: object) -> None:
+            pass
+
+        async def screen_with_metadata(self, paper: Paper, _profile: Profile) -> object:
+            screened_order.append(paper.title)
+            return provider_module.GenerationResult(
+                data=ScreeningResult(
+                    relevant=True,
+                    relevance_score=90,
+                    reason="Relevant fake result",
+                    matched_topics=[direction],
+                    key_contributions=[],
+                    tags=[],
+                ),
+                transport="mock",
+                provider="test",
+                model="test",
+            )
+
+    monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakePaperAnalyzer)
+
+    result = await paper_analysis.analyze_papers(limit=0)
+
+    assert result["screened"] == 3
+    assert screened_order == ["both", "author", "neither"]
 
 
 @pytest.mark.asyncio
@@ -450,6 +519,9 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     profile_payload = profile.json()
     profile_payload["min_relevance"] = 75
     profile_payload["watched_authors"] = ["A. Author"]
+    profile_payload["watched_organizations"] = ["NVIDIA Research"]
+    profile_payload["prioritize_watched_authors"] = True
+    profile_payload["prioritize_watched_organizations"] = True
     saved_profile = client.put("/api/profile", json=profile_payload)
     assert saved_profile.status_code == 200
     assert saved_profile.json()["min_relevance"] == 75
@@ -460,7 +532,11 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert catalog.json()["version"]
     assert all(item["keywords"] for item in catalog.json()["items"])
     assert saved_profile.json()["watched_authors"] == ["A. Author"]
+    assert saved_profile.json()["watched_organizations"] == ["NVIDIA Research"]
+    assert saved_profile.json()["prioritize_watched_authors"] is True
+    assert saved_profile.json()["prioritize_watched_organizations"] is True
     assert client.get("/api/profile").json()["watched_authors"] == ["A. Author"]
+    assert client.get("/api/profile").json()["watched_organizations"] == ["NVIDIA Research"]
 
     settings = client.put(
         "/api/settings",
@@ -1727,7 +1803,66 @@ def test_daily_sync_uses_the_latest_complete_utc_date() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
+async def test_organization_priority_bounds_affiliation_enrichment_to_100(
+    client: TestClient,
+) -> None:
+    from app.services.paper_sync import sync_papers
+    from app.services.semantic import RecallService, SemanticMatch
+    from app.settings import SemanticSettings, set_setting
+
+    records = [
+        PaperDocument(
+            arxiv_id=f"2608.{20000 + index}",
+            version=1,
+            title=f"Candidate {index}",
+            authors=["Researcher"],
+            categories=["cs.RO"],
+            primary_category="cs.RO",
+            published_at=datetime.now(UTC),
+        )
+        for index in range(101)
+    ]
+    enriched_ids: list[str] = []
+
+    async def fetch_papers(*_args: object, **_kwargs: object) -> list[PaperDocument]:
+        return records
+
+    async def fetch_paper_affiliations(
+        arxiv_ids: list[str],
+    ) -> dict[str, list[str]]:
+        enriched_ids.extend(arxiv_ids)
+        return {}
+
+    class FakeMatcher:
+        model_name = "test-embedding-model"
+
+        def match(
+            self, _session: object, papers: list[Paper], _topics: object
+        ) -> dict[int, SemanticMatch]:
+            return {paper.id: SemanticMatch(0.8, {"Embodied AI": 0.8}) for paper in papers}
+
+    with database.SessionLocal() as session:
+        set_setting(session, "watched_organizations", ["NVIDIA"])
+        set_setting(session, "prioritize_watched_organizations", True)
+        session.commit()
+
+    result = await sync_papers(
+        target_date=date(2026, 8, 14),
+        session_factory=database.SessionLocal,
+        paper_fetcher=fetch_papers,
+        affiliation_fetcher=fetch_paper_affiliations,
+        recall_service=RecallService(  # type: ignore[arg-type]
+            FakeMatcher(),
+            SemanticSettings(),
+        ),
+    )
+
+    assert result["queued"] == 101
+    assert len(enriched_ids) == 100
+
+
+@pytest.mark.asyncio
+async def test_watched_author_does_not_bypass_unavailable_semantic_model(
     client: TestClient,
 ) -> None:
     from app.services.paper_sync import sync_papers
@@ -1777,12 +1912,11 @@ async def test_sync_uses_fallback_when_semantic_model_is_unavailable(
     assert result["fetched"] == 1
     assert result["semantic_degraded"] is True
     assert result["semantic_error"] == "model download unavailable"
-    assert result["queued"] == 1
+    assert result["queued"] == 0
     with database.SessionLocal() as session:
         match = session.query(PaperMatch).one()
         assert match.semantic_score is None
-        queue_item = session.query(ScreeningQueueItem).one()
-        assert queue_item.semantic_score is None
+        assert session.query(ScreeningQueueItem).count() == 0
 
 
 @pytest.mark.asyncio

@@ -50,6 +50,9 @@ export interface BackendProfile {
   negative_keywords?: string[]
   categories?: string[]
   watched_authors?: string[]
+  watched_organizations?: string[]
+  prioritize_watched_authors?: boolean
+  prioritize_watched_organizations?: boolean
   min_relevance?: number
 }
 
@@ -64,5 +67,8 @@ export interface Profile {
   negative_keywords: string[]
   categories: string[]
   watched_authors: string[]
+  watched_organizations: string[]
+  prioritize_watched_authors: boolean
+  prioritize_watched_organizations: boolean
   min_relevance: number
 }

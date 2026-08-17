@@ -24,9 +24,8 @@ from .state import active_profile
 class _SyncOptions:
     profile_id: int
     topics: list[Topic]
-    author_watchlist: list[str]
     fetch_limit: int
-    batch_size: int
+    affiliation_limit: int
     recall_mode: RecallMode
 
 
@@ -41,9 +40,12 @@ def _load_options(factory: sessionmaker[Session]) -> _SyncOptions:
         return _SyncOptions(
             profile_id=profile.id,
             topics=list(profile.topics),
-            author_watchlist=list(settings.watched_authors),
             fetch_limit=settings.arxiv_fetch_limit,
-            batch_size=settings.screening_batch_size,
+            affiliation_limit=(
+                100
+                if settings.prioritize_watched_organizations and settings.watched_organizations
+                else settings.screening_batch_size
+            ),
             recall_mode=settings.semantic_recall_mode,
         )
 
@@ -80,14 +82,12 @@ async def sync_papers(
             stored.papers,
             profile_id=options.profile_id,
             topics=options.topics,
-            author_watchlist=options.author_watchlist,
             report_date=target_date,
-            batch_size=options.batch_size,
             mode=options.recall_mode,
         )
 
     affiliations = await (affiliation_fetcher or fetch_affiliations)(
-        recalled.enrichment_ids
+        recalled.enrichment_ids[: options.affiliation_limit]
     )
     if affiliations:
         with session_scope(factory) as db:

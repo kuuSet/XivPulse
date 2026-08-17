@@ -1,17 +1,20 @@
-import { Check, CheckCircle2, ChevronDown, CircleAlert, LoaderCircle, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Building2, Check, CheckCircle2, ChevronDown, CircleAlert, LoaderCircle, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
 import { sampleProfile } from '../../sample'
 import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Profile } from '../../types/profile'
 import type { LoadState, Toast } from '../../app/types'
-import { Modal, FormSection, TagEditor, WorkspaceSkeleton, PageError } from '../../shared/ui'
+import { Modal, FormSection, WorkspaceSkeleton, PageError } from '../../shared/ui'
+
+type WatchKind = 'topic' | 'author' | 'organization'
 
 export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: string) => void }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [catalog, setCatalog] = useState<DirectionCatalog | null>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerKind, setPickerKind] = useState<WatchKind>('topic')
   const [state, setState] = useState<LoadState>('loading')
   const [error, setError] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved')
@@ -165,12 +168,33 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
     setCatalogQuery('')
   }
 
+  const addNamedWatch = () => {
+    if (!profile) return
+    const value = catalogQuery.normalize('NFKC').trim()
+    if (value.length < 2) {
+      onToast('error', pickerKind === 'author' ? '请输入作者姓名' : '请输入机构名称')
+      return
+    }
+    const field = pickerKind === 'author' ? 'watched_authors' : 'watched_organizations'
+    if (profile[field].some((item) => item.normalize('NFKC').trim().toLocaleLowerCase() === value.toLocaleLowerCase())) {
+      onToast('error', '该关注项已经存在')
+      return
+    }
+    setProfile({ ...profile, [field]: [...profile[field], value] })
+    setCatalogQuery('')
+  }
+
+  const removeNamedWatch = (field: 'watched_authors' | 'watched_organizations', index: number) => {
+    if (!profile) return
+    setProfile({ ...profile, [field]: profile[field].filter((_, itemIndex) => itemIndex !== index) })
+  }
+
   if (state === 'loading' || !profile) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
 
   return (
     <div className="standard-page settings-page">
       <section className="page-heading">
-        <div><div className="eyebrow-row"><SlidersHorizontal size={14} /> 个性化筛选</div><h1>关注设置</h1><p>用少量英文标签描述长期关注的研究方向。</p></div>
+        <div><div className="eyebrow-row"><SlidersHorizontal size={14} /> 个性化筛选</div><h1>关注设置</h1><p>统一管理研究方向、作者和机构。</p></div>
         <div className={`auto-save-status ${saveState}`} aria-live="polite">
           {saveState === 'saving' || saveState === 'pending' ? <LoaderCircle className={saveState === 'saving' ? 'spin' : ''} size={15} /> : saveState === 'error' ? <CircleAlert size={15} /> : <CheckCircle2 size={15} />}
           <span>{saveState === 'pending' ? '等待自动保存' : saveState === 'saving' ? '正在保存' : saveState === 'error' ? '保存失败' : '已自动保存'}</span>
@@ -179,40 +203,46 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
       </section>
       <div className="form-layout profile-form-layout">
         <div className="form-main">
-          <FormSection title="关注标签" description="使用简短、自然的英文研究方向；预设标签已经包含合适的语义词和 arXiv 抓取分类。">
+          <FormSection title="关注列表" description="研究方向决定语义召回；作者和机构只对已通过门槛的论文调整处理顺序。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
-                {profile.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag" key={topic.id ?? `new-${index}`}>
+                {profile.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" key={topic.id ?? `new-${index}`}>
                   {englishDirectionLabel(topic)}
                   <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
                 </span>)}
-                <button className="interest-add-tag" type="button" onClick={() => setPickerOpen(true)} aria-label="添加关注标签" title="添加关注标签"><Plus size={16} /></button>
+                {profile.watched_authors.map((author, index) => <span className="interest-tag author" key={`author-${author}`}><UserRound size={12} />{author}<button type="button" onClick={() => removeNamedWatch('watched_authors', index)} aria-label={`删除作者 ${author}`} title="删除作者"><X size={13} /></button></span>)}
+                {profile.watched_organizations.map((organization, index) => <span className="interest-tag organization" key={`organization-${organization}`}><Building2 size={12} />{organization}<button type="button" onClick={() => removeNamedWatch('watched_organizations', index)} aria-label={`删除机构 ${organization}`} title="删除机构"><X size={13} /></button></span>)}
+                <button className="interest-add-tag" type="button" onClick={() => setPickerOpen(true)} aria-label="添加关注项" title="添加关注项"><Plus size={16} /></button>
               </div>
-              <p>建议保留 3–12 个边界清晰的方向；删除和添加后会自动保存。</p>
+              <p>建议保留 3–12 个边界清晰的研究方向；所有修改都会自动保存。</p>
+              <div className="watch-priority-options">
+                <label className="toggle-field"><input type="checkbox" checked={profile.prioritize_watched_authors} onChange={(event) => setProfile({ ...profile, prioritize_watched_authors: event.target.checked })} /><span><strong>关注作者优先</strong><small>命中完整作者姓名的候选优先初筛和深读</small></span></label>
+                <label className="toggle-field"><input type="checkbox" checked={profile.prioritize_watched_organizations} onChange={(event) => setProfile({ ...profile, prioritize_watched_organizations: event.target.checked })} /><span><strong>关注机构优先</strong><small>命中机构名称的候选优先初筛和深读</small></span></label>
+              </div>
             </div>
           </FormSection>
           <details className="form-section optional-section">
-            <summary><div><h2>个性化描述与作者关注</h2><p>可选；用于给 AI 更多研究背景，并提高关注作者的论文优先级。</p></div><ChevronDown size={16} /></summary>
+            <summary><div><h2>个性化描述</h2><p>可选；用于给 AI 更多研究背景。</p></div><ChevronDown size={16} /></summary>
             <div className="form-section-body">
               <label className="field"><span>画像名称</span><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /></label>
               <label className="field"><span>研究兴趣描述</span><textarea rows={5} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} placeholder="例如：关注具身智能中的世界模型与接触丰富操作……" /><small>这段描述会作为论文评估上下文提供给模型。</small></label>
-              <TagEditor label="关注作者" tags={profile.watched_authors} placeholder="输入作者英文名" onChange={(tags) => setProfile({ ...profile, watched_authors: tags })} />
             </div>
           </details>
         </div>
       </div>
-      {pickerOpen && <Modal title="添加关注标签" onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
+      {pickerOpen && <Modal title="添加关注项" onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
         <div className="interest-picker">
-          <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.preventDefault() }} placeholder="Search presets or type a new interest" />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
-          {catalogQuery.trim() && <button className={`interest-custom-option ${isEnglishDirectionLabel(catalogQuery) ? '' : 'invalid'}`} type="button" onClick={addCustomTopic}>
+          <div className="interest-picker-tabs">{(['topic', 'author', 'organization'] as WatchKind[]).map((kind) => <button className={pickerKind === kind ? 'active' : ''} type="button" onClick={() => { setPickerKind(kind); setCatalogQuery('') }} key={kind}>{kind === 'topic' ? 'Research topic' : kind === 'author' ? 'Author' : 'Organization'}</button>)}</div>
+          <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (pickerKind !== 'topic') addNamedWatch() } }} placeholder={pickerKind === 'topic' ? 'Search presets or type a new interest' : pickerKind === 'author' ? 'Type an author name' : 'Type an organization name'} />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
+          {catalogQuery.trim() && <button className={`interest-custom-option ${pickerKind === 'topic' && !isEnglishDirectionLabel(catalogQuery) ? 'invalid' : ''}`} type="button" onClick={pickerKind === 'topic' ? addCustomTopic : addNamedWatch}>
             <Plus size={15} />
-            <span><strong>Add “{catalogQuery.trim()}”</strong><small>{isEnglishDirectionLabel(catalogQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语'}</small></span>
+            <span><strong>Add “{catalogQuery.trim()}”</strong><small>{pickerKind === 'topic' ? isEnglishDirectionLabel(catalogQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语' : pickerKind === 'author' ? '使用论文中的完整作者姓名进行精确匹配' : '使用完整机构词组进行匹配'}</small></span>
           </button>}
-          <div className="interest-picker-head"><strong>Preset interests</strong><span>{visibleCatalogItems.length} tags</span></div>
+          {pickerKind === 'topic' && <><div className="interest-picker-head"><strong>Preset interests</strong><span>{visibleCatalogItems.length} tags</span></div>
           <div className="interest-options">
             {visibleCatalogItems.map((item) => { const exists = catalogItemExists(item); return <button className={exists ? 'selected' : ''} type="button" disabled={exists} onClick={() => addCatalogTopic(item)} title={`${item.name}：${item.description}`} key={item.slug}>{exists ? <Check size={13} /> : <Plus size={13} />}<span>{englishDirectionLabel(item)}</span></button> })}
             {!visibleCatalogItems.length && <p className="interest-empty">没有匹配的预设标签，可以使用上方输入创建自定义标签。</p>}
-          </div>
+          </div></>}
         </div>
       </Modal>}
     </div>

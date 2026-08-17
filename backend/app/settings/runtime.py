@@ -61,8 +61,13 @@ class RuntimeSettings(BaseSettings):
     custom_methods: tuple[Any, ...] = ()
     dismissed_method_candidates: tuple[str, ...] = ()
 
-    # Author-based recall.
+    # Watched authors and organizations.
     watched_authors: tuple[str, ...] = ()
+    watched_organizations: tuple[str, ...] = ()
+
+    # Watched author and organization processing priority.
+    prioritize_watched_authors: bool = False
+    prioritize_watched_organizations: bool = False
 
     # Email delivery controls.
     email_enabled: bool = False

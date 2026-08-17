@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from ...models import Profile
+from ...settings import RuntimeSettings
 
 
 def _profile_wire(
     profile: Profile,
-    min_relevance: float = 80.0,
-    watched_authors: list[str] | None = None,
+    settings: RuntimeSettings,
 ) -> dict[str, Any]:
     enabled = [topic for topic in profile.topics if topic.enabled]
     positive = list(dict.fromkeys(keyword for topic in enabled for keyword in topic.keywords))
@@ -29,8 +29,11 @@ def _profile_wire(
         "positive_keywords": positive,
         "negative_keywords": negative,
         "categories": categories,
-        "watched_authors": watched_authors or [],
-        "min_relevance": min_relevance,
+        "watched_authors": list(settings.watched_authors),
+        "watched_organizations": list(settings.watched_organizations),
+        "prioritize_watched_authors": settings.prioritize_watched_authors,
+        "prioritize_watched_organizations": settings.prioritize_watched_organizations,
+        "min_relevance": settings.deep_analysis_threshold,
         "topics": [
             {
                 "id": topic.id,

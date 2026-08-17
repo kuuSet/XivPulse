@@ -31,12 +31,8 @@ class RecallService:
         self,
         semantic_score: float | None,
         mode: RecallMode,
-        *,
-        watched_author: bool = False,
     ) -> bool:
-        return watched_author or (
-            semantic_score is not None and semantic_score >= self.settings.threshold(mode)
-        )
+        return semantic_score is not None and semantic_score >= self.settings.threshold(mode)
 
     def recall(
         self,
@@ -45,13 +41,10 @@ class RecallService:
         *,
         profile_id: int,
         topics: Sequence[Topic],
-        author_watchlist: Sequence[str],
         report_date: date,
-        batch_size: int,
         mode: RecallMode,
     ) -> RecallResult:
         matches = self._paper_matches(session, papers, profile_id)
-        watched_ids = self._watched_paper_ids(papers, author_watchlist)
         for match in matches.values():
             if match.screened_at is None:
                 match.matched_topics_json = []
@@ -71,11 +64,10 @@ class RecallService:
         for paper in papers:
             match = matches[paper.id]
             semantic = semantic_results.get(paper.id)
-            self._update_match(match, semantic, paper.id in watched_ids, mode)
+            self._update_match(match, semantic, mode)
             if match.screened_at is None and self.is_candidate(
                 match.semantic_score,
                 mode,
-                watched_author=paper.id in watched_ids,
             ):
                 candidates.append((paper, match))
 
@@ -100,22 +92,8 @@ class RecallService:
             if not paper.affiliations:
                 enrichment_candidates.append((match.semantic_score or 0.0, paper.arxiv_id))
 
-        enrichment_ids = [
-            arxiv_id for _, arxiv_id in sorted(enrichment_candidates, reverse=True)[:batch_size]
-        ]
+        enrichment_ids = [arxiv_id for _, arxiv_id in sorted(enrichment_candidates, reverse=True)]
         return RecallResult(len(candidates), enrichment_ids, semantic_error)
-
-    @staticmethod
-    def _watched_paper_ids(
-        papers: Sequence[Paper],
-        author_watchlist: Sequence[str],
-    ) -> set[int]:
-        watched = [value.casefold() for value in author_watchlist if value.strip()]
-        return {
-            paper.id
-            for paper in papers
-            if any(name in author.casefold() for name in watched for author in paper.authors)
-        }
 
     @staticmethod
     def _queue_items(
@@ -163,7 +141,6 @@ class RecallService:
         self,
         match: PaperMatch,
         semantic: SemanticMatch | None,
-        watched_author: bool,
         mode: RecallMode,
     ) -> None:
         match.semantic_score = semantic.score if semantic is not None else None
@@ -180,8 +157,6 @@ class RecallService:
             and semantic.candidate_topics
         ):
             match.reason = f"语义召回：{semantic.candidate_topics[0]} ({semantic.score:.3f})"
-        elif watched_author:
-            match.reason = "命中关注作者"
         elif semantic is None:
             match.reason = "语义模型不可用"
         else:

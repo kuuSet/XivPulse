@@ -22,11 +22,7 @@ router = APIRouter()
 @router.get("/api/profile")
 def get_profile(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    return _profile_wire(
-        active_profile(db),
-        settings.deep_analysis_threshold,
-        list(settings.watched_authors),
-    )
+    return _profile_wire(active_profile(db), settings)
 
 
 @router.get("/api/directions/catalog")
@@ -63,12 +59,17 @@ def update_profile(
         if not 0 <= threshold <= 100:
             raise HTTPException(status_code=422, detail="最低相关度必须在 0 到 100 之间")
         set_setting(db, "deep_analysis_threshold", threshold)
-    if validated.watched_authors is not None:
-        set_setting(
-            db,
-            "watched_authors",
-            clean_string_list(validated.watched_authors),
-        )
+    for field in ("watched_authors", "watched_organizations"):
+        value = getattr(validated, field)
+        if value is not None:
+            set_setting(db, field, clean_string_list(value))
+    for field in (
+        "prioritize_watched_authors",
+        "prioritize_watched_organizations",
+    ):
+        value = getattr(validated, field)
+        if value is not None:
+            set_setting(db, field, value)
     for field in ("name", "description", "language", "active"):
         value = getattr(validated, field)
         if value is not None:
@@ -91,8 +92,4 @@ def update_profile(
     db.commit()
     db.refresh(profile)
     settings = load_runtime_settings(db)
-    return _profile_wire(
-        active_profile(db),
-        settings.deep_analysis_threshold,
-        list(settings.watched_authors),
-    )
+    return _profile_wire(active_profile(db), settings)
