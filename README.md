@@ -164,7 +164,7 @@ powershell -ExecutionPolicy Bypass -File .\install_task.ps1
 - Caddy HTTPS 证书与客户端信任
 - 可选的 SMTP 日报邮件参数
 
-不要把本地 Compose 的 `8765` 端口直接暴露到公网。完整步骤、证书信任、备份、升级和故障排查见 [SERVER_DEPLOYMENT.md](SERVER_DEPLOYMENT.md)。当前服务器形态是单用户、单研究画像；多用户应部署相互隔离的实例。
+不要把本地 Compose 的 `8765` 端口直接暴露到公网。完整步骤、证书信任、备份、升级和故障排查见 [SERVER_DEPLOYMENT.md](SERVER_DEPLOYMENT.md)。当前服务器形态是单用户实例；多用户应部署相互隔离的实例。
 
 ## 数据与隐私
 

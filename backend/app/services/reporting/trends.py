@@ -30,7 +30,7 @@ def build_topic_trends(
     timezone_name: str = DEFAULT_TIMEZONE,
     limit: int = DEFAULT_TREND_LIMIT,
 ) -> dict[str, Any]:
-    """Return daily and rolling seven-day research-direction trends for one profile.
+    """Return daily and rolling seven-day trends for the followed topics.
 
     The current day is compared with the previous calendar day.  The current
     seven-day window (ending on ``as_of``) is compared with the preceding seven
@@ -78,7 +78,6 @@ def build_topic_trends(
         limit=limit,
     )
     return {
-        "profile_id": profile_id,
         "as_of": day.isoformat(),
         "requested_as_of": requested_day.isoformat(),
         "latest_complete_date": day.isoformat(),

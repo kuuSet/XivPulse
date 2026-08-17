@@ -1,4 +1,4 @@
-"""Database upgrade tests for the score-source migration."""
+"""Database upgrade tests."""
 
 from datetime import UTC, date, datetime
 
@@ -25,12 +25,95 @@ def test_upgrade_schema_renames_ambiguous_match_score() -> None:
     assert "relevance_score" not in columns
 
 
+def test_upgrade_schema_removes_profile_metadata_without_losing_relations() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE profiles ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "name VARCHAR(120) NOT NULL UNIQUE, "
+                "description TEXT NOT NULL, "
+                "language VARCHAR(20) NOT NULL, "
+                "active BOOLEAN NOT NULL, "
+                "created_at DATETIME NOT NULL, "
+                "updated_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE topics ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "profile_id INTEGER NOT NULL REFERENCES profiles(id))"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE paper_matches ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "profile_id INTEGER NOT NULL REFERENCES profiles(id), "
+                "screening_relevance_score FLOAT, screened_at DATETIME, reason TEXT)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE analyses ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "profile_id INTEGER NOT NULL REFERENCES profiles(id), status VARCHAR(20))"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE screening_queue ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "profile_id INTEGER NOT NULL REFERENCES profiles(id))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO profiles VALUES "
+                "(7, 'Legacy profile', 'Must not affect decisions', 'zh-CN', 1, "
+                "'2026-08-01 00:00:00', '2026-08-02 00:00:00')"
+            )
+        )
+        connection.execute(text("INSERT INTO topics VALUES (11, 7)"))
+        connection.execute(
+            text(
+                "INSERT INTO paper_matches VALUES "
+                "(12, 7, 91, '2026-08-03 00:00:00', 'Legacy profile decision')"
+            )
+        )
+        connection.execute(text("INSERT INTO analyses VALUES (13, 7, 'completed')"))
+        connection.execute(text("INSERT INTO screening_queue VALUES (14, 7)"))
+
+    assert upgrade_schema(engine) is True
+    assert upgrade_schema(engine) is False
+
+    assert [column["name"] for column in inspect(engine).get_columns("profiles")] == [
+        "id",
+        "created_at",
+        "updated_at",
+    ]
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id FROM profiles")).scalar_one() == 7
+        assert connection.execute(text("SELECT profile_id FROM topics")).scalar_one() == 7
+        match = connection.execute(
+            text(
+                "SELECT screening_relevance_score, screened_at, reason FROM paper_matches"
+            )
+        ).one()
+        assert match == (None, None, "")
+        assert connection.execute(text("SELECT status FROM analyses")).scalar_one() == "stale"
+        assert connection.execute(text("SELECT count(*) FROM screening_queue")).scalar_one() == 0
+        assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
+
+
 def test_mock_cleanup_restores_semantic_scores_and_preserves_real_ai_scores() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     now = datetime.now(UTC)
     with Session(engine) as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         mock_paper = Paper(arxiv_id="2608.00001", title="Mocked", abstract="Abstract")
         ai_paper = Paper(arxiv_id="2608.00002", title="Real AI", abstract="Abstract")
         session.add_all((mock_paper, ai_paper))

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from html import escape
 from typing import Any, Literal
 
-from ..models import Paper, Profile, Topic
+from ..models import Paper, Topic
 from ..schemas import DeepAnalysisResult, ScreeningResult
 from .directions.matching import (
     canonical_requested_direction_names,
@@ -72,7 +72,7 @@ def _topic_context(topics: Sequence[Topic | Mapping[str, Any]]) -> str:
             f"- {name}；可接受别名：{alias_text}；方向词：{positive_text}；"
             f"领域锚点：{anchor_text}；排除词：{negative_text}"
         )
-    return "\n".join(lines) or "- 具身智能与机器人学习"
+    return "\n".join(lines) or "- 未配置关注标签"
 
 
 def _paper_value(paper: Paper | Mapping[str, Any], name: str, default: Any = "") -> Any:
@@ -81,12 +81,6 @@ def _paper_value(paper: Paper | Mapping[str, Any], name: str, default: Any = "")
             return paper[name]
         return paper.get(f"{name}_json", default)
     return getattr(paper, name, getattr(paper, f"{name}_json", default))
-
-
-def _profile_value(profile: Profile | Mapping[str, Any], name: str, default: Any = "") -> Any:
-    if isinstance(profile, Mapping):
-        return profile.get(name, default)
-    return getattr(profile, name, default)
 
 
 def _xml_text(value: object) -> str:
@@ -120,25 +114,21 @@ class PaperAnalyzer:
     async def screen(
         self,
         paper: Paper | Mapping[str, Any],
-        profile: Profile | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]] | None = None,
+        topics: Sequence[Topic | Mapping[str, Any]],
     ) -> ScreeningResult:
-        return (await self.screen_with_metadata(paper, profile, topics)).data
+        return (await self.screen_with_metadata(paper, topics)).data
 
     async def screen_with_metadata(
         self,
         paper: Paper | Mapping[str, Any],
-        profile: Profile | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]] | None = None,
+        topics: Sequence[Topic | Mapping[str, Any]],
     ) -> GenerationResult[ScreeningResult]:
-        topics = list(topics if topics is not None else _profile_value(profile, "topics", []))
+        topics = list(topics)
         prompt = (
             f"<analysis_preferences>\n{_xml_text(self.screening_prompt)}\n"
             f"</analysis_preferences>\n\n"
-            f"<research_profile>\n研究画像："
-            f"{_xml_text(_profile_value(profile, 'description'))}\n"
-            f"正式研究方向及归因关键词：\n{_xml_text(_topic_context(topics))}\n"
-            f"</research_profile>\n\n"
+            f"<followed_topics>\n关注标签及归因词：\n{_xml_text(_topic_context(topics))}\n"
+            f"</followed_topics>\n\n"
             f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
             f"分类：{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
             f"摘要：{_xml_text(_paper_value(paper, 'abstract'))}\n</paper_data>"
@@ -162,25 +152,23 @@ class PaperAnalyzer:
     async def deep_analyze(
         self,
         paper: Paper | Mapping[str, Any],
-        profile: Profile | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]] | None = None,
+        topics: Sequence[Topic | Mapping[str, Any]],
         *,
         include_fulltext: bool = True,
     ) -> DeepAnalysisResult:
         result, _ = await self.deep_analyze_with_metadata(
-            paper, profile, topics, include_fulltext=include_fulltext
+            paper, topics, include_fulltext=include_fulltext
         )
         return result.data
 
     async def deep_analyze_with_metadata(
         self,
         paper: Paper | Mapping[str, Any],
-        profile: Profile | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]] | None = None,
+        topics: Sequence[Topic | Mapping[str, Any]],
         *,
         include_fulltext: bool = True,
     ) -> tuple[GenerationResult[DeepAnalysisResult], FullTextDocument]:
-        topics = list(topics if topics is not None else _profile_value(profile, "topics", []))
+        topics = list(topics)
         fulltext = FullTextDocument("", "unavailable", None)
         if include_fulltext:
             if isinstance(paper, Paper):
@@ -195,10 +183,8 @@ class PaperAnalyzer:
         prompt = (
             f"<analysis_preferences>\n{_xml_text(self.deep_analysis_prompt)}\n"
             f"</analysis_preferences>\n\n"
-            f"<research_profile>\n研究画像："
-            f"{_xml_text(_profile_value(profile, 'description'))}\n"
-            f"正式研究方向及归因关键词：\n{_xml_text(_topic_context(topics))}\n"
-            f"</research_profile>\n\n"
+            f"<followed_topics>\n关注标签及归因词：\n{_xml_text(_topic_context(topics))}\n"
+            f"</followed_topics>\n\n"
             f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
             f"作者：{_xml_text(', '.join(_paper_value(paper, 'authors', []) or []))}\n"
             f"arXiv 分类："

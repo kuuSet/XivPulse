@@ -12,7 +12,6 @@ def _digest_wire(digest: Digest | None) -> dict[str, Any] | None:
         return None
     return {
         "id": digest.id,
-        "profile_id": digest.profile_id,
         "digest_date": digest.digest_date,
         "title": digest.title,
         "summary": digest.summary,

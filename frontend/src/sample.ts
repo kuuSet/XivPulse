@@ -1,5 +1,5 @@
 import type { DashboardData } from './types/dashboard'
-import type { Profile } from './types/profile'
+import type { Interests } from './types/interests'
 import type { ResearchProject } from './types/projects'
 import type { DailyReport } from './types/reports'
 import type { AnalysisPromptCatalog, Settings } from './types/settings'
@@ -220,9 +220,7 @@ export const sampleDashboard: DashboardData = {
   ],
 }
 
-export const sampleProfile: Profile = {
-  name: '我的研究关注',
-  description: '正式关注方向包括具身智能与通用机器人、视觉-语言-动作模型、机器人学习与强化学习、世界模型与规划、机器人操作与灵巧手、导航与空间智能；偏好有真实实验、可靠评测或明确方法创新的工作。',
+export const sampleInterests: Interests = {
   topics: [
     { name: '具身智能与通用机器人', aliases: ['Embodied AI'], query: '', arxiv_categories: ['cs.RO', 'cs.AI'], keywords: ['embodied AI', 'embodied intelligence', 'generalist robot'], context_keywords: [], negative_keywords: [], weight: 1.35, enabled: true },
     { name: '视觉-语言-动作模型', aliases: ['VLA', 'Vision-Language-Action'], query: '', arxiv_categories: ['cs.RO', 'cs.CV', 'cs.AI'], keywords: ['vision-language-action', 'vision language action', 'VLA'], context_keywords: [], negative_keywords: ['vehicle-to-load'], weight: 1.5, enabled: true },
@@ -231,12 +229,8 @@ export const sampleProfile: Profile = {
     { name: '机器人操作与灵巧手', aliases: ['Robot Manipulation'], query: '', arxiv_categories: ['cs.RO'], keywords: ['robot manipulation', 'dexterous manipulation', 'grasping'], context_keywords: [], negative_keywords: [], weight: 1.1, enabled: true },
     { name: '导航与空间智能', aliases: ['Robot Navigation'], query: '', arxiv_categories: ['cs.RO', 'cs.CV'], keywords: ['robot navigation', 'visual navigation', 'spatial intelligence'], context_keywords: [], negative_keywords: [], weight: 1, enabled: true },
   ],
-  positive_keywords: ['embodied AI', 'vision-language-action', 'world model', 'robot learning', 'causal representation'],
-  negative_keywords: ['survey only', 'medical imaging', 'wireless network'],
-  categories: ['cs.RO', 'cs.AI', 'cs.LG', 'cs.CV'],
   watched_authors: [],
   watched_organizations: [],
-  min_relevance: 80,
 }
 
 export const sampleSettings: Settings = {

@@ -1,4 +1,4 @@
-"""Shared access to the active research profile and normalized string lists."""
+"""Shared access to the single-user data scope and normalized string lists."""
 
 from __future__ import annotations
 
@@ -15,15 +15,10 @@ def active_profile(db: Session) -> Profile:
     profile = db.scalar(
         select(Profile)
         .options(selectinload(Profile.topics))
-        .where(Profile.active.is_(True))
         .order_by(Profile.id)
     )
     if profile is None:
-        profile = db.scalar(
-            select(Profile).options(selectinload(Profile.topics)).order_by(Profile.id)
-        )
-    if profile is None:
-        raise HTTPException(status_code=500, detail="研究画像尚未初始化")
+        raise HTTPException(status_code=500, detail="关注设置尚未初始化")
     return profile
 
 

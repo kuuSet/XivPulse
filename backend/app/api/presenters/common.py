@@ -25,7 +25,8 @@ def _latest_analysis(
     analyses = [
         item
         for item in paper.analyses
-        if (kind is None or item.kind == kind)
+        if item.status == "completed"
+        and (kind is None or item.kind == kind)
         and (profile_id is None or item.profile_id == profile_id)
     ]
     return max(

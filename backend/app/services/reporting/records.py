@@ -65,7 +65,7 @@ _EVIDENCE_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 class _Label:
     key: str
     name: str
-    source: Literal["profile_topic"]
+    source: Literal["followed_topic"]
     terms: tuple[str, ...]
 
 
@@ -218,10 +218,10 @@ def _labels(
     taxonomy_fingerprint: str,
 ) -> tuple[_Label, ...]:
 
-    """Return only current, enabled profile topics matched by this paper.
+    """Return only current, enabled followed topics matched by this paper.
 
     ``matched_topics_json`` is a historical snapshot and can contain model-created
-    phrases, special match reasons, or topics later removed from the profile.  A
+    phrases, special match reasons, or topics later removed from the followed list. A
     bare ``topic_id`` also has no evidence or taxonomy provenance.  The current
     taxonomy plus current keyword or stamped-screening evidence is therefore the
     authority for analytics labels.
@@ -292,7 +292,7 @@ def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
             continue
         label = topics_by_key.setdefault(
             normalized,
-            _Label(normalized, name, "profile_topic", tuple(topic.keywords)),
+            _Label(normalized, name, "followed_topic", tuple(topic.keywords)),
         )
         if topic.id is not None:
             topics_by_id[topic.id] = label

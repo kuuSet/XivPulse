@@ -32,7 +32,7 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
         high_priority_papers: 1,
         items: [paper(day)],
         topic_stats: [],
-        profile: { watched_authors: [], watched_organizations: [] },
+        interests: { watched_authors: [], watched_organizations: [] },
       }),
     })
   })
@@ -108,7 +108,7 @@ test('opening a paper preserves the workspace position and resets only the reade
         high_priority_papers: 2,
         items: [paper(1), paper(2)],
         topic_stats: [],
-        profile: { watched_authors: [], watched_organizations: [] },
+        interests: { watched_authors: [], watched_organizations: [] },
       }),
     })
   })

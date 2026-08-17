@@ -54,33 +54,15 @@ class TopicWrite(TopicBase):
     id: int | None = None
 
 
-class TopicRead(TopicBase, ORMModel):
-    id: int
-    profile_id: int
-    created_at: datetime
-    updated_at: datetime
+class InterestsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-
-class ProfileBase(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    description: str = Field(default="", max_length=10000)
-    language: str = Field(default="zh-CN", min_length=2, max_length=20)
-    active: bool = True
-
-
-class ProfileUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    description: str | None = Field(default=None, max_length=10000)
-    language: str | None = Field(default=None, min_length=2, max_length=20)
-    active: bool | None = None
-    topics: list[TopicWrite] | None = None
-    watched_authors: list[str] | None = None
-    watched_organizations: list[str] | None = None
+    topics: list[TopicWrite]
+    watched_authors: list[str] = Field(default_factory=list)
+    watched_organizations: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_topic_directions(self) -> ProfileUpdate:
-        if self.topics is None:
-            return self
+    def validate_topic_directions(self) -> InterestsUpdate:
         if not any(topic.enabled for topic in self.topics):
             raise ValueError("至少需要启用一个研究方向")
         identities: dict[str, str] = {}
@@ -96,13 +78,6 @@ class ProfileUpdate(BaseModel):
                     )
                 identities[key] = raw
         return self
-
-
-class ProfileRead(ProfileBase, ORMModel):
-    id: int
-    topics: list[TopicRead] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
 
 
 class PaperVersionRead(ORMModel):
@@ -304,26 +279,8 @@ class ProviderTestResult(BaseModel):
     message: str
 
 
-class DashboardStats(BaseModel):
-    fetched_today: int = 0
-    relevant_today: int = 0
-    analyzed_today: int = 0
-    saved_total: int = 0
-
-
-class DashboardRead(BaseModel):
-    profile: ProfileRead
-    stats: DashboardStats = Field(default_factory=DashboardStats)
-    recommendations: list[RankedPaperRead] = Field(default_factory=list)
-    latest_digest: DigestRead | None = None
-    active_job: JobRead | None = None
-    provider: dict[str, Any] = Field(default_factory=dict)
-
-
 __all__ = [
     "AnalysisRead",
-    "DashboardRead",
-    "DashboardStats",
     "DeepAnalysisResult",
     "DigestRead",
     "FeedbackAction",
@@ -334,12 +291,10 @@ __all__ = [
     "PaperDetail",
     "PaperRead",
     "PaperVersionRead",
-    "ProfileRead",
-    "ProfileUpdate",
+    "InterestsUpdate",
     "ProviderTestResult",
     "RankedPaperRead",
     "RecommendationRead",
     "ScreeningResult",
-    "TopicRead",
     "TopicWrite",
 ]

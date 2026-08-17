@@ -40,10 +40,6 @@ class Profile(TimestampMixin, Base):
     __tablename__ = "profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True)
-    description: Mapped[str] = mapped_column(Text, default="")
-    language: Mapped[str] = mapped_column(String(20), default="zh-CN")
-    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
 
     topics: Mapped[list[Topic]] = relationship(
         back_populates="profile", cascade="all, delete-orphan", order_by="Topic.id"
@@ -545,7 +541,7 @@ class Digest(Base):
 
 
 class DailyResearchReport(TimestampMixin, Base):
-    """Immutable-by-default JSON snapshot of one profile's daily research report."""
+    """Immutable-by-default JSON snapshot of one daily research report."""
 
     __tablename__ = "daily_research_reports"
     __table_args__ = (

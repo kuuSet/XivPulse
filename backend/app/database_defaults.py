@@ -1,11 +1,10 @@
-"""Built-in research profile seed data."""
+"""Built-in followed-topic seed data."""
 
 from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-DEFAULT_PROFILE_NAME = "具身智能研究"
 DEFAULT_TOPICS = (
     {
         "name": "具身智能与通用机器人",
@@ -177,17 +176,9 @@ DEFAULT_TOPICS = (
 def seed_defaults(session: Session) -> None:
     from .models import Profile, Topic
 
-    profile = session.scalar(select(Profile).where(Profile.name == DEFAULT_PROFILE_NAME))
+    profile = session.scalar(select(Profile).order_by(Profile.id))
     if profile is None:
-        profile = Profile(
-            name=DEFAULT_PROFILE_NAME,
-            description=(
-                "关注具身智能、机器人基础模型、视觉-语言-动作模型、机器人学习、"
-                "世界模型、操作与导航；优先可复现且有真实机器人证据的工作。"
-            ),
-            language="zh-CN",
-            active=True,
-        )
+        profile = Profile()
         session.add(profile)
         session.flush()
         for values in DEFAULT_TOPICS:

@@ -159,7 +159,6 @@ def build_research_roadmap(
         )
 
     return {
-        "profile_id": profile_id,
         "as_of": day.isoformat(),
         "timezone": timezone_name,
         "window": {

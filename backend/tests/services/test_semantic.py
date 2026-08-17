@@ -71,7 +71,7 @@ def test_recall_service_bulk_loads_matches_without_creating_ai_queue() -> None:
             return {paper.id: SemanticMatch(0.8, {"Embodied AI": 0.8}) for paper in papers}
 
     with Session(engine) as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         papers = [
             Paper(
                 arxiv_id=f"2608.1000{index}",
@@ -167,7 +167,7 @@ def test_rescorer_skips_unchanged_fingerprint_and_force_uses_keyset_batches() ->
 
     matcher = FakeMatcher()
     with factory() as db:
-        profile = db.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = db.query(Profile).one()
         for index in range(5):
             paper = Paper(
                 arxiv_id=f"2608.2000{index}",
@@ -254,7 +254,7 @@ def test_rescorer_failure_keeps_previous_fingerprint() -> None:
             raise RuntimeError("embedding unavailable")
 
     with factory() as db:
-        profile = db.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = db.query(Profile).one()
         paper = Paper(arxiv_id="2608.30001", title="Paper", abstract="Abstract")
         db.add(paper)
         db.flush()
@@ -298,7 +298,7 @@ def test_rescorer_leaves_pending_when_directions_change_during_work() -> None:
             return {paper.id: SemanticMatch(0.5, {"Topic": 0.5}) for paper in papers}
 
     with factory() as db:
-        profile = db.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = db.query(Profile).one()
         paper = Paper(arxiv_id="2608.30002", title="Paper", abstract="Abstract")
         db.add(paper)
         db.flush()

@@ -39,32 +39,8 @@ export interface DirectionCatalog {
   scope_note: string
 }
 
-export interface BackendProfile {
-  id?: number
-  name: string
-  description: string
-  language?: string
-  active?: boolean
+export interface Interests {
   topics: BackendTopic[]
-  positive_keywords?: string[]
-  negative_keywords?: string[]
-  categories?: string[]
-  watched_authors?: string[]
-  watched_organizations?: string[]
-  min_relevance?: number
-}
-
-export interface Profile {
-  id?: number
-  name: string
-  description: string
-  language?: string
-  active?: boolean
-  topics: BackendTopic[]
-  positive_keywords: string[]
-  negative_keywords: string[]
-  categories: string[]
   watched_authors: string[]
   watched_organizations: string[]
-  min_relevance: number
 }

@@ -122,7 +122,7 @@
   .digest-layout { grid-template-columns: 1fr; }
   .digest-sidebar { position: static; }
   .form-layout { grid-template-columns: 1fr; }
-  .form-layout.profile-form-layout { grid-template-columns: 1fr; }
+  .form-layout.interests-form-layout { grid-template-columns: 1fr; }
   .form-aside { order: -1; }
   .sticky-panel { position: static; }
   .security-panel { display: none; }

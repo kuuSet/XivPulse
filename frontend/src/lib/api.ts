@@ -1,8 +1,7 @@
 import type {
-  BackendProfile,
   DirectionCatalog,
-  Profile,
-} from '../types/profile'
+  Interests,
+} from '../types/interests'
 import type { DashboardData } from '../types/dashboard'
 import type { MethodCandidates, MethodCatalog } from '../types/methods'
 import type { FeedbackReason, FeedbackWriteAction, Paper, PaperPage, ReadingData } from '../types/papers'
@@ -97,13 +96,13 @@ export const api = {
     method: 'POST', body: JSON.stringify({ username, password }),
   }),
   logout: () => request<AuthSession>('/auth/logout', { method: 'POST' }),
-  profile: async () => toProfile(await request<BackendProfile | Profile>('/profile')),
+  interests: () => request<Interests>('/interests'),
   directionCatalog: () => request<DirectionCatalog>('/directions/catalog'),
-  saveProfile: async (profile: Profile) =>
-    toProfile(await request<BackendProfile | Profile>('/profile', {
+  saveInterests: (interests: Interests) =>
+    request<Interests>('/interests', {
       method: 'PUT',
-      body: JSON.stringify(toBackendProfile(profile)),
-    })),
+      body: JSON.stringify(interestsUpdatePayload(interests)),
+    }),
   settings: () => request<Settings>('/settings'),
   promptCatalog: () => request<AnalysisPromptCatalog>('/prompts/catalog'),
   methodCatalog: () => request<MethodCatalog>('/methods/catalog'),
@@ -256,33 +255,9 @@ function normalizeGap(value: string | DailyResearchGap) {
   return value.text ?? value.gap ?? value.limitation ?? value.name ?? value.item ?? '待核查的研究缺口'
 }
 
-function toProfile(profile: BackendProfile | Profile): Profile {
-  const topics = Array.isArray(profile.topics) ? profile.topics : []
-  const enabled = topics.filter((topic) => topic.enabled !== false)
+function interestsUpdatePayload(interests: Interests) {
   return {
-    id: profile.id,
-    name: profile.name,
-    description: profile.description,
-    language: profile.language ?? 'zh-CN',
-    active: profile.active ?? true,
-    topics: topics.map((topic) => ({ ...topic, aliases: topic.aliases ?? [] })),
-    positive_keywords: profile.positive_keywords ?? unique(enabled.flatMap((topic) => topic.keywords ?? [])),
-    negative_keywords: profile.negative_keywords ?? unique(enabled.flatMap((topic) => topic.negative_keywords ?? [])),
-    categories: profile.categories ?? unique(enabled.flatMap((topic) => topic.arxiv_categories ?? [])),
-    watched_authors: profile.watched_authors ?? [],
-    watched_organizations: profile.watched_organizations ?? [],
-    min_relevance: profile.min_relevance ?? 80,
-  }
-}
-
-function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: number } {
-  return {
-    id: profile.id,
-    name: profile.name,
-    description: profile.description,
-    language: profile.language ?? 'zh-CN',
-    active: profile.active ?? true,
-    topics: profile.topics.map((topic) => ({
+    topics: interests.topics.map((topic) => ({
       ...(topic.id !== undefined ? { id: topic.id } : {}),
       name: topic.name.trim(),
       aliases: unique(topic.aliases ?? []),
@@ -295,9 +270,8 @@ function toBackendProfile(profile: Profile): BackendProfile & { min_relevance: n
       weight: topic.weight ?? 1,
       enabled: topic.enabled !== false,
     })),
-    watched_authors: unique(profile.watched_authors),
-    watched_organizations: unique(profile.watched_organizations),
-    min_relevance: profile.min_relevance,
+    watched_authors: unique(interests.watched_authors),
+    watched_organizations: unique(interests.watched_organizations),
   }
 }
 

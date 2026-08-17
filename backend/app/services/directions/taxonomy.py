@@ -8,7 +8,7 @@ import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-DIRECTION_ATTRIBUTION_VERSION = "profile-topic-v4-aliases"
+DIRECTION_ATTRIBUTION_VERSION = "followed-topic-v5-tags-only"
 DIRECTION_ATTRIBUTION_FIELD = "_direction_attribution"
 
 

@@ -45,7 +45,7 @@
   padding: 17px 18px 19px;
 }
 
-.form-layout.profile-form-layout {
+.form-layout.interests-form-layout {
   grid-template-columns: minmax(0, 820px);
 }
 

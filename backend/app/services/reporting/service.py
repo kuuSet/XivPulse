@@ -73,7 +73,7 @@ def create_digest(digest_date: date | None = None) -> dict[str, Any]:
             )
             db.add(digest)
         digest.paper_ids_json = [item.paper_id for item in matches]
-        digest.summary = f"今日筛选出 {len(matches)} 篇与你的研究画像相关的论文。"
+        digest.summary = f"今日筛选出 {len(matches)} 篇符合关注标签的论文。"
         digest.stats_json = {"recommended": len(matches)}
         digest.status = "ready"
         db.flush()

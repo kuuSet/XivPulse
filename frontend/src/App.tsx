@@ -2,7 +2,7 @@ import { CheckCircle2, CircleAlert, KeyRound, LayoutDashboard, Library, LoaderCi
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { DigestView } from './features/digest/DigestView'
 import { PaperWorkspace } from './features/papers/PaperWorkspace'
-import { ProfileView } from './features/profile/ProfileView'
+import { InterestsView } from './features/interests/InterestsView'
 import { ProjectsView } from './features/projects/ProjectsView'
 import { SettingsView } from './features/settings/SettingsView'
 import { TrendsView } from './features/trends/TrendsView'
@@ -22,7 +22,7 @@ const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof Radar }> = [
   { id: 'digest', label: '研究日报', icon: Mail },
   { id: 'projects', label: '分类库', icon: NotebookTabs },
   { id: 'trends', label: '研究方向', icon: TrendingUp },
-  { id: 'profile', label: '关注设置', icon: SlidersHorizontal },
+  { id: 'interests', label: '关注设置', icon: SlidersHorizontal },
   { id: 'settings', label: '系统设置', icon: SettingsIcon },
 ]
 
@@ -346,7 +346,7 @@ function App() {
         )}
         {view === 'projects' && <ProjectsView projects={projects} onProjectsChange={syncProjects} onPapersReload={loadDashboard} onOpenPaper={(id) => openPaper(id, 'library')} onToast={pushToast} />}
         {view === 'trends' && <TrendsView onToast={pushToast} />}
-        {view === 'profile' && <ProfileView onToast={pushToast} />}
+        {view === 'interests' && <InterestsView onToast={pushToast} />}
         {view === 'settings' && <SettingsView onToast={pushToast} onFontSizeChange={setUiFontSizePt} />}
       </main>
 

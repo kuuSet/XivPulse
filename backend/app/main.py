@@ -13,10 +13,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .api.auth import require_server_auth
 from .api.auth import router as auth_router
 from .api.dashboard import router as dashboard_router
+from .api.interests import router as interests_router
 from .api.jobs import router as jobs_router
 from .api.methods import router as methods_router
 from .api.papers import router as papers_router
-from .api.profile import router as profile_router
 from .api.projects import router as projects_router
 from .api.reports import router as reports_router
 from .api.settings import router as settings_router
@@ -50,7 +50,7 @@ app.include_router(dashboard_router)
 app.include_router(jobs_router)
 app.include_router(methods_router)
 app.include_router(papers_router)
-app.include_router(profile_router)
+app.include_router(interests_router)
 app.include_router(projects_router)
 app.include_router(reports_router)
 app.include_router(settings_router)

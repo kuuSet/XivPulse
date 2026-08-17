@@ -71,7 +71,6 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
     with Session(engine) as session:
         profiles = list(session.scalars(select(Profile)).all())
         assert len(profiles) == 1
-        assert profiles[0].name == "具身智能研究"
         assert len(profiles[0].topics) == 6
         settings = load_runtime_settings(session)
         assert settings.screening_batch_size == 30
@@ -845,7 +844,16 @@ async def test_editable_prompt_is_bounded_and_stamped_in_analysis_metadata() -> 
                 ),
                 "categories": ["cs.AI"],
             },
-            {"description": "关注可信 AI", "topics": []},
+            [
+                {
+                    "name": "Trustworthy AI",
+                    "aliases": ["Reliable AI"],
+                    "keywords": ["model auditing"],
+                    "context_keywords": ["controlled experiments"],
+                    "negative_keywords": [],
+                    "enabled": True,
+                }
+            ],
         )
 
     messages = captured[0]["input"]  # type: ignore[index]
@@ -860,6 +868,9 @@ async def test_editable_prompt_is_bounded_and_stamped_in_analysis_metadata() -> 
     assert "<paper_data>" in messages[1]["content"]  # type: ignore[index]
     assert "&lt;/paper_data&gt;" in messages[1]["content"]  # type: ignore[index]
     assert "&lt;analysis_preferences&gt;" in messages[1]["content"]  # type: ignore[index]
+    assert "<followed_topics>" in messages[1]["content"]  # type: ignore[index]
+    assert "Trustworthy AI" in messages[1]["content"]  # type: ignore[index]
+    assert "研究画像" not in messages[1]["content"]  # type: ignore[index]
     assert result.prompt_metadata["template_id"] == "evidence-audit"
     assert result.prompt_metadata["stage"] == "screening"
     assert result.prompt_metadata["customized"] is True

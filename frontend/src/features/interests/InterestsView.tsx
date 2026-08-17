@@ -1,16 +1,16 @@
-import { Building2, Check, CheckCircle2, ChevronDown, CircleAlert, LoaderCircle, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
+import { Building2, Check, CheckCircle2, CircleAlert, LoaderCircle, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
-import { sampleProfile } from '../../sample'
-import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Profile } from '../../types/profile'
+import { sampleInterests } from '../../sample'
+import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Interests } from '../../types/interests'
 import type { LoadState, Toast } from '../../app/types'
 import { Modal, FormSection, WorkspaceSkeleton, PageError } from '../../shared/ui'
 
 type WatchKind = 'topic' | 'author' | 'organization'
 
-export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], message: string) => void }) {
-  const [profile, setProfile] = useState<Profile | null>(null)
+export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], message: string) => void }) {
+  const [interests, setInterests] = useState<Interests | null>(null)
   const [catalog, setCatalog] = useState<DirectionCatalog | null>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -19,7 +19,7 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
   const [error, setError] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved')
   const [saveRetry, setSaveRetry] = useState(0)
-  const savedProfileRef = useRef('')
+  const savedInterestsRef = useRef('')
   const saveVersionRef = useRef(0)
   const pendingSavesRef = useRef(0)
   const saveQueueRef = useRef(Promise.resolve())
@@ -27,43 +27,43 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
   const load = useCallback(async () => {
     setState('loading')
     try {
-      const [nextProfile, nextCatalog] = isDemo
-        ? [sampleProfile, demoDirectionCatalog(sampleProfile)]
-        : await Promise.all([api.profile(), api.directionCatalog()])
-      savedProfileRef.current = profileFingerprint(nextProfile)
-      setProfile(nextProfile)
+      const [nextInterests, nextCatalog] = isDemo
+        ? [sampleInterests, demoDirectionCatalog(sampleInterests)]
+        : await Promise.all([api.interests(), api.directionCatalog()])
+      savedInterestsRef.current = interestsFingerprint(nextInterests)
+      setInterests(nextInterests)
       setCatalog(nextCatalog)
       setSaveState('saved')
       setState('ready')
       setError('')
     } catch (loadError) {
       setState('error')
-      setError(loadError instanceof Error ? loadError.message : '研究画像加载失败')
+      setError(loadError instanceof Error ? loadError.message : '关注设置加载失败')
     }
   }, [])
 
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    if (!profile || state !== 'ready') return
-    const fingerprint = profileFingerprint(profile)
-    if (fingerprint === savedProfileRef.current && pendingSavesRef.current === 0) return
-    if (!profile.topics.some((topic) => topic.enabled !== false)) {
+    if (!interests || state !== 'ready') return
+    const fingerprint = interestsFingerprint(interests)
+    if (fingerprint === savedInterestsRef.current && pendingSavesRef.current === 0) return
+    if (!interests.topics.some((topic) => topic.enabled !== false)) {
       setSaveState('error')
       return
     }
     const version = ++saveVersionRef.current
     setSaveState('pending')
     const timer = window.setTimeout(() => {
-      const queuedProfile = profile
+      const queuedInterests = interests
       setSaveState('saving')
       pendingSavesRef.current += 1
       saveQueueRef.current = saveQueueRef.current.then(async () => {
         try {
-          const saved = isDemo ? queuedProfile : await api.saveProfile(queuedProfile)
-          savedProfileRef.current = profileFingerprint(saved)
+          const saved = isDemo ? queuedInterests : await api.saveInterests(queuedInterests)
+          savedInterestsRef.current = interestsFingerprint(saved)
           if (version !== saveVersionRef.current) return
-          setProfile(saved)
+          setInterests(saved)
           setSaveState('saved')
         } catch (saveError) {
           if (version !== saveVersionRef.current) return
@@ -75,11 +75,11 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
       })
     }, 600)
     return () => window.clearTimeout(timer)
-  }, [onToast, profile, saveRetry, state])
+  }, [interests, onToast, saveRetry, state])
 
   const topicIdentities = useMemo(
-    () => new Set((profile?.topics ?? []).filter((topic) => topic.enabled !== false).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(directionIdentity)),
-    [profile],
+    () => new Set((interests?.topics ?? []).filter((topic) => topic.enabled !== false).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(directionIdentity)),
+    [interests],
   )
   const visibleCatalogItems = useMemo(() => {
     if (!catalog) return []
@@ -95,36 +95,36 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
     [item.name, ...item.aliases].some((label) => topicIdentities.has(directionIdentity(label)))
 
   const addCatalogTopic = (item: DirectionCatalogItem) => {
-    if (!profile) return
+    if (!interests) return
     const identities = new Set([item.name, ...item.aliases].map(directionIdentity))
-    const existingIndex = profile.topics.findIndex((topic) =>
+    const existingIndex = interests.topics.findIndex((topic) =>
       [topic.name, ...(topic.aliases ?? [])].some((label) => identities.has(directionIdentity(label))),
     )
-    if (existingIndex >= 0 && profile.topics[existingIndex].enabled !== false) {
+    if (existingIndex >= 0 && interests.topics[existingIndex].enabled !== false) {
       onToast('error', '该关注标签已经存在')
       return
     }
     if (existingIndex >= 0) {
-      setProfile({ ...profile, topics: profile.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
+      setInterests({ ...interests, topics: interests.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
       setCatalogQuery('')
       return
     }
     const { slug: _slug, group: _group, description: _description, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
-    setProfile({ ...profile, topics: [...profile.topics, { ...topic, query: '' }] })
+    setInterests({ ...interests, topics: [...interests.topics, { ...topic, query: '' }] })
     setCatalogQuery('')
   }
 
   const removeTopic = (index: number) => {
-    if (!profile) return
-    if (profile.topics.filter((topic) => topic.enabled !== false).length <= 1) {
+    if (!interests) return
+    if (interests.topics.filter((topic) => topic.enabled !== false).length <= 1) {
       onToast('error', '至少保留一个关注标签')
       return
     }
-    setProfile({ ...profile, topics: profile.topics.filter((_, topicIndex) => topicIndex !== index) })
+    setInterests({ ...interests, topics: interests.topics.filter((_, topicIndex) => topicIndex !== index) })
   }
 
   const addCustomTopic = () => {
-    if (!profile) return
+    if (!interests) return
     const name = catalogQuery.normalize('NFKC').trim()
     if (!isEnglishDirectionLabel(name)) {
 
@@ -138,22 +138,22 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
       addCatalogTopic(preset)
       return
     }
-    const existingIndex = profile.topics.findIndex((topic) =>
+    const existingIndex = interests.topics.findIndex((topic) =>
       [topic.name, ...(topic.aliases ?? [])].some((label) => directionIdentity(label) === directionIdentity(name)),
     )
-    if (existingIndex >= 0 && profile.topics[existingIndex].enabled !== false) {
+    if (existingIndex >= 0 && interests.topics[existingIndex].enabled !== false) {
       onToast('error', '该关注标签已经存在')
       return
     }
     if (existingIndex >= 0) {
-      setProfile({ ...profile, topics: profile.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
+      setInterests({ ...interests, topics: interests.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
       setCatalogQuery('')
       return
     }
-    const categories = Array.from(new Set(profile.topics.filter((topic) => topic.enabled !== false).flatMap((topic) => topic.arxiv_categories)))
-    setProfile({
-      ...profile,
-      topics: [...profile.topics, {
+    const categories = Array.from(new Set(interests.topics.filter((topic) => topic.enabled !== false).flatMap((topic) => topic.arxiv_categories)))
+    setInterests({
+      ...interests,
+      topics: [...interests.topics, {
         name,
         query: '',
         arxiv_categories: categories.length ? categories : ['cs.AI'],
@@ -169,27 +169,27 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
   }
 
   const addNamedWatch = () => {
-    if (!profile) return
+    if (!interests) return
     const value = catalogQuery.normalize('NFKC').trim()
     if (value.length < 2) {
       onToast('error', pickerKind === 'author' ? '请输入作者姓名' : '请输入机构名称')
       return
     }
     const field = pickerKind === 'author' ? 'watched_authors' : 'watched_organizations'
-    if (profile[field].some((item) => item.normalize('NFKC').trim().toLocaleLowerCase() === value.toLocaleLowerCase())) {
+    if (interests[field].some((item) => item.normalize('NFKC').trim().toLocaleLowerCase() === value.toLocaleLowerCase())) {
       onToast('error', '该关注项已经存在')
       return
     }
-    setProfile({ ...profile, [field]: [...profile[field], value] })
+    setInterests({ ...interests, [field]: [...interests[field], value] })
     setCatalogQuery('')
   }
 
   const removeNamedWatch = (field: 'watched_authors' | 'watched_organizations', index: number) => {
-    if (!profile) return
-    setProfile({ ...profile, [field]: profile[field].filter((_, itemIndex) => itemIndex !== index) })
+    if (!interests) return
+    setInterests({ ...interests, [field]: interests[field].filter((_, itemIndex) => itemIndex !== index) })
   }
 
-  if (state === 'loading' || !profile) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
+  if (state === 'loading' || !interests) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
 
   return (
     <div className="standard-page settings-page">
@@ -201,12 +201,12 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
           {saveState === 'error' && <button type="button" onClick={() => setSaveRetry((value) => value + 1)}>重试</button>}
         </div>
       </section>
-      <div className="form-layout profile-form-layout">
+      <div className="form-layout interests-form-layout">
         <div className="form-main">
           <FormSection title="关注标签" description="研究方向决定论文的语义召回范围。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
-                {profile.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" key={topic.id ?? `new-${index}`}>
+                {interests.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" key={topic.id ?? `new-${index}`}>
                   {englishDirectionLabel(topic)}
                   <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
                 </span>)}
@@ -218,7 +218,7 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
           <FormSection title="关注作者" description="用于在“今日论文”中将这些作者的论文优先显示。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
-                {profile.watched_authors.map((author, index) => <span className="interest-tag author" key={`author-${author}`}><UserRound size={12} />{author}<button type="button" onClick={() => removeNamedWatch('watched_authors', index)} aria-label={`删除作者 ${author}`} title="删除作者"><X size={13} /></button></span>)}
+                {interests.watched_authors.map((author, index) => <span className="interest-tag author" key={`author-${author}`}><UserRound size={12} />{author}<button type="button" onClick={() => removeNamedWatch('watched_authors', index)} aria-label={`删除作者 ${author}`} title="删除作者"><X size={13} /></button></span>)}
                 <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('author'); setPickerOpen(true) }} aria-label="添加关注作者" title="添加关注作者"><Plus size={16} /></button>
               </div>
               <p>使用论文中的完整作者姓名进行精确匹配。</p>
@@ -227,19 +227,12 @@ export function ProfileView({ onToast }: { onToast: (kind: Toast['kind'], messag
           <FormSection title="关注机构" description="用于在“今日论文”中将这些机构的论文优先显示。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
-                {profile.watched_organizations.map((organization, index) => <span className="interest-tag organization" key={`organization-${organization}`}><Building2 size={12} />{organization}<button type="button" onClick={() => removeNamedWatch('watched_organizations', index)} aria-label={`删除机构 ${organization}`} title="删除机构"><X size={13} /></button></span>)}
+                {interests.watched_organizations.map((organization, index) => <span className="interest-tag organization" key={`organization-${organization}`}><Building2 size={12} />{organization}<button type="button" onClick={() => removeNamedWatch('watched_organizations', index)} aria-label={`删除机构 ${organization}`} title="删除机构"><X size={13} /></button></span>)}
                 <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('organization'); setPickerOpen(true) }} aria-label="添加关注机构" title="添加关注机构"><Plus size={16} /></button>
               </div>
               <p>使用论文 affiliation 中的完整机构词组进行匹配。</p>
             </div>
           </FormSection>
-          <details className="form-section optional-section">
-            <summary><div><h2>个性化描述</h2><p>可选；用于给 AI 更多研究背景。</p></div><ChevronDown size={16} /></summary>
-            <div className="form-section-body">
-              <label className="field"><span>画像名称</span><input value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} /></label>
-              <label className="field"><span>研究兴趣描述</span><textarea rows={5} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} placeholder="例如：关注具身智能中的世界模型与接触丰富操作……" /><small>这段描述会作为论文评估上下文提供给模型。</small></label>
-            </div>
-          </details>
         </div>
       </div>
       {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
@@ -264,8 +257,8 @@ function directionIdentity(value: string) {
   return value.normalize('NFKC').trim().replace(/[\s_-]+/g, '').toLocaleLowerCase()
 }
 
-function profileFingerprint(profile: Profile) {
-  return JSON.stringify(profile)
+function interestsFingerprint(interests: Interests) {
+  return JSON.stringify(interests)
 }
 
 function englishDirectionLabel(topic: Pick<BackendTopic, 'name' | 'aliases' | 'keywords'>) {
@@ -279,14 +272,14 @@ function isEnglishDirectionLabel(value: string) {
   return normalized.length >= 3 && /[A-Za-z]/.test(normalized) && !/[\u3400-\u9fff]/.test(normalized)
 }
 
-function demoDirectionCatalog(profile: Profile): DirectionCatalog {
+function demoDirectionCatalog(interests: Interests): DirectionCatalog {
   const groups = ['示例方向']
-  const items: DirectionCatalogItem[] = profile.topics.map((topic, index) => ({
+  const items: DirectionCatalogItem[] = interests.topics.map((topic, index) => ({
     ...topic,
     slug: `demo-${index}`,
     group: groups[0],
     level: 'main',
     description: '演示模式中的现有研究方向。连接本地服务后可浏览完整 AI 方向库。',
   }))
-  return { version: 'demo', updated_at: '', groups, count: items.length, items, sources: [], scope_note: '演示模式仅展示当前画像中的方向。' }
+  return { version: 'demo', updated_at: '', groups, count: items.length, items, sources: [], scope_note: '演示模式仅展示当前关注标签。' }
 }

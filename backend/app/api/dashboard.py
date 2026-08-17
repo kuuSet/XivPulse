@@ -27,9 +27,9 @@ from ..services.jobs import RUNNING_STATUSES
 from ..services.state import active_profile
 from ..settings import get_process_settings, load_runtime_settings
 from .presenters.common import _as_utc
+from .presenters.interests import _interests_wire
 from .presenters.jobs import _job_wire
 from .presenters.papers import _paper_wire, _query_papers
-from .presenters.profiles import _profile_wire
 from .presenters.reports import _digest_wire
 from .system_views import _provider_public_status, _settings_wire
 
@@ -244,7 +244,7 @@ def dashboard(
         },
         "items": items,
         "topic_stats": [{"topic": name, "count": count} for name, count in topics.most_common()],
-        "profile": _profile_wire(profile, current_settings),
+        "interests": _interests_wire(profile, current_settings),
         "settings": _settings_wire(db),
         "stats": {
             "fetched_today": fetched_today,
@@ -261,7 +261,7 @@ def dashboard(
                 "recommendation": {
                     "paper_id": item["id"],
                     "score": item["effective_score"],
-                    "explanation": item["why_recommended"] or "符合研究画像",
+                    "explanation": item["why_recommended"] or "符合关注标签",
                     "matched_topics": item["match_reasons"],
                     "matched_keywords": item["match_reasons"],
                 },

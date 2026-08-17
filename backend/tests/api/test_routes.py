@@ -89,7 +89,7 @@ def _insert_paper(
     screened: bool = False,
 ) -> int:
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).first()
+        profile = session.query(Profile).first()
         assert profile is not None
         paper = Paper(
             arxiv_id=arxiv_id,
@@ -113,7 +113,7 @@ def _insert_paper(
                 matched_keywords_json=["robot learning"],
                 semantic_score=0.92,
                 screening_relevance_score=92 if screened else None,
-                reason="与具身智能画像高度相关",
+                reason="与关注标签高度相关",
                 screened_at=datetime.now(UTC) if screened else None,
             )
         )
@@ -164,7 +164,7 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
     matcher = SemanticMatcher(model)
     recall = RecallService(matcher, settings)
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         paper = Paper(
             arxiv_id="2608.08888",
             title="A New Cross-Modal Policy Architecture",
@@ -211,7 +211,7 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
         "/api/settings", json={"screening_batch_size": 30, "api_key": "test-key"}
     ).status_code == 200
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         direction = profile.topics[0].name
         for index in range(65):
             paper = Paper(
@@ -238,7 +238,7 @@ async def test_screening_queue_processes_65_candidates_in_three_batches(
         def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
+        async def screen_with_metadata(self, _paper: Paper, _topics: object) -> object:
             return provider_module.GenerationResult(
                 data=ScreeningResult(
                     relevant=True,
@@ -293,7 +293,7 @@ async def test_analysis_without_api_key_keeps_semantic_score_and_writes_no_mock_
     from app.settings import load_runtime_settings
 
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         paper = Paper(
             arxiv_id="2608.00001",
             title="Semantic-only candidate",
@@ -347,7 +347,7 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
 
     attempts: dict[str, int] = {}
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         direction = profile.topics[0].name
         for suffix in ("90", "91"):
             paper = Paper(
@@ -374,7 +374,7 @@ async def test_screening_retries_and_keeps_final_failure_in_queue(
         def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen_with_metadata(self, paper: Paper, _profile: Profile) -> object:
+        async def screen_with_metadata(self, paper: Paper, _topics: object) -> object:
             attempts[paper.arxiv_id] = attempts.get(paper.arxiv_id, 0) + 1
             if paper.arxiv_id.endswith("91") or attempts[paper.arxiv_id] < 3:
                 raise provider_module.ProviderError("simulated timeout")
@@ -494,32 +494,30 @@ async def test_email_delivery_is_idempotent_for_automatic_report(
         assert session.query(EmailDelivery).filter_by(status="sent").count() == 1
 
 
-def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
+def test_health_interests_settings_and_dashboard(client: TestClient) -> None:
     paper_id = _insert_paper()
 
     assert client.get("/api/health").json()["ok"] is True
-    profile = client.get("/api/profile")
-    assert profile.status_code == 200
-    assert profile.json()["topics"]
-    profile_payload = profile.json()
-    profile_payload["min_relevance"] = 75
-    profile_payload["watched_authors"] = ["A. Author"]
-    profile_payload["watched_organizations"] = ["NVIDIA Research"]
-    saved_profile = client.put("/api/profile", json=profile_payload)
-    assert saved_profile.status_code == 200
-    assert saved_profile.json()["min_relevance"] == 75
+    interests = client.get("/api/interests")
+    assert interests.status_code == 200
+    assert interests.json()["topics"]
+    interests_payload = interests.json()
+    interests_payload["watched_authors"] = ["A. Author"]
+    interests_payload["watched_organizations"] = ["NVIDIA Research"]
+    saved_interests = client.put("/api/interests", json=interests_payload)
+    assert saved_interests.status_code == 200
 
     catalog = client.get("/api/directions/catalog")
     assert catalog.status_code == 200
     assert catalog.json()["count"] >= 30
     assert catalog.json()["version"]
     assert all(item["keywords"] for item in catalog.json()["items"])
-    assert saved_profile.json()["watched_authors"] == ["A. Author"]
-    assert saved_profile.json()["watched_organizations"] == ["NVIDIA Research"]
-    assert "prioritize_watched_authors" not in saved_profile.json()
-    assert "prioritize_watched_organizations" not in saved_profile.json()
-    assert client.get("/api/profile").json()["watched_authors"] == ["A. Author"]
-    assert client.get("/api/profile").json()["watched_organizations"] == ["NVIDIA Research"]
+    assert saved_interests.json()["watched_authors"] == ["A. Author"]
+    assert saved_interests.json()["watched_organizations"] == ["NVIDIA Research"]
+    assert "name" not in saved_interests.json()
+    assert "description" not in saved_interests.json()
+    assert client.get("/api/interests").json()["watched_authors"] == ["A. Author"]
+    assert client.get("/api/interests").json()["watched_organizations"] == ["NVIDIA Research"]
 
     settings = client.put(
         "/api/settings",
@@ -539,12 +537,14 @@ def test_health_profile_settings_and_dashboard(client: TestClient) -> None:
     assert dashboard["total_papers"] == 1
     assert dashboard["screened_papers"] == 0
     assert dashboard["items"][0]["id"] == paper_id
+    assert dashboard["interests"] == saved_interests.json()
+    assert "profile" not in dashboard
     assert dashboard["settings"]["schedule_time"] == "13:30"
 
 
 def test_dashboard_returns_only_the_requested_date(client: TestClient) -> None:
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         for day, suffix in ((13, "13"), (14, "14")):
             paper = Paper(
                 arxiv_id=f"2608.100{suffix}",
@@ -589,7 +589,7 @@ def test_dashboard_returns_only_the_requested_date(client: TestClient) -> None:
 
 def test_budget_token_usage_and_method_candidate_review(client: TestClient) -> None:
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         for suffix in ("51", "52"):
             paper = Paper(
                 arxiv_id=f"2608.000{suffix}",
@@ -699,7 +699,7 @@ async def test_daily_ai_synthesis_is_persisted_and_counted(
 
     report_date = date(2026, 8, 14)
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         session.add(
             DailyResearchReport(
                 profile_id=profile.id,
@@ -781,7 +781,7 @@ def test_daily_ai_synthesis_without_key_does_not_call_provider(
 
     report_date = date(2026, 8, 13)
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         session.add(
             DailyResearchReport(
                 profile_id=profile.id,
@@ -853,7 +853,7 @@ def test_dashboard_direction_stats_ignore_historical_match_labels(
 
     dashboard = client.get("/api/dashboard").json()
     paper = dashboard["items"][0]
-    profile_directions = {topic["name"] for topic in client.get("/api/profile").json()["topics"]}
+    profile_directions = {topic["name"] for topic in client.get("/api/interests").json()["topics"]}
     assert set(paper["matched_topics"]) <= profile_directions
     assert {item["topic"] for item in dashboard["topic_stats"]} == set(paper["matched_topics"])
     assert paper["matched_topics"] == []
@@ -861,43 +861,43 @@ def test_dashboard_direction_stats_ignore_historical_match_labels(
     assert "旧版自由标签" not in paper["match_reasons"]
 
 
-def test_profile_rejects_duplicate_or_fully_disabled_directions(
+def test_interests_reject_duplicate_or_fully_disabled_directions(
     client: TestClient,
 ) -> None:
-    original = client.get("/api/profile").json()
+    original = client.get("/api/interests").json()
 
     duplicate = deepcopy(original)
     duplicate["topics"][0]["name"] = "World   Model"
     duplicate["topics"][1]["name"] = "ＷＯＲＬＤ model"
-    response = client.put("/api/profile", json=duplicate)
+    response = client.put("/api/interests", json=duplicate)
     assert response.status_code == 422
     assert "研究方向名称或别名不能重复" in response.json()["detail"]
 
     disabled = deepcopy(original)
     for topic in disabled["topics"]:
         topic["enabled"] = False
-    response = client.put("/api/profile", json=disabled)
+    response = client.put("/api/interests", json=disabled)
     assert response.status_code == 422
     assert response.json()["detail"] == "至少需要启用一个研究方向"
 
-    unchanged = client.get("/api/profile").json()
+    unchanged = client.get("/api/interests").json()
     assert [topic["name"] for topic in unchanged["topics"]] == [
         topic["name"] for topic in original["topics"]
     ]
     assert any(topic["enabled"] for topic in unchanged["topics"])
 
 
-def test_profile_aliases_round_trip_and_reject_cross_direction_conflicts(
+def test_interests_aliases_round_trip_and_reject_cross_direction_conflicts(
     client: TestClient,
 ) -> None:
-    profile = client.get("/api/profile").json()
-    profile["topics"][0]["aliases"] = [
+    interests = client.get("/api/interests").json()
+    interests["topics"][0]["aliases"] = [
         "Embodied Agent",
         "具身 Agent",
         "Embodied Agent",
     ]
 
-    response = client.put("/api/profile", json=profile)
+    response = client.put("/api/interests", json=interests)
 
     assert response.status_code == 200
     assert response.json()["topics"][0]["aliases"] == [
@@ -907,13 +907,13 @@ def test_profile_aliases_round_trip_and_reject_cross_direction_conflicts(
 
     conflict = response.json()
     conflict["topics"][1]["aliases"] = ["embodied-agent"]
-    response = client.put("/api/profile", json=conflict)
+    response = client.put("/api/interests", json=conflict)
     assert response.status_code == 422
     assert "请保留一个正式名称" in response.json()["detail"]
 
-    name_conflict = client.get("/api/profile").json()
+    name_conflict = client.get("/api/interests").json()
     name_conflict["topics"][1]["aliases"] = [name_conflict["topics"][0]["name"]]
-    response = client.put("/api/profile", json=name_conflict)
+    response = client.put("/api/interests", json=name_conflict)
     assert response.status_code == 422
 
 
@@ -940,13 +940,13 @@ def test_dashboard_exposes_latest_daily_processing_counts(client: TestClient) ->
     assert summary["pending_deep_count"] >= 0
 
 
-def test_profile_round_trips_direction_context_anchors(client: TestClient) -> None:
-    profile = client.get("/api/profile").json()
-    topic = next(item for item in profile["topics"] if item["name"] == "机器人学习与强化学习")
+def test_interests_round_trip_direction_context_anchors(client: TestClient) -> None:
+    interests = client.get("/api/interests").json()
+    topic = next(item for item in interests["topics"] if item["name"] == "机器人学习与强化学习")
     assert "robot" in topic["context_keywords"]
     topic["context_keywords"] = ["robot", "humanoid", "robot"]
 
-    response = client.put("/api/profile", json=profile)
+    response = client.put("/api/interests", json=interests)
 
     assert response.status_code == 200
     saved = next(
@@ -955,28 +955,30 @@ def test_profile_round_trips_direction_context_anchors(client: TestClient) -> No
     assert saved["context_keywords"] == ["robot", "humanoid"]
 
 
-def test_profile_rejects_legacy_payload_that_would_collapse_directions(
+def test_interests_require_complete_topics(
     client: TestClient,
 ) -> None:
-    original = client.get("/api/profile").json()
+    original = client.get("/api/interests").json()
     response = client.put(
-        "/api/profile",
+        "/api/interests",
         json={
-            "name": original["name"],
-            "description": original["description"],
-            "positive_keywords": ["robot learning"],
-            "negative_keywords": [],
-            "categories": ["cs.RO"],
             "watched_authors": [],
-            "min_relevance": 80,
+            "watched_organizations": [],
         },
     )
     assert response.status_code == 422
-    assert "旧版单方向格式已停用" in response.json()["detail"]
-    unchanged = client.get("/api/profile").json()
+    assert "Field required" in response.json()["detail"]
+    unchanged = client.get("/api/interests").json()
     assert [topic["name"] for topic in unchanged["topics"]] == [
         topic["name"] for topic in original["topics"]
     ]
+
+    response = client.put(
+        "/api/interests",
+        json={**original, "description": "Legacy profile text"},
+    )
+    assert response.status_code == 422
+    assert "Extra inputs are not permitted" in response.json()["detail"]
 
 
 def test_paper_filter_detail_and_feedback(client: TestClient) -> None:
@@ -1230,7 +1232,7 @@ def test_favorites_library_tracks_save_feedback_bidirectionally(client: TestClie
 def test_favorites_library_backfills_legacy_saved_feedback(client: TestClient) -> None:
     paper_id = _insert_paper()
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).first()
+        profile = session.query(Profile).first()
         assert profile is not None
         session.add(Feedback(paper_id=paper_id, profile_id=profile.id, action="save"))
         session.commit()
@@ -1486,7 +1488,7 @@ def test_job_calendar_uses_paper_date_and_latest_daily_job(client: TestClient) -
     from app.services.paper_sync import latest_complete_submission_date
 
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         for index, (score, screened) in enumerate(((0.8, True), (0.7, False), (0.5, True))):
             paper = Paper(
                 arxiv_id=f"2608.4000{index}",
@@ -1630,7 +1632,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
     from app.services import provider as provider_module
 
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         formal_direction = profile.topics[0].name
         lexical_topic = profile.topics[2]
         stale_legal_direction = profile.topics[4].name
@@ -1662,7 +1664,7 @@ async def test_ai_screening_keeps_only_formal_directions_and_preserves_keywords(
         def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
+        async def screen_with_metadata(self, _paper: Paper, _topics: object) -> object:
             return provider_module.GenerationResult(
                 data=ScreeningResult(
                     relevant=True,
@@ -1712,7 +1714,7 @@ async def test_targeted_daily_analysis_does_not_process_other_dates(
     other_date = date(2026, 8, 14)
     queue_ids: dict[date, int] = {}
     with database.SessionLocal() as session:
-        profile = session.query(Profile).filter(Profile.active.is_(True)).one()
+        profile = session.query(Profile).one()
         for index, report_date in enumerate((target_date, other_date)):
             paper = Paper(
                 arxiv_id=f"2608.0710{index}",
@@ -1754,7 +1756,7 @@ async def test_targeted_daily_analysis_does_not_process_other_dates(
         def __init__(self, _adapter: object, **_options: object) -> None:
             pass
 
-        async def screen_with_metadata(self, _paper: Paper, _profile: Profile) -> object:
+        async def screen_with_metadata(self, _paper: Paper, _topics: object) -> object:
             return provider_module.GenerationResult(
                 data=ScreeningResult(
                     relevant=False,

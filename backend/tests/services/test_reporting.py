@@ -20,7 +20,7 @@ def analytics_session() -> Session:
     engine = make_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
-    profile = Profile(name="Robotics", description="Robot learning")
+    profile = Profile()
     session.add(profile)
     session.flush()
     configured_topics = {
@@ -188,7 +188,7 @@ def test_daily_and_weekly_trends_are_deterministic(analytics_session: Session) -
     assert daily["VLA"]["direction"] == "stable"
     assert daily["World Models"]["direction"] == "new"
     assert daily["VLA"]["average_score"] == 94.0
-    assert all(item["sources"] == ["profile_topic"] for item in daily.values())
+    assert all(item["sources"] == ["followed_topic"] for item in daily.values())
 
     weekly = {item["name"]: item for item in first["weekly"]["topics"]}
     assert weekly["Navigation"]["count"] == 0
@@ -239,7 +239,7 @@ def test_research_roadmap_has_topic_nodes_relations_and_timeline(
     nodes = {item["label"]: item for item in roadmap["nodes"]}
     assert roadmap["coverage"]["paper_count"] == 4
     assert set(nodes) == {"VLA", "World Models", "Robot Learning", "Navigation"}
-    assert all(item["sources"] == ["profile_topic"] for item in nodes.values())
+    assert all(item["sources"] == ["followed_topic"] for item in nodes.values())
     assert "cs.RO" not in nodes
     assert "Embodied AI" not in nodes
     assert nodes["VLA"]["paper_count"] == 2
@@ -260,7 +260,7 @@ def test_research_roadmap_has_topic_nodes_relations_and_timeline(
     assert "不代表引用" in roadmap["relation_basis"]
 
 
-def test_trends_and_roadmap_reject_non_profile_labels(
+def test_trends_and_roadmap_reject_non_followed_labels(
     analytics_session: Session,
 ) -> None:
     first_match = analytics_session.scalar(select(PaperMatch).where(PaperMatch.paper_id == 1))

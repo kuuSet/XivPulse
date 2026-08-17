@@ -99,8 +99,8 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
     if (mode === 'library' && !isDemo) return [...(libraryPage?.items ?? [])]
     const normalized = query.trim().toLowerCase()
     const source = mode === 'library' && isDemo ? sampleDashboard.items : data?.items ?? []
-    const watchedAuthors = new Set((data?.profile?.watched_authors ?? []).map(authorIdentity))
-    const watchedOrganizations = (data?.profile?.watched_organizations ?? []).map(organizationIdentity)
+    const watchedAuthors = new Set((data?.interests?.watched_authors ?? []).map(authorIdentity))
+    const watchedOrganizations = (data?.interests?.watched_organizations ?? []).map(organizationIdentity)
     return [...source]
       .filter((paper) => {
         if (category !== 'all' && !paper.categories.includes(category)) return false
@@ -211,7 +211,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
             {mode === 'today' ? <><CalendarDays size={14} /> {formatFullDate(data?.date)}</> : <><Library size={14} /> 本地论文索引</>}
           </div>
           <h1>{mode === 'today' ? '今日论文' : '论文库'}</h1>
-          <p>{mode === 'today' ? '已按你的研究画像筛选并排序今日更新。' : '检索和回看本地语义筛选出的论文。'}</p>
+          <p>{mode === 'today' ? '已按你的关注标签筛选并排序今日更新。' : '检索和回看本地语义筛选出的论文。'}</p>
         </div>
         <button className="button primary" onClick={() => onRefresh()} disabled={refreshing}>
           <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
@@ -638,7 +638,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
             <div className="five-scores">
               {scores.map(([label, score, color]) => <ScoreGauge key={label} label={label} score={score} color={color} />)}
             </div>
-            <p className="recommendation-note"><Sparkles size={15} /> {paper.why_recommended || '已根据关键词、分类与研究画像计算推荐得分。'}</p>
+            <p className="recommendation-note"><Sparkles size={15} /> {paper.why_recommended || '已根据关注标签计算推荐得分。'}</p>
           </section>
 
           <DetailSection title="核心贡献" pending={!analysis.contributions?.length}>

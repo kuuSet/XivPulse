@@ -39,7 +39,6 @@ interface TopicTrendPeriod {
 }
 
 export interface TopicTrends {
-  profile_id?: number | string
   as_of: string
   requested_as_of?: string
   latest_complete_date?: string
@@ -89,7 +88,6 @@ interface RoadmapCluster {
 }
 
 export interface ResearchRoadmap {
-  profile_id?: number | string
   as_of: string
   timezone?: string
   window?: { start_date: string; end_date: string; days: number }

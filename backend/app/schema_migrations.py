@@ -10,20 +10,77 @@ LOG = logging.getLogger("xivpulse")
 
 
 def upgrade_schema(engine: Engine) -> bool:
-    if engine.dialect.name != "sqlite" or not inspect(engine).has_table("paper_matches"):
+    if engine.dialect.name != "sqlite":
         return False
 
-    columns = {column["name"] for column in inspect(engine).get_columns("paper_matches")}
-    with engine.begin() as connection:
+    upgraded = _remove_profile_metadata(engine)
+    inspector = inspect(engine)
+    if inspector.has_table("paper_matches"):
+        columns = {column["name"] for column in inspector.get_columns("paper_matches")}
         if "relevance_score" in columns and "screening_relevance_score" not in columns:
-            connection.execute(
-                text(
-                    "ALTER TABLE paper_matches "
-                    "RENAME COLUMN relevance_score TO screening_relevance_score"
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE paper_matches "
+                        "RENAME COLUMN relevance_score TO screening_relevance_score"
+                    )
                 )
+            upgraded = True
+    return upgraded
+
+
+def _remove_profile_metadata(engine: Engine) -> bool:
+    inspector = inspect(engine)
+    if not inspector.has_table("profiles"):
+        return False
+    columns = {column["name"] for column in inspector.get_columns("profiles")}
+    if not columns.intersection({"name", "description", "language", "active"}):
+        return False
+
+    connection = engine.raw_connection()
+    cursor = connection.cursor()
+    foreign_keys = True
+    try:
+        foreign_keys = bool(cursor.execute("PRAGMA foreign_keys").fetchone()[0])
+        connection.commit()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.execute("BEGIN")
+        cursor.execute(
+            "CREATE TABLE profiles_new ("
+            "id INTEGER NOT NULL PRIMARY KEY, "
+            "created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL)"
+        )
+        cursor.execute(
+            "INSERT INTO profiles_new (id, created_at, updated_at) "
+            "SELECT id, created_at, updated_at FROM profiles"
+        )
+        cursor.execute("DROP TABLE profiles")
+        cursor.execute("ALTER TABLE profiles_new RENAME TO profiles")
+        tables = {
+            row[0]
+            for row in cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "analyses" in tables:
+            cursor.execute("UPDATE analyses SET status='stale' WHERE status='completed'")
+        if "paper_matches" in tables:
+            cursor.execute(
+                "UPDATE paper_matches SET "
+                "screening_relevance_score=NULL, screened_at=NULL, reason=''"
             )
-            return True
-    return False
+        if "screening_queue" in tables:
+            cursor.execute("DELETE FROM screening_queue")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.execute(f"PRAGMA foreign_keys={'ON' if foreign_keys else 'OFF'}")
+        cursor.close()
+        connection.close()
+    return True
 
 
 def remove_mock_analyses(engine: Engine) -> None:

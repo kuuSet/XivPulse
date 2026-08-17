@@ -199,7 +199,7 @@ def _executive_summary(
                 "当前正式研究方向，因此不据此生成研究趋势、代表论文或阅读建议。"
             )
         return (
-            f"{day.isoformat()} 未发现符合当前研究画像的新论文。"
+            f"{day.isoformat()} 未发现符合当前关注标签的新论文。"
             "建议回看近一周高分候选，并确认当日抓取任务是否正常完成。"
         )
     analyzed = sum(record.analysis is not None for record in records)
@@ -591,8 +591,6 @@ def build_daily_research_report(
     )
     research_situation["quality_overview"] = _quality_overview(records)
     return {
-        "profile_id": profile_id,
-
         "report_date": day.isoformat(),
         "timezone": timezone_name,
         "title": f"{day.isoformat()} 当日研究总结",

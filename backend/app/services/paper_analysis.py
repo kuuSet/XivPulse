@@ -187,7 +187,9 @@ async def analyze_papers(
         last_error: Exception | None = None
         for attempt in range(1, 4):
             try:
-                generated = await analyzer.screen_with_metadata(match.paper, match.profile)
+                generated = await analyzer.screen_with_metadata(
+                    match.paper, match.profile.topics
+                )
                 return queue_id, match, generated, None, attempt
             except ProviderError as exc:
                 last_error = exc
@@ -401,7 +403,7 @@ async def analyze_papers(
     for match in matches:
         try:
             generated, fulltext = await analyzer.deep_analyze_with_metadata(
-                match.paper, match.profile
+                match.paper, match.profile.topics
             )
         except ProviderError as exc:
             LOG.warning("Deep analysis failed for paper %s: %s", match.paper_id, exc)

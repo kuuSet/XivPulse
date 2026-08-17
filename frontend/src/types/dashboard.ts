@@ -1,5 +1,5 @@
 import type { Paper } from './papers'
-import type { Profile } from './profile'
+import type { Interests } from './interests'
 import type { Settings } from './settings'
 import type { JobInfo, TopicStat } from './system'
 
@@ -29,7 +29,7 @@ export interface DashboardData {
     deep_analysis_threshold: number
   }
   items: Paper[]
-  profile?: Profile
+  interests?: Interests
   topic_stats: TopicStat[]
   settings?: Settings
   active_job?: JobInfo | null

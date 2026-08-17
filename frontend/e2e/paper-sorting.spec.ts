@@ -32,7 +32,7 @@ test('today papers can prioritize watched authors or organizations', async ({ pa
           paper(3, 'Watched organization paper', ['John Smith'], ['NVIDIA Research'], 70),
         ],
         topic_stats: [],
-        profile: {
+        interests: {
           watched_authors: ['Jane Doe'],
           watched_organizations: ['NVIDIA'],
         },
@@ -90,7 +90,7 @@ test('semantic candidates stay visible without an AI screening score', async ({ 
           match_reasons: ['Test topic'],
         }],
         topic_stats: [],
-        profile: { watched_authors: [], watched_organizations: [] },
+        interests: { watched_authors: [], watched_organizations: [] },
       }),
     })
   })
