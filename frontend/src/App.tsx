@@ -328,7 +328,7 @@ function App() {
             selectedId={selectedId}
             refreshing={refreshing}
             job={job ?? dashboard?.active_job ?? null}
-            onRetry={loadDashboard}
+            onRetry={() => void loadDashboard(locationDate())}
             onRefresh={handleRefresh}
             onDateSelect={selectDate}
             onSelect={(id) => openPaper(id, view)}
@@ -342,7 +342,7 @@ function App() {
           />
         )}
         {view === 'digest' && (
-          <DigestView data={dashboard} state={dashboardState} error={dashboardError} onRetry={loadDashboard} onToast={pushToast} />
+          <DigestView data={dashboard} state={dashboardState} error={dashboardError} onRetry={() => void loadDashboard(locationDate())} onToast={pushToast} />
         )}
         {view === 'projects' && <ProjectsView projects={projects} onProjectsChange={syncProjects} onPapersReload={loadDashboard} onOpenPaper={(id) => openPaper(id, 'library')} onToast={pushToast} />}
         {view === 'trends' && <TrendsView onToast={pushToast} />}
