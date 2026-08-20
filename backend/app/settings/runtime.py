@@ -114,6 +114,9 @@ def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> Pro
         api_key=values.get("api_key") or configured.api_key,
         api_timeout_seconds=configured.api_timeout_seconds,
         codex_model=values.get("codex_model") or configured.codex_model,
+        codex_reasoning_effort=(
+            values.get("codex_reasoning_effort") or configured.codex_reasoning_effort
+        ),
     )
 
 

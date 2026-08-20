@@ -109,7 +109,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     }
     setApiKey('')
     try {
-      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ model_source: saved.model_source, provider_name: saved.provider_name, model_name: saved.model_name, api_base_url: saved.api_base_url, codex_model: saved.codex_model })
+      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ model_source: saved.model_source, provider_name: saved.provider_name, model_name: saved.model_name, api_base_url: saved.api_base_url, codex_model: saved.codex_model, codex_reasoning_effort: saved.codex_reasoning_effort })
       setTestResult(result)
     } catch (testError) {
       setTestResult({ ok: false, message: testError instanceof Error ? testError.message : '连接测试失败' })
@@ -144,6 +144,8 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   if (state === 'loading' || !settings) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
   const usingCodex = settings.model_source === 'codex'
   const insecure = !usingCodex && settings.api_base_url.trim().toLowerCase().startsWith('http://')
+  const selectedCodexModel = settings.codex_model_options.find((option) => option.value === settings.codex_model)
+  const selectedReasoning = settings.codex_reasoning_options.find((option) => option.value === settings.codex_reasoning_effort)
   const budgetOptions = [
     { id: 'economy' as const, name: '经济', detail: '正文 1.6 万字符 / PDF 12 页；标题与摘要 900、深读 2,000 输出 Token' },
     { id: 'balanced' as const, name: '平衡', detail: '正文 3 万字符 / PDF 25 页；标题与摘要 1,200、深读 3,500 输出 Token' },
@@ -217,7 +219,11 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
               <label className={usingCodex ? 'selected' : ''}><input type="radio" name="model-source" checked={usingCodex} onChange={() => { setSettings({ ...settings, model_source: 'codex' }); setTestResult(null) }} /><span><strong>本机 Codex</strong><small>复用 Codex 登录；每次分析会启动独立进程，速度更慢且上下文开销更高。</small></span></label>
             </div>
             {usingCodex ? <>
-              <label className="field"><span>Codex 模型（可选）</span><input value={settings.codex_model} onChange={(event) => { setSettings({ ...settings, codex_model: event.target.value }); setTestResult(null) }} placeholder="留空使用 Codex 默认模型" /><small>需要先在本机执行 codex login；Docker 部署还需要挂载登录文件。</small></label>
+              <div className="field-grid two">
+                <label className="field"><span>Codex 模型</span><select value={settings.codex_model} onChange={(event) => { setSettings({ ...settings, codex_model: event.target.value as Settings['codex_model'] }); setTestResult(null) }}>{settings.codex_model_options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select><small>{selectedCodexModel?.description}</small></label>
+                <label className="field"><span>推理强度</span><select value={settings.codex_reasoning_effort} onChange={(event) => { setSettings({ ...settings, codex_reasoning_effort: event.target.value as Settings['codex_reasoning_effort'] }); setTestResult(null) }}>{settings.codex_reasoning_options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select><small>{selectedReasoning?.description}</small></label>
+              </div>
+              <small>需要先在本机执行 codex login；Docker 部署还需要挂载登录文件。Extra High 是否可用取决于所选模型。</small>
               <div className="warning-banner"><ShieldAlert size={18} /><div><strong>本机 Codex 适合可信的个人环境</strong><span>论文内容会作为不可信数据交给只读沙箱中的 Codex。登录凭据不会保存到网页设置或数据库。</span></div></div>
             </> : <>
               <div className="field-grid two">

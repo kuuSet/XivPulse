@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import Integer, desc, func, select
 from sqlalchemy.orm import Session
 
+from ..integrations.codex.catalog import CODEX_MODEL_OPTIONS, CODEX_REASONING_OPTIONS
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
 from ..settings import load_runtime_settings
@@ -36,6 +37,9 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         "api_protocol": provider_settings.api_protocol,
         "api_key_configured": bool(provider_settings.api_key),
         "codex_model": provider_settings.codex_model,
+        "codex_reasoning_effort": provider_settings.codex_reasoning_effort,
+        "codex_model_options": CODEX_MODEL_OPTIONS,
+        "codex_reasoning_options": CODEX_REASONING_OPTIONS,
         "ui_font_size_pt": settings.ui_font_size_pt,
         "schedule_time": settings.schedule_time,
         "schedule_timezone": settings.schedule_timezone,

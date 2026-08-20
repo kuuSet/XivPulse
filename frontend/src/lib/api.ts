@@ -118,7 +118,7 @@ export const api = {
   }),
   saveSettings: (settings: Settings & { api_key?: string; smtp_password?: string }) =>
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
-  testConnection: (settings: Pick<Settings, 'model_source' | 'provider_name' | 'model_name' | 'api_base_url' | 'codex_model'> & { api_key?: string }) =>
+  testConnection: (settings: Pick<Settings, 'model_source' | 'provider_name' | 'model_name' | 'api_base_url' | 'codex_model' | 'codex_reasoning_effort'> & { api_key?: string }) =>
     request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
   testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
   feedback: (paperId: PaperId, actionOrPayload: FeedbackWriteAction | FeedbackPayload, note?: string) => {
@@ -268,6 +268,7 @@ function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_pas
     model_name: settings.model_name,
     api_base_url: settings.api_base_url,
     codex_model: settings.codex_model,
+    codex_reasoning_effort: settings.codex_reasoning_effort,
     ui_font_size_pt: settings.ui_font_size_pt,
     schedule_time: settings.schedule_time,
     schedule_timezone: settings.schedule_timezone,

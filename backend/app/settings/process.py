@@ -13,6 +13,13 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from ..integrations.codex.catalog import (
+    DEFAULT_CODEX_MODEL,
+    DEFAULT_CODEX_REASONING_EFFORT,
+    CodexModel,
+    CodexReasoningEffort,
+)
+
 
 class ProviderSettings(BaseSettings):
     # Defines how Pydantic reads environment variables and validates this group.
@@ -43,8 +50,9 @@ class ProviderSettings(BaseSettings):
     )
     api_timeout_seconds: float = Field(default=180.0, ge=5.0, le=600.0)
 
-    # Optional Codex model; an empty value uses the Codex CLI default.
-    codex_model: str = ""
+    # Codex model and reasoning effort used by local CLI calls.
+    codex_model: CodexModel = DEFAULT_CODEX_MODEL
+    codex_reasoning_effort: CodexReasoningEffort = DEFAULT_CODEX_REASONING_EFFORT
 
     @classmethod
     def settings_customise_sources(
@@ -69,7 +77,7 @@ class ProviderSettings(BaseSettings):
     @property
     def selected_model(self) -> str:
         if self.model_source == "codex":
-            return self.codex_model or "default"
+            return self.codex_model
         return self.model_name
 
     def public_dict(self) -> dict[str, Any]:

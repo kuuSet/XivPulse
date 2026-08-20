@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
 from ..services.prompt_catalog import (
     MAX_EDITABLE_PROMPT_CHARS,
     PROMPT_TEMPLATE_IDS,
@@ -34,7 +35,8 @@ class SettingsPayload(BaseModel):
     model_name: str | None = Field(default=None, max_length=200)
     api_base_url: str | None = Field(default=None, max_length=2000)
     api_key: str | None = Field(default=None, max_length=10000)
-    codex_model: str | None = Field(default=None, max_length=200)
+    codex_model: CodexModel | None = None
+    codex_reasoning_effort: CodexReasoningEffort | None = None
 
     # Interface display preferences.
     ui_font_size_pt: float | None = Field(default=None, ge=10.0, le=16.0, multiple_of=0.5)
@@ -122,7 +124,8 @@ class ProviderTestPayload(BaseModel):
     model_name: str | None = None
     api_base_url: str | None = None
     api_key: str | None = None
-    codex_model: str | None = None
+    codex_model: CodexModel | None = None
+    codex_reasoning_effort: CodexReasoningEffort | None = None
 
 
 @router.get("/api/settings")
@@ -173,6 +176,11 @@ async def test_provider(
                     if payload.codex_model is not None
                     else settings.provider.codex_model
                 ),
+                "codex_reasoning_effort": (
+                    payload.codex_reasoning_effort
+                    if payload.codex_reasoning_effort is not None
+                    else settings.provider.codex_reasoning_effort
+                ),
             }
         )
         result = await create_model_adapter(provider_settings).test_connection()
@@ -187,7 +195,7 @@ async def test_provider(
                 else payload.provider_name or "openai-compatible"
             ),
             "model": (
-                payload.codex_model or settings.provider.codex_model or "default"
+                payload.codex_model or settings.provider.codex_model
                 if source == "codex"
                 else model_name
             ),

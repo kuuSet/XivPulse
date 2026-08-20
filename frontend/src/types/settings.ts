@@ -17,6 +17,15 @@ export interface AnalysisPromptCatalog {
   }
 }
 
+export type CodexModel = 'gpt-5.6-sol' | 'gpt-5.6-terra' | 'gpt-5.6-luna'
+export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+
+interface CodexOption<T extends string> {
+  value: T
+  label: string
+  description: string
+}
+
 export interface Settings {
   model_source: 'api' | 'codex'
   provider_name: string
@@ -24,7 +33,10 @@ export interface Settings {
   api_base_url: string
   api_protocol?: string
   api_key_configured: boolean
-  codex_model: string
+  codex_model: CodexModel
+  codex_reasoning_effort: CodexReasoningEffort
+  codex_model_options: CodexOption<CodexModel>[]
+  codex_reasoning_options: CodexOption<CodexReasoningEffort>[]
   ui_font_size_pt: number
   schedule_time: string
   schedule_timezone: string

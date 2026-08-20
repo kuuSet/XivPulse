@@ -95,16 +95,33 @@ def test_settings_expose_only_llm_pipeline_controls(client: TestClient) -> None:
     assert "semantic_recall_mode" not in payload
     assert "semantic_recall_presets" not in payload
     assert payload["model_source"] == "api"
-    assert payload["codex_model"] == ""
+    assert payload["codex_model"] == "gpt-5.6-sol"
+    assert payload["codex_reasoning_effort"] == "medium"
+    assert [item["value"] for item in payload["codex_model_options"]] == [
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ]
 
     updated = client.put(
         "/api/settings",
-        json={"prefilter_batch_size": 40, "model_source": "codex", "codex_model": "gpt-test"},
+        json={
+            "prefilter_batch_size": 40,
+            "model_source": "codex",
+            "codex_model": "gpt-5.6-terra",
+            "codex_reasoning_effort": "high",
+        },
     )
     assert updated.status_code == 200
     assert updated.json()["prefilter_batch_size"] == 40
     assert updated.json()["model_source"] == "codex"
-    assert updated.json()["codex_model"] == "gpt-test"
+    assert updated.json()["codex_model"] == "gpt-5.6-terra"
+    assert updated.json()["codex_reasoning_effort"] == "high"
+    assert client.put("/api/settings", json={"codex_model": "unknown"}).status_code == 422
+    assert (
+        client.put("/api/settings", json={"codex_reasoning_effort": "ultra"}).status_code
+        == 422
+    )
     assert client.get("/api/prompts/catalog").json()["fixed_prompts"]["prefilter"]
 
 

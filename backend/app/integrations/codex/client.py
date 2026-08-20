@@ -130,8 +130,10 @@ class CodexAdapter:
             "--color",
             "never",
         ]
-        if self.settings.codex_model:
-            command.extend(("--model", self.settings.codex_model))
+        command.extend(("--model", self.settings.codex_model))
+        command.extend(
+            ("--config", f'model_reasoning_effort="{self.settings.codex_reasoning_effort}"')
+        )
         command.append("-")
         return command
 

@@ -42,7 +42,11 @@ async def test_codex_adapter_runs_one_isolated_structured_call(
 ) -> None:
     auth_file = tmp_path / "auth.json"
     auth_file.write_text('{"token":"secret"}', encoding="utf-8")
-    provider = ProviderSettings(model_source="codex", codex_model="gpt-test")
+    provider = ProviderSettings(
+        model_source="codex",
+        codex_model="gpt-5.6-terra",
+        codex_reasoning_effort="high",
+    )
     process_settings = ProcessSettings(
         data_dir=tmp_path / "data",
         provider=provider,
@@ -79,7 +83,8 @@ async def test_codex_adapter_runs_one_isolated_structured_call(
     assert "--ignore-user-config" in command
     assert "--ignore-rules" in command
     assert command[command.index("--sandbox") + 1] == "read-only"
-    assert command[command.index("--model") + 1] == "gpt-test"
+    assert command[command.index("--model") + 1] == "gpt-5.6-terra"
+    assert command[command.index("--config") + 1] == 'model_reasoning_effort="high"'
     assert result.data.ok is True
     assert result.provider == "codex"
     assert result.transport == "codex"
