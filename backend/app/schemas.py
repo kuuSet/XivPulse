@@ -16,6 +16,7 @@ class ORMModel(BaseModel):
 
 class TopicBase(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=2000)
     aliases: list[str] = Field(default_factory=list)
     query: str = Field(default="", max_length=2000)
     arxiv_categories: list[str] = Field(default_factory=list)
@@ -25,7 +26,7 @@ class TopicBase(BaseModel):
     weight: float = Field(default=1.0, ge=0.0, le=5.0)
     enabled: bool = True
 
-    @field_validator("name", "query")
+    @field_validator("name", "description", "query")
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.strip()

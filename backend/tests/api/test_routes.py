@@ -182,7 +182,8 @@ def test_semantic_recall_uses_cached_fake_vectors_without_keyword_gate(
         assert cached_results[paper.id].score == pytest.approx(0.78)
         assert session.query(PaperEmbedding).filter_by(paper_id=paper.id).count() == 1
         assert len(embedding_calls) == 3
-        assert all(text.isascii() for text in embedding_calls[0][1])
+        assert all(text.startswith("Research topic: ") for text in embedding_calls[0][1])
+        assert all("Scope: " in text for text in embedding_calls[0][1])
         assert embedding_calls[1][0] == "passage"
         assert recall.is_candidate(
             settings.threshold_high,
@@ -944,6 +945,7 @@ def test_interests_round_trip_direction_context_anchors(client: TestClient) -> N
     interests = client.get("/api/interests").json()
     topic = next(item for item in interests["topics"] if item["name"] == "机器人学习与强化学习")
     assert "robot" in topic["context_keywords"]
+    topic["description"] = "  Learning systems for physical robots.  "
     topic["context_keywords"] = ["robot", "humanoid", "robot"]
 
     response = client.put("/api/interests", json=interests)
@@ -952,6 +954,7 @@ def test_interests_round_trip_direction_context_anchors(client: TestClient) -> N
     saved = next(
         item for item in response.json()["topics"] if item["name"] == "机器人学习与强化学习"
     )
+    assert saved["description"] == "Learning systems for physical robots."
     assert saved["context_keywords"] == ["robot", "humanoid"]
 
 

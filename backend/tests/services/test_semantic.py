@@ -15,6 +15,7 @@ from app.services.semantic import (
     SemanticMatcher,
     SemanticRescorer,
 )
+from app.services.semantic.matcher import _topic_text
 from app.settings import SemanticSettings
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
@@ -140,6 +141,49 @@ def test_semantic_fingerprint_tracks_only_score_inputs() -> None:
     second.keywords = ["unused disabled direction"]
     assert matcher.fingerprint([first, second]) == changed
     assert matcher.fingerprint([first, second]) == matcher.fingerprint([second, first])
+
+
+def test_topic_text_always_includes_title_description_and_related_terms() -> None:
+    topic = Topic(
+        profile_id=1,
+        name="Embodied AI",
+        description="Systems for physical robots operating in the real world.",
+        aliases_json=["Embodied intelligence"],
+        keywords_json=["robot systems"],
+        context_keywords_json=["physical world"],
+    )
+
+    assert _topic_text(topic) == (
+        "Research topic: Embodied AI. "
+        "Scope: Systems for physical robots operating in the real world. "
+        "Related terms: Embodied intelligence, robot systems. "
+        "Application context: physical world."
+    )
+
+
+def test_semantic_fingerprint_changes_with_enabled_topic_description() -> None:
+    model = type("Model", (), {"model_name": "test-model"})()
+    matcher = SemanticMatcher(model)  # type: ignore[arg-type]
+    enabled = Topic(
+        profile_id=1,
+        name="LLM Systems",
+        description="Efficient inference serving.",
+        enabled=True,
+    )
+    disabled = Topic(
+        profile_id=1,
+        name="Unused",
+        description="Initial description.",
+        enabled=False,
+    )
+
+    initial = matcher.fingerprint([enabled, disabled])
+    enabled.description = "Distributed training and inference serving."
+    changed = matcher.fingerprint([enabled, disabled])
+    disabled.description = "This must not affect active scores."
+
+    assert changed != initial
+    assert matcher.fingerprint([enabled, disabled]) == changed
 
 
 def test_rescorer_skips_unchanged_fingerprint_and_force_uses_keyset_batches() -> None:

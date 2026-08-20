@@ -1,6 +1,7 @@
 export interface BackendTopic {
   id?: number
   name: string
+  description: string
   aliases: string[]
   query?: string
   arxiv_categories: string[]
@@ -14,7 +15,6 @@ export interface BackendTopic {
 export interface DirectionCatalogItem extends BackendTopic {
   slug: string
   group: string
-  description: string
   level: 'main' | 'specialty'
   parent_slug?: string | null
   parent_name?: string | null

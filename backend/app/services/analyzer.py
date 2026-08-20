@@ -52,6 +52,10 @@ def _topic_context(topics: Sequence[Topic | Mapping[str, Any]]) -> str:
         if not enabled:
             continue
         name = str(topic.get("name", "") if isinstance(topic, Mapping) else topic.name)
+        raw_description = (
+            topic.get("description", "") if isinstance(topic, Mapping) else topic.description
+        )
+        description = str(raw_description or "").strip()
         aliases = terms(topic, "aliases")
         keywords = (
             topic.get("keywords", topic.get("keywords_json", []))
@@ -69,7 +73,8 @@ def _topic_context(topics: Sequence[Topic | Mapping[str, Any]]) -> str:
         anchor_text = ", ".join(anchors[:12]) or "无需额外领域锚点"
         negative_text = ", ".join(str(value) for value in negatives[:12]) or "无"
         lines.append(
-            f"- {name}；可接受别名：{alias_text}；方向词：{positive_text}；"
+            f"- {name}；范围：{description or '未补充'}；可接受别名：{alias_text}；"
+            f"方向词：{positive_text}；"
             f"领域锚点：{anchor_text}；排除词：{negative_text}"
         )
     return "\n".join(lines) or "- 未配置关注标签"

@@ -98,6 +98,7 @@
 
 .interest-picker { display: grid; gap: 12px; padding: 16px 18px 18px; }
 .interest-picker > .search-box { width: 100%; }
+.interest-description-field textarea { min-height: 82px; }
 .interest-custom-option { display: flex; width: 100%; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid #a9c9b9; border-radius: 6px; color: #275c46; background: var(--green-soft); cursor: pointer; text-align: left; }
 .interest-custom-option.invalid { border-color: #dec6a0; color: #765816; background: #fff8e7; }
 .interest-custom-option > svg { flex: 0 0 auto; }

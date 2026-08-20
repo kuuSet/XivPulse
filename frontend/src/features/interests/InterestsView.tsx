@@ -1,4 +1,4 @@
-import { Building2, Check, CheckCircle2, CircleAlert, LoaderCircle, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
+import { Building2, Check, CheckCircle2, CircleAlert, LoaderCircle, Pencil, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
@@ -13,6 +13,8 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
   const [interests, setInterests] = useState<Interests | null>(null)
   const [catalog, setCatalog] = useState<DirectionCatalog | null>(null)
   const [catalogQuery, setCatalogQuery] = useState('')
+  const [descriptionDraft, setDescriptionDraft] = useState('')
+  const [editingTopicIndex, setEditingTopicIndex] = useState<number | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerKind, setPickerKind] = useState<WatchKind>('topic')
   const [state, setState] = useState<LoadState>('loading')
@@ -109,9 +111,10 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       setCatalogQuery('')
       return
     }
-    const { slug: _slug, group: _group, description: _description, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
-    setInterests({ ...interests, topics: [...interests.topics, { ...topic, query: '' }] })
+    const { slug: _slug, group: _group, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
+    setInterests({ ...interests, topics: [...interests.topics, { ...topic, description: catalogSemanticDescription(item), query: '' }] })
     setCatalogQuery('')
+    setDescriptionDraft('')
   }
 
   const removeTopic = (index: number) => {
@@ -138,6 +141,11 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       addCatalogTopic(preset)
       return
     }
+    const description = descriptionDraft.trim()
+    if (!isEnglishDescription(description)) {
+      onToast('error', '请用英文写清这个标签关注的问题、方法或应用边界')
+      return
+    }
     const existingIndex = interests.topics.findIndex((topic) =>
       [topic.name, ...(topic.aliases ?? [])].some((label) => directionIdentity(label) === directionIdentity(name)),
     )
@@ -155,6 +163,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       ...interests,
       topics: [...interests.topics, {
         name,
+        description,
         query: '',
         arxiv_categories: categories.length ? categories : ['cs.AI'],
         keywords: [name],
@@ -166,6 +175,22 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       }],
     })
     setCatalogQuery('')
+    setDescriptionDraft('')
+  }
+
+  const saveTopicDescription = () => {
+    if (!interests || editingTopicIndex === null) return
+    const description = descriptionDraft.trim()
+    if (!isEnglishDescription(description)) {
+      onToast('error', '请用英文写清这个标签关注的问题、方法或应用边界')
+      return
+    }
+    setInterests({
+      ...interests,
+      topics: interests.topics.map((topic, index) => index === editingTopicIndex ? { ...topic, description } : topic),
+    })
+    setEditingTopicIndex(null)
+    setDescriptionDraft('')
   }
 
   const addNamedWatch = () => {
@@ -206,8 +231,9 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
           <FormSection title="关注标签" description="研究方向决定论文的语义召回范围。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
-                {interests.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" key={topic.id ?? `new-${index}`}>
+                {interests.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" title={topic.description || '尚未填写语义描述'} key={topic.id ?? `new-${index}`}>
                   {englishDirectionLabel(topic)}
+                  <button type="button" onClick={() => { setEditingTopicIndex(index); setDescriptionDraft(topic.description) }} aria-label={`编辑 ${englishDirectionLabel(topic)}`} title="编辑描述"><Pencil size={12} /></button>
                   <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
                 </span>)}
                 <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('topic'); setPickerOpen(true) }} aria-label="添加关注标签" title="添加关注标签"><Plus size={16} /></button>
@@ -235,9 +261,10 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
           </FormSection>
         </div>
       </div>
-      {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setCatalogQuery('') }}>
+      {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setCatalogQuery(''); setDescriptionDraft('') }}>
         <div className="interest-picker">
           <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (pickerKind !== 'topic') addNamedWatch() } }} placeholder={pickerKind === 'topic' ? 'Search presets or type a new interest' : pickerKind === 'author' ? 'Type an author name' : 'Type an organization name'} />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
+          {pickerKind === 'topic' && catalogQuery.trim() && !catalog?.items.some((item) => [item.name, ...item.aliases].some((label) => directionIdentity(label) === directionIdentity(catalogQuery))) && <label className="field interest-description-field"><span>Semantic description (English)</span><textarea value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>This text is embedded together with the title. Be specific enough to exclude adjacent fields.</small></label>}
           {catalogQuery.trim() && <button className={`interest-custom-option ${pickerKind === 'topic' && !isEnglishDirectionLabel(catalogQuery) ? 'invalid' : ''}`} type="button" onClick={pickerKind === 'topic' ? addCustomTopic : addNamedWatch}>
             <Plus size={15} />
             <span><strong>Add “{catalogQuery.trim()}”</strong><small>{pickerKind === 'topic' ? isEnglishDirectionLabel(catalogQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语' : pickerKind === 'author' ? '使用论文中的完整作者姓名进行精确匹配' : '使用完整机构词组进行匹配'}</small></span>
@@ -247,6 +274,12 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
             {visibleCatalogItems.map((item) => { const exists = catalogItemExists(item); return <button className={exists ? 'selected' : ''} type="button" disabled={exists} onClick={() => addCatalogTopic(item)} title={`${item.name}：${item.description}`} key={item.slug}>{exists ? <Check size={13} /> : <Plus size={13} />}<span>{englishDirectionLabel(item)}</span></button> })}
             {!visibleCatalogItems.length && <p className="interest-empty">没有匹配的预设标签，可以使用上方输入创建自定义标签。</p>}
           </div></>}
+        </div>
+      </Modal>}
+      {editingTopicIndex !== null && <Modal title={`编辑 ${englishDirectionLabel(interests.topics[editingTopicIndex])}`} onClose={() => { setEditingTopicIndex(null); setDescriptionDraft('') }}>
+        <div className="interest-picker">
+          <label className="field interest-description-field"><span>Semantic description (English)</span><textarea autoFocus value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>标题和这段描述会共同决定语义召回范围。</small></label>
+          <button className="button primary" type="button" onClick={saveTopicDescription}>保存描述</button>
         </div>
       </Modal>}
     </div>
@@ -272,6 +305,15 @@ function isEnglishDirectionLabel(value: string) {
   return normalized.length >= 3 && /[A-Za-z]/.test(normalized) && !/[\u3400-\u9fff]/.test(normalized)
 }
 
+function isEnglishDescription(value: string) {
+  return value.trim().length >= 12 && /[A-Za-z]/.test(value) && !/[\u3400-\u9fff]/.test(value)
+}
+
+function catalogSemanticDescription(item: DirectionCatalogItem) {
+  const terms = Array.from(new Set([...item.keywords, ...item.context_keywords])).slice(0, 12)
+  return `Research on ${englishDirectionLabel(item)}${terms.length ? `, including ${terms.join(', ')}` : ''}.`
+}
+
 function demoDirectionCatalog(interests: Interests): DirectionCatalog {
   const groups = ['示例方向']
   const items: DirectionCatalogItem[] = interests.topics.map((topic, index) => ({
@@ -279,7 +321,7 @@ function demoDirectionCatalog(interests: Interests): DirectionCatalog {
     slug: `demo-${index}`,
     group: groups[0],
     level: 'main',
-    description: '演示模式中的现有研究方向。连接本地服务后可浏览完整 AI 方向库。',
+    description: topic.description,
   }))
   return { version: 'demo', updated_at: '', groups, count: items.length, items, sources: [], scope_note: '演示模式仅展示当前关注标签。' }
 }

@@ -14,6 +14,8 @@ def upgrade_schema(engine: Engine) -> bool:
         return False
 
     upgraded = _remove_profile_metadata(engine)
+    if _add_topic_description(engine):
+        upgraded = True
     inspector = inspect(engine)
     if inspector.has_table("paper_matches"):
         columns = {column["name"] for column in inspector.get_columns("paper_matches")}
@@ -27,6 +29,20 @@ def upgrade_schema(engine: Engine) -> bool:
                 )
             upgraded = True
     return upgraded
+
+
+def _add_topic_description(engine: Engine) -> bool:
+    inspector = inspect(engine)
+    if not inspector.has_table("topics"):
+        return False
+    columns = {column["name"] for column in inspector.get_columns("topics")}
+    if "description" in columns:
+        return False
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE topics ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        )
+    return True
 
 
 def _remove_profile_metadata(engine: Engine) -> bool:

@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 DEFAULT_TOPICS = (
     {
         "name": "具身智能与通用机器人",
+        "description": (
+            "Embodied AI systems that perceive, reason, learn, and act through physical "
+            "robots in the real world."
+        ),
         "aliases_json": [
             "Embodied AI",
             "Embodied Intelligence",
@@ -35,6 +39,10 @@ DEFAULT_TOPICS = (
     },
     {
         "name": "视觉-语言-动作模型",
+        "description": (
+            "Vision-language-action models that map visual and language inputs to robot "
+            "actions and policies."
+        ),
         "aliases_json": ["VLA", "Vision-Language-Action"],
         "query": 'all:"vision language action" OR all:VLA OR all:"multimodal robot"',
         "arxiv_categories_json": ["cs.RO", "cs.CV", "cs.AI"],
@@ -50,6 +58,10 @@ DEFAULT_TOPICS = (
     },
     {
         "name": "机器人学习与强化学习",
+        "description": (
+            "Learning methods for physical robot policies, including reinforcement, "
+            "imitation, and behavior learning."
+        ),
         "aliases_json": ["Robot Learning", "Reinforcement Learning for Robotics"],
         "query": 'all:"robot learning" OR all:"reinforcement learning" OR all:imitation',
         "arxiv_categories_json": ["cs.RO", "cs.LG", "cs.AI"],
@@ -80,6 +92,10 @@ DEFAULT_TOPICS = (
     },
     {
         "name": "世界模型与规划",
+        "description": (
+            "World models and predictive planning for robot control, autonomous systems, "
+            "and physical interaction."
+        ),
         "aliases_json": ["World Models and Planning", "Robot World Models"],
         "query": ('all:"world model" OR all:"model-based planning" OR all:"predictive control"'),
         "arxiv_categories_json": ["cs.RO", "cs.AI", "cs.LG"],
@@ -109,6 +125,10 @@ DEFAULT_TOPICS = (
     },
     {
         "name": "机器人操作与灵巧手",
+        "description": (
+            "Robot manipulation, grasping, bimanual control, tactile sensing, and dexterous "
+            "hand skills."
+        ),
         "aliases_json": ["Robot Manipulation", "Dexterous Manipulation"],
         "query": "all:manipulation OR all:dexterous OR all:grasping OR all:bimanual",
         "arxiv_categories_json": ["cs.RO"],
@@ -134,6 +154,10 @@ DEFAULT_TOPICS = (
     },
     {
         "name": "导航与空间智能",
+        "description": (
+            "Robot navigation, localization, mapping, spatial reasoning, and motion "
+            "planning in physical environments."
+        ),
         "aliases_json": ["Robot Navigation", "Spatial Intelligence"],
         "query": (
             'all:"robot navigation" OR all:"spatial intelligence" OR all:"visual navigation"'

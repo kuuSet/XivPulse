@@ -70,6 +70,7 @@ class Topic(TimestampMixin, Base):
         ForeignKey("profiles.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default="")
     aliases_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     query: Mapped[str] = mapped_column(Text, default="")
     arxiv_categories_json: Mapped[list[str]] = mapped_column(JSON, default=list)

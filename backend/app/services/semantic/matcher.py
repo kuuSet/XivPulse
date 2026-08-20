@@ -40,6 +40,7 @@ class SemanticMatcher:
         configured = [
             {
                 "name": topic.name.strip(),
+                "description": str(topic.description or "").strip(),
                 "aliases": _values(topic, "aliases"),
                 "keywords": _values(topic, "keywords"),
                 "context_keywords": _values(topic, "context_keywords"),
@@ -142,17 +143,22 @@ def _values(item: Topic | Mapping[str, Any], name: str) -> list[str]:
 
 def _topic_text(topic: Topic | Mapping[str, Any]) -> str:
     name = str(topic.get("name", "") if isinstance(topic, Mapping) else topic.name).strip()
+    raw_description = (
+        topic.get("description", "") if isinstance(topic, Mapping) else topic.description
+    )
+    description = str(raw_description or "").strip()
     aliases = _values(topic, "aliases")
     keywords = _values(topic, "keywords")
     context = _values(topic, "context_keywords")
-    parts: list[str] = []
-    if aliases:
-        parts.append(f"Research area: {', '.join(aliases)}")
-    if keywords:
-        parts.append(f"Core concepts: {', '.join(keywords)}")
+    related = list(dict.fromkeys([*aliases, *keywords]))
+    parts = [f"Research topic: {name}"]
+    if description:
+        parts.append(f"Scope: {description.rstrip('.')}")
+    if related:
+        parts.append(f"Related terms: {', '.join(related)}")
     if context:
         parts.append(f"Application context: {', '.join(context)}")
-    return ". ".join(parts or [f"Research area: {name}"])
+    return ". ".join(parts) + "."
 
 
 def _paper_text(paper: Paper | Mapping[str, Any]) -> str:

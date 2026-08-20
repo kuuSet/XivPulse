@@ -19,6 +19,7 @@ def _interests_wire(
             {
                 "id": topic.id,
                 "name": topic.name,
+                "description": topic.description,
                 "aliases": topic.aliases,
                 "query": topic.query,
                 "arxiv_categories": topic.arxiv_categories,

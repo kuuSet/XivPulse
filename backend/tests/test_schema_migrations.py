@@ -25,6 +25,46 @@ def test_upgrade_schema_renames_ambiguous_match_score() -> None:
     assert "relevance_score" not in columns
 
 
+def test_upgrade_schema_adds_topic_description_without_losing_rows() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE profiles ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "created_at DATETIME NOT NULL, "
+                "updated_at DATETIME NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE topics ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "profile_id INTEGER NOT NULL REFERENCES profiles(id), "
+                "name VARCHAR(120) NOT NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO profiles VALUES "
+                "(7, '2026-08-01 00:00:00', '2026-08-02 00:00:00')"
+            )
+        )
+        connection.execute(text("INSERT INTO topics VALUES (11, 7, 'LLM Systems')"))
+
+    assert upgrade_schema(engine) is True
+    assert upgrade_schema(engine) is False
+
+    columns = {column["name"] for column in inspect(engine).get_columns("topics")}
+    assert "description" in columns
+    with engine.connect() as connection:
+        topic = connection.execute(
+            text("SELECT id, profile_id, name, description FROM topics")
+        ).one()
+        assert topic == (11, 7, "LLM Systems", "")
+        assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
+
+
 def test_upgrade_schema_removes_profile_metadata_without_losing_relations() -> None:
     engine = make_engine("sqlite:///:memory:")
     with engine.begin() as connection:

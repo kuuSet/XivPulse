@@ -260,6 +260,7 @@ function interestsUpdatePayload(interests: Interests) {
     topics: interests.topics.map((topic) => ({
       ...(topic.id !== undefined ? { id: topic.id } : {}),
       name: topic.name.trim(),
+      description: topic.description.trim(),
       aliases: unique(topic.aliases ?? []),
       // The visual editor treats keywords as the source of truth for arXiv queries.
       query: '',
