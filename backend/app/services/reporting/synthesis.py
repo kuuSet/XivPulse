@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field
 from ..analyzer import analysis_budget
 from ..provider import (
     GenerationResult,
-    OpenAICompatibleAdapter,
     ProviderProtocolError,
+    StructuredModelAdapter,
 )
 
 
@@ -117,7 +117,7 @@ def _length_instruction(mode: Literal["economy", "balanced", "deep"]) -> str:
 
 
 async def generate_daily_report_synthesis(
-    adapter: OpenAICompatibleAdapter,
+    adapter: StructuredModelAdapter,
     report: Mapping[str, Any],
     *,
     budget_mode: str,

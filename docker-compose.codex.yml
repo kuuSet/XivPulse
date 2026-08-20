@@ -1,0 +1,18 @@
+services:
+  xivpulse:
+    environment:
+      XIVPULSE_CODEX_AUTH_FILE: /run/secrets/xivpulse-codex-auth.json
+    volumes:
+      - type: bind
+        source: ${XIVPULSE_CODEX_HOME}/auth.json
+        target: /run/secrets/xivpulse-codex-auth.json
+        read_only: true
+
+  scheduler:
+    environment:
+      XIVPULSE_CODEX_AUTH_FILE: /run/secrets/xivpulse-codex-auth.json
+    volumes:
+      - type: bind
+        source: ${XIVPULSE_CODEX_HOME}/auth.json
+        target: /run/secrets/xivpulse-codex-auth.json
+        read_only: true

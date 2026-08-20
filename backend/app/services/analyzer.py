@@ -22,7 +22,7 @@ from .prompt_catalog import (
     analysis_prompt_metadata,
     prompt_template,
 )
-from .provider import GenerationResult, OpenAICompatibleAdapter
+from .provider import GenerationResult, StructuredModelAdapter
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +79,7 @@ def _xml_text(value: object) -> str:
 class PaperAnalyzer:
     def __init__(
         self,
-        adapter: OpenAICompatibleAdapter | None = None,
+        adapter: StructuredModelAdapter,
         *,
         fulltext_fetcher: FullTextFetcher | None = None,
         budget_mode: str = "balanced",
@@ -87,7 +87,7 @@ class PaperAnalyzer:
         screening_prompt: str | None = None,
         deep_analysis_prompt: str | None = None,
     ) -> None:
-        self.adapter = adapter or OpenAICompatibleAdapter()
+        self.adapter = adapter
         self.budget = analysis_budget(budget_mode)
         selected_prompt = prompt_template(prompt_template_id)
         self.prompt_template_id = selected_prompt.id

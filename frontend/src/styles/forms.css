@@ -354,6 +354,7 @@
 .analysis-thresholds .field em { color: var(--quiet); font-size: 9px; font-style: normal; }
 
 .budget-mode-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.model-source-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .budget-mode-list label { display: block; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
 .budget-mode-list label.selected { border-color: #6d9bc4; background: #eaf3fb; box-shadow: 0 0 0 2px rgba(23, 105, 170, .07); }
 .budget-mode-list input { position: absolute; opacity: 0; pointer-events: none; }

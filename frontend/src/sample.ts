@@ -233,10 +233,12 @@ export const sampleInterests: Interests = {
 }
 
 export const sampleSettings: Settings = {
+  model_source: 'api',
   provider_name: 'openai-compatible',
   model_name: 'gpt-5-mini',
   api_base_url: 'https://api.openai.com/v1',
   api_key_configured: false,
+  codex_model: '',
   ui_font_size_pt: 12,
   schedule_time: '13:30',
   schedule_timezone: 'Asia/Shanghai',

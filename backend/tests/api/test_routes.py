@@ -94,10 +94,17 @@ def test_settings_expose_only_llm_pipeline_controls(client: TestClient) -> None:
     assert "embedding" not in payload
     assert "semantic_recall_mode" not in payload
     assert "semantic_recall_presets" not in payload
+    assert payload["model_source"] == "api"
+    assert payload["codex_model"] == ""
 
-    updated = client.put("/api/settings", json={"prefilter_batch_size": 40})
+    updated = client.put(
+        "/api/settings",
+        json={"prefilter_batch_size": 40, "model_source": "codex", "codex_model": "gpt-test"},
+    )
     assert updated.status_code == 200
     assert updated.json()["prefilter_batch_size"] == 40
+    assert updated.json()["model_source"] == "codex"
+    assert updated.json()["codex_model"] == "gpt-test"
     assert client.get("/api/prompts/catalog").json()["fixed_prompts"]["prefilter"]
 
 

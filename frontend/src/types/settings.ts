@@ -18,11 +18,13 @@ export interface AnalysisPromptCatalog {
 }
 
 export interface Settings {
+  model_source: 'api' | 'codex'
   provider_name: string
   model_name: string
   api_base_url: string
   api_protocol?: string
   api_key_configured: boolean
+  codex_model: string
   ui_font_size_pt: number
   schedule_time: string
   schedule_timezone: string

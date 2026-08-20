@@ -76,7 +76,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     setTesting(true)
     setTestResult(null)
     try {
-      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ provider_name: settings.provider_name, model_name: settings.model_name, api_base_url: settings.api_base_url, ...(apiKey ? { api_key: apiKey } : {}) })
+      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ model_source: settings.model_source, provider_name: settings.provider_name, model_name: settings.model_name, api_base_url: settings.api_base_url, codex_model: settings.codex_model, ...(apiKey ? { api_key: apiKey } : {}) })
       setTestResult(result)
     } catch (testError) {
       setTestResult({ ok: false, message: testError instanceof Error ? testError.message : '连接测试失败' })
@@ -102,7 +102,8 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   }
 
   if (state === 'loading' || !settings) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
-  const insecure = settings.api_base_url.trim().toLowerCase().startsWith('http://')
+  const usingCodex = settings.model_source === 'codex'
+  const insecure = !usingCodex && settings.api_base_url.trim().toLowerCase().startsWith('http://')
   const budgetOptions = [
     { id: 'economy' as const, name: '经济', detail: '正文 1.6 万字符 / PDF 12 页；标题与摘要 900、深读 2,000 输出 Token' },
     { id: 'balanced' as const, name: '平衡', detail: '正文 3 万字符 / PDF 25 页；标题与摘要 1,200、深读 3,500 输出 Token' },
@@ -160,7 +161,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   return (
     <div className="standard-page settings-page">
       <section className="page-heading">
-        <div><div className="eyebrow-row"><SettingsIcon size={14} /> 本地服务配置</div><h1>系统设置</h1><p>配置界面字号、模型 API、报告时区和分析规模。</p></div>
+        <div><div className="eyebrow-row"><SettingsIcon size={14} /> 本地服务配置</div><h1>系统设置</h1><p>配置界面字号、模型连接、报告时区和分析规模。</p></div>
         <button className="button primary" type="submit" form="settings-form" disabled={saving} aria-label={saving ? '正在保存系统设置' : '保存系统设置'} title={saving ? '正在保存' : '保存更改'}><Save size={16} /><span>{saving ? '保存中' : '保存更改'}</span></button>
       </section>
 
@@ -170,16 +171,25 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
             <label className="field font-size-field"><span>界面基准字号</span><div><input type="number" min="10" max="16" step="0.5" value={settings.ui_font_size_pt} onChange={(event) => { const value = Math.min(16, Math.max(10, Number(event.target.value) || 10)); setSettings({ ...settings, ui_font_size_pt: value }); onFontSizeChange(value) }} /><em>pt</em></div><small>可设置 10–16pt，修改时立即预览，保存后长期生效。</small></label>
           </FormSection>
 
-          <FormSection title="模型 API" description="支持 OpenAI 兼容接口。密钥仅由本地后端读取和保存。">
-            <div className="field-grid two">
-              <label className="field"><span>服务商</span><select value={settings.provider_name} onChange={(event) => setSettings({ ...settings, provider_name: event.target.value })}><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>
-              <label className="field"><span>模型</span><input value={settings.model_name} onChange={(event) => setSettings({ ...settings, model_name: event.target.value })} placeholder="gpt-5-mini" /></label>
+          <FormSection title="模型连接" description="分析流水线可以使用 OpenAI 兼容 API，或调用运行 XivPulse 的机器上已登录的 Codex CLI。">
+            <div className="budget-mode-list model-source-list" role="radiogroup" aria-label="模型连接来源">
+              <label className={!usingCodex ? 'selected' : ''}><input type="radio" name="model-source" checked={!usingCodex} onChange={() => { setSettings({ ...settings, model_source: 'api' }); setTestResult(null) }} /><span><strong>API</strong><small>直接调用 OpenAI 或兼容接口，适合稳定的自动化任务。</small></span></label>
+              <label className={usingCodex ? 'selected' : ''}><input type="radio" name="model-source" checked={usingCodex} onChange={() => { setSettings({ ...settings, model_source: 'codex' }); setTestResult(null) }} /><span><strong>本机 Codex</strong><small>复用 Codex 登录；每次分析会启动独立进程，速度更慢且上下文开销更高。</small></span></label>
             </div>
-            <label className="field"><span>Base URL</span><input value={settings.api_base_url} onChange={(event) => { setSettings({ ...settings, api_base_url: event.target.value }); setTestResult(null) }} placeholder="https://api.openai.com/v1" /></label>
-            {insecure && <div className="warning-banner"><ShieldAlert size={18} /><div><strong>连接未加密</strong><span>这个地址使用 HTTP，API 密钥可能在网络中明文传输。除本机调试外请使用 HTTPS。</span></div></div>}
-            <label className="field"><span>API Key</span><div className="secret-input"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" placeholder={settings.api_key_configured ? '已配置，留空则不修改' : '输入 API Key'} />{settings.api_key_configured && !apiKey && <span className="configured-label"><Check size={13} /> 已配置</span>}</div><small>不会返回到浏览器；保存后界面只显示配置状态。</small></label>
+            {usingCodex ? <>
+              <label className="field"><span>Codex 模型（可选）</span><input value={settings.codex_model} onChange={(event) => { setSettings({ ...settings, codex_model: event.target.value }); setTestResult(null) }} placeholder="留空使用 Codex 默认模型" /><small>需要先在本机执行 codex login；Docker 部署还需要挂载登录文件。</small></label>
+              <div className="warning-banner"><ShieldAlert size={18} /><div><strong>本机 Codex 适合可信的个人环境</strong><span>论文内容会作为不可信数据交给只读沙箱中的 Codex。登录凭据不会保存到网页设置或数据库。</span></div></div>
+            </> : <>
+              <div className="field-grid two">
+                <label className="field"><span>服务商</span><select value={settings.provider_name} onChange={(event) => setSettings({ ...settings, provider_name: event.target.value })}><option value="openai-compatible">OpenAI 兼容</option><option value="openai">OpenAI</option><option value="custom">自定义</option></select></label>
+                <label className="field"><span>模型</span><input value={settings.model_name} onChange={(event) => setSettings({ ...settings, model_name: event.target.value })} placeholder="gpt-5-mini" /></label>
+              </div>
+              <label className="field"><span>Base URL</span><input value={settings.api_base_url} onChange={(event) => { setSettings({ ...settings, api_base_url: event.target.value }); setTestResult(null) }} placeholder="https://api.openai.com/v1" /></label>
+              {insecure && <div className="warning-banner"><ShieldAlert size={18} /><div><strong>连接未加密</strong><span>这个地址使用 HTTP，API 密钥可能在网络中明文传输。除本机调试外请使用 HTTPS。</span></div></div>}
+              <label className="field"><span>API Key</span><div className="secret-input"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" placeholder={settings.api_key_configured ? '已配置，留空则不修改' : '输入 API Key'} />{settings.api_key_configured && !apiKey && <span className="configured-label"><Check size={13} /> 已配置</span>}</div><small>不会返回到浏览器；保存后界面只显示配置状态。</small></label>
+            </>}
             <div className="connection-row">
-              <button type="button" className="button secondary" onClick={test} disabled={testing || !settings.api_base_url || !settings.model_name}><Wifi size={16} /> {testing ? '正在测试' : '测试连接'}</button>
+              <button type="button" className="button secondary" onClick={test} disabled={testing || (!usingCodex && (!settings.api_base_url || !settings.model_name))}><Wifi size={16} /> {testing ? '正在测试' : '测试连接'}</button>
               {testResult && <span className={`connection-result ${testResult.ok ? 'ok' : 'failed'}`}>{testResult.ok ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}{testResult.message}</span>}
             </div>
           </FormSection>
@@ -277,8 +287,10 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
         </div>
         <aside className="form-aside">
           <div className="sticky-panel security-panel">
-            <h2><KeyRound size={17} /> 密钥安全</h2>
-            <ul><li>API Key 不写入前端代码</li><li>浏览器无法读取已保存密钥</li><li>建议使用限额独立密钥</li><li>本地服务不要暴露到公网</li></ul>
+            <h2><KeyRound size={17} /> 凭据安全</h2>
+            {usingCodex
+              ? <ul><li>Codex 登录文件不写入数据库</li><li>Docker 中只读挂载认证文件</li><li>每次调用使用临时目录</li><li>本地服务不要暴露到公网</li></ul>
+              : <ul><li>API Key 不写入前端代码</li><li>浏览器无法读取已保存密钥</li><li>建议使用限额独立密钥</li><li>本地服务不要暴露到公网</li></ul>}
           </div>
         </aside>
       </form>

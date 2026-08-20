@@ -6,14 +6,14 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, Protocol, TypeVar
 from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from ..schemas import ProviderTestResult
-from ..settings import ProviderSettings, get_process_settings
+from ..settings import ProcessSettings, ProviderSettings, get_process_settings
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -78,11 +78,25 @@ class ProviderProtocolError(ProviderError):
 @dataclass(slots=True)
 class GenerationResult[TModel: BaseModel]:
     data: TModel
-    transport: Literal["responses", "chat"]
+    transport: Literal["responses", "chat", "codex"]
     provider: str
     model: str
     usage: TokenUsage = field(default_factory=TokenUsage)
     prompt_metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class StructuredModelAdapter(Protocol):
+    async def generate_json_with_metadata[TModel: BaseModel](
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_model: type[TModel],
+        schema_name: str | None = None,
+        max_output_tokens: int = 3000,
+    ) -> GenerationResult[TModel]: ...
+
+    async def test_connection(self) -> ProviderTestResult: ...
 
 
 def _safe_base_url(value: str) -> str:
@@ -416,3 +430,15 @@ class _ProviderHTTPError(Exception):
     def __init__(self, status_code: int) -> None:
         self.status_code = status_code
         super().__init__(f"HTTP {status_code}")
+
+
+def create_model_adapter(
+    settings: ProviderSettings,
+    *,
+    process: ProcessSettings | None = None,
+) -> StructuredModelAdapter:
+    if settings.model_source == "codex":
+        from ..integrations.codex.client import CodexAdapter
+
+        return CodexAdapter(settings, process=process)
+    return OpenAICompatibleAdapter(settings)

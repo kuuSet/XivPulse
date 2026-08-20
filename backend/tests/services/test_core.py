@@ -80,6 +80,9 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
     assert status["api_key_configured"] is True
     assert "do-not-leak" not in json.dumps(status)
     assert "api_key" not in status
+    codex_status = _provider_settings(model_source="codex", api_key=None).public_dict()
+    assert codex_status["api_key_configured"] is False
+    assert _provider_settings(model_source="codex", api_key=None).configured is True
 
 
 def test_process_settings_use_only_xivpulse_environment_names(

@@ -25,7 +25,7 @@ from ...settings import load_runtime_settings
 from ..jobs import update_job_progress
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ..methods.catalog import clean_custom_methods
-from ..provider import OpenAICompatibleAdapter
+from ..provider import create_model_adapter
 from ..state import active_profile
 from .builder import build_daily_research_report
 from .records import current_date_in_timezone
@@ -263,7 +263,7 @@ async def synthesize_daily_report(
         report_id = snapshot.id
 
     generated = await generate_daily_report_synthesis(
-        OpenAICompatibleAdapter(provider_settings),
+        create_model_adapter(provider_settings),
         report,
         budget_mode=budget_mode,
     )

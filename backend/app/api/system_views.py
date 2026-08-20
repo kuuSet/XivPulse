@@ -29,11 +29,13 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             pass
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
+        "model_source": provider_settings.model_source,
         "provider_name": provider_settings.provider_name,
         "model_name": provider_settings.model_name,
         "api_base_url": provider_settings.api_base_url,
         "api_protocol": provider_settings.api_protocol,
-        "api_key_configured": provider_settings.configured,
+        "api_key_configured": bool(provider_settings.api_key),
+        "codex_model": provider_settings.codex_model,
         "ui_font_size_pt": settings.ui_font_size_pt,
         "schedule_time": settings.schedule_time,
         "schedule_timezone": settings.schedule_timezone,

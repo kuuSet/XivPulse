@@ -106,12 +106,14 @@ class RuntimeSettings(BaseSettings):
 def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> ProviderSettings:
     configured = process.provider
     return ProviderSettings(
+        model_source=values.get("model_source") or configured.model_source,
         provider_name=values.get("provider_name") or configured.provider_name,
         model_name=values.get("model_name") or configured.model_name,
         api_base_url=values.get("api_base_url") or configured.api_base_url,
         api_protocol=configured.api_protocol,
         api_key=values.get("api_key") or configured.api_key,
         api_timeout_seconds=configured.api_timeout_seconds,
+        codex_model=values.get("codex_model") or configured.codex_model,
     )
 
 

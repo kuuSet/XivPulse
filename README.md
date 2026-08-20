@@ -105,7 +105,12 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1
 
 ## 配置模型服务
 
-XivPulse 支持 OpenAI 兼容 API。在网页的“系统设置”中填写 Base URL、模型名称和 API Key，再测试连接即可。未配置 API Key 时仍可浏览界面和本地确定性功能，但不会产生真实的 AI 分析。
+XivPulse 支持两种模型连接。在网页“系统设置”中选择后先测试连接：
+
+- `API`：填写 OpenAI 兼容接口的 Base URL、模型名称和 API Key，适合稳定的无人值守任务。
+- `本机 Codex`：复用运行 XivPulse 的机器上已经完成 `codex login` 的 Codex CLI。每次分析都会启动独立 Codex 进程，因此比直接 API 更慢、代理上下文开销也更高。
+
+未配置可用的模型连接时仍可浏览界面和使用本地确定性功能，但不会产生真实的 AI 分析。
 
 Docker 用户也可以复制示例配置：
 
@@ -121,13 +126,25 @@ XIVPULSE_MODEL_NAME=your-model
 XIVPULSE_API_KEY=your-key
 ```
 
-`.env`、SQLite 数据库、日志和证书默认不会进入 Git 或 Docker 构建上下文。设置接口只返回密钥是否已配置，不会把 API Key 原文返回浏览器。
+Docker 中使用本机 Codex 时，在 `.env` 中填写宿主机 Codex 登录目录，然后显式叠加可选配置：
+
+```dotenv
+XIVPULSE_CODEX_HOME=C:/Users/you/.codex
+```
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.codex.yml up -d --build
+```
+
+该配置只读挂载 `auth.json`，XivPulse 不读取或解析其中内容，也不会把它保存到数据库。Codex 在空工作目录和 `read-only` 沙箱中处理论文数据。认证方式与非交互模式分别见 OpenAI 官方的 [Codex authentication](https://learn.chatgpt.com/docs/auth.md) 和 [Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md)。
+
+`.env`、SQLite 数据库、日志和证书默认不会进入 Git 或 Docker 构建上下文。设置接口只返回密钥是否已配置，不会把 API Key 或 Codex 登录凭据返回浏览器。
 
 ## 首次设置建议
 
 1. 在“关注设置”中从候选目录选择或创建 3-12 个边界清晰的长期研究方向。
 2. 在“系统设置”中选择分析预算、标题预筛批量大小和全文深读门槛。
-3. 配置模型 API，并先用少量候选测试输出质量和 Token 消耗。
+3. 配置模型连接，并先用少量候选测试输出质量、速度和 Token 消耗。
 4. 运行一次完整日更，检查候选量、初筛完成度、正式方向和推荐理由。
 5. 持续使用喜欢、不喜欢、收藏、忽略和结构化原因反馈，让排序逐步贴近你的判断。
 

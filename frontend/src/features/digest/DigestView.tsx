@@ -87,7 +87,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
       setReport(next)
       const status = next.ai_synthesis?.status
       if (status === 'ready') onToast('success', `${activeReportDate} 的 AI 综合研判已生成并保存`)
-      else if (status === 'not_configured') onToast('error', '尚未配置模型 API Key，确定性日报仍可正常使用')
+      else if (status === 'not_configured') onToast('error', '尚未配置模型连接，确定性日报仍可正常使用')
       else if (status === 'insufficient_data') onToast('error', '当天还没有足够的已分析论文，暂不调用 AI')
       else onToast('error', 'AI 综合研判未生成')
     } catch (synthesisError) {
@@ -270,7 +270,7 @@ function StructuredReport({ report, papers }: { report: DailyReport; papers: Pap
 function AiSynthesisSection({ synthesis }: { synthesis?: DailyReport['ai_synthesis'] }) {
   const hasSavedContent = Boolean(synthesis?.overall_assessment)
   const statusCopy: Record<string, { title: string; detail: string }> = {
-    not_configured: { title: '尚未配置 AI 综合研判', detail: '配置模型 API Key 后，可在日报顶部手动生成；打开或切换日期不会调用模型。' },
+    not_configured: { title: '尚未配置 AI 综合研判', detail: '配置 API 或本机 Codex 后，可在日报顶部手动生成；打开或切换日期不会调用模型。' },
     insufficient_data: { title: '当天分析证据不足', detail: '至少需要一篇已完成分析并进入代表列表的论文，系统才会调用 AI。' },
     disabled: { title: '自动 AI 综合研判已关闭', detail: '确定性日报保持可用，也可以在日报顶部按需手动生成。' },
   }

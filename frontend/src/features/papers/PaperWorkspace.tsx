@@ -225,7 +225,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
         <section className="metric-band" aria-label="今日统计">
           <Metric label="本次拉取" value={data.processing_summary?.latest_fetched_count ?? data.total_papers} note="最近一次完整日更" />
           <Metric label="标题预筛" value={data.prefiltered_papers} note={`保留 ${data.prefilter_kept_papers} · 待处理 ${data.processing_summary?.pending_prefilter_count ?? 0}`} />
-          <Metric label="摘要评分" value={data.processing_summary?.latest_screened_count ?? data.screened_papers} note={data.processing_summary?.ai_configured ? `待评分 ${data.processing_summary.pending_screening_count}` : '未配置 API Key'} />
+          <Metric label="摘要评分" value={data.processing_summary?.latest_screened_count ?? data.screened_papers} note={data.processing_summary?.ai_configured ? `待评分 ${data.processing_summary.pending_screening_count}` : '未配置模型连接'} />
           <Metric label="全文深读" value={data.processing_summary?.latest_deep_analyzed_count ?? 0} note={`达标待深读 ${data.processing_summary?.pending_deep_count ?? 0} 篇`} accent />
           <Metric label="重点推荐" value={data.high_priority_papers} note={data.processing_summary?.ai_configured ? 'AI 初筛 80 分以上' : '配置 AI 后生成'} />
           <div className="update-summary">

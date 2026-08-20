@@ -16,7 +16,7 @@ from ..settings import load_runtime_settings
 from .analyzer import PaperAnalyzer
 from .jobs import update_job_progress
 from .prompt_catalog import resolve_prompt_settings
-from .provider import OpenAICompatibleAdapter, TokenUsage
+from .provider import TokenUsage, create_model_adapter
 from .state import active_profile
 
 
@@ -45,7 +45,7 @@ async def analyze_papers(
     budget_mode = settings.analysis_budget
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
-        OpenAICompatibleAdapter(settings=settings.provider),
+        create_model_adapter(settings.provider),
         budget_mode=budget_mode,
         prompt_template_id=prompt_settings["prompt_template_id"],
         screening_prompt=prompt_settings["screening_prompt"],

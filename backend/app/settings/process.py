@@ -25,7 +25,10 @@ class ProviderSettings(BaseSettings):
         str_strip_whitespace=True,
     )
 
-    # Model provider and model selection.
+    # Selects the model connection used by analysis jobs.
+    model_source: Literal["api", "codex"] = "api"
+
+    # API provider and model selection.
     provider_name: str = "openai"
     model_name: str = "gpt-4o-mini"
 
@@ -39,6 +42,9 @@ class ProviderSettings(BaseSettings):
         exclude=True,
     )
     api_timeout_seconds: float = Field(default=180.0, ge=5.0, le=600.0)
+
+    # Optional Codex model; an empty value uses the Codex CLI default.
+    codex_model: str = ""
 
     @classmethod
     def settings_customise_sources(
@@ -58,11 +64,17 @@ class ProviderSettings(BaseSettings):
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key)
+        return self.model_source == "codex" or bool(self.api_key)
+
+    @property
+    def selected_model(self) -> str:
+        if self.model_source == "codex":
+            return self.codex_model or "default"
+        return self.model_name
 
     def public_dict(self) -> dict[str, Any]:
         payload = self.model_dump()
-        payload["api_key_configured"] = self.configured
+        payload["api_key_configured"] = bool(self.api_key)
         return payload
 
 
@@ -82,6 +94,9 @@ class ProcessSettings(BaseSettings):
     # Model provider settings applied at process startup.
     provider: ProviderSettings = Field(default_factory=ProviderSettings)
 
+    # Optional read-only Codex login file mounted into the process.
+    codex_auth_file: Path | None = Field(default=None, repr=False, exclude=True)
+
     # Server request filtering.
     server_allowed_hosts: tuple[str, ...] = ()
 
@@ -93,10 +108,10 @@ class ProcessSettings(BaseSettings):
     auth_secure_cookies: bool | None = None
     auth_trust_proxy: bool = False
 
-    @field_validator("data_dir")
+    @field_validator("data_dir", "codex_auth_file")
     @classmethod
-    def resolve_data_dir(cls, value: Path) -> Path:
-        return value.expanduser().resolve()
+    def resolve_path(cls, value: Path | None) -> Path | None:
+        return value.expanduser().resolve() if value is not None else None
 
     @property
     def database_url(self) -> str:

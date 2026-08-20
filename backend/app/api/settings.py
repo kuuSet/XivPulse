@@ -28,11 +28,13 @@ router = APIRouter()
 class SettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Model provider and API connection.
+    # Model source and provider connection.
+    model_source: Literal["api", "codex"] | None = None
     provider_name: str | None = None
     model_name: str | None = Field(default=None, max_length=200)
     api_base_url: str | None = Field(default=None, max_length=2000)
     api_key: str | None = Field(default=None, max_length=10000)
+    codex_model: str | None = Field(default=None, max_length=200)
 
     # Interface display preferences.
     ui_font_size_pt: float | None = Field(default=None, ge=10.0, le=16.0, multiple_of=0.5)
@@ -114,11 +116,13 @@ class SettingsPayload(BaseModel):
 class ProviderTestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Model provider and API connection to test.
+    # Model source and provider connection to test.
+    model_source: Literal["api", "codex"] | None = None
     provider_name: str | None = None
     model_name: str | None = None
     api_base_url: str | None = None
     api_key: str | None = None
+    codex_model: str | None = None
 
 
 @router.get("/api/settings")
@@ -148,39 +152,46 @@ async def test_provider(
     payload: ProviderTestPayload, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    key = payload.api_key or settings.provider.api_key
-    api_base_url = (payload.api_base_url or settings.provider.api_base_url).rstrip("/")
+    source = payload.model_source or settings.provider.model_source
     model_name = payload.model_name or settings.provider.model_name
-    if not key:
-        return {
-            "ok": False,
-            "message": "请先配置 API Key。",
-            "provider_name": settings.provider.provider_name,
-            "model": model_name,
-            "transport": settings.provider.api_protocol,
-        }
     try:
-        from ..services.provider import OpenAICompatibleAdapter
+        from ..services.provider import create_model_adapter
 
         provider_settings = settings.provider.model_copy(
             update={
+                "model_source": source,
                 "provider_name": payload.provider_name
                 or settings.provider.provider_name
                 or "openai-compatible",
-                "api_base_url": api_base_url,
+                "api_base_url": (
+                    payload.api_base_url or settings.provider.api_base_url
+                ).rstrip("/"),
                 "model_name": model_name,
-                "api_key": key,
+                "api_key": payload.api_key or settings.provider.api_key,
+                "codex_model": (
+                    payload.codex_model
+                    if payload.codex_model is not None
+                    else settings.provider.codex_model
+                ),
             }
         )
-        result = await OpenAICompatibleAdapter(provider_settings).test_connection()
+        result = await create_model_adapter(provider_settings).test_connection()
         return result.model_dump()
     except Exception as exc:
         return {
             "ok": False,
             "message": f"连接失败：{exc}",
-            "provider_name": payload.provider_name or "openai-compatible",
-            "model": model_name,
-            "transport": "http",
+            "provider_name": (
+                "codex"
+                if source == "codex"
+                else payload.provider_name or "openai-compatible"
+            ),
+            "model": (
+                payload.codex_model or settings.provider.codex_model or "default"
+                if source == "codex"
+                else model_name
+            ),
+            "transport": "codex" if source == "codex" else settings.provider.api_protocol,
         }
 
 

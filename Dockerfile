@@ -7,6 +7,12 @@ COPY frontend/ ./
 RUN npm run build
 
 
+FROM node:22-alpine AS codex-build
+
+ARG CODEX_VERSION=0.147.0
+RUN npm install -g "@openai/codex@${CODEX_VERSION}"
+
+
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,7 +25,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY backend/requirements.txt /app/backend/requirements.txt
-RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bubblewrap ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir -r /app/backend/requirements.txt \
     && addgroup --system xivpulse \
     && adduser --system --ingroup xivpulse --home /app xivpulse \
     && mkdir -p /app/data /app/frontend/dist \
@@ -27,6 +36,8 @@ RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt \
 
 COPY --chown=xivpulse:xivpulse backend/ /app/backend/
 COPY --from=frontend-build --chown=xivpulse:xivpulse /build/frontend/dist/ /app/frontend/dist/
+COPY --from=codex-build /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl /opt/codex/
+RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex
 
 USER xivpulse
 EXPOSE 8765
