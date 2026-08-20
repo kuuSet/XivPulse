@@ -59,12 +59,12 @@ class RuntimeSettings(BaseSettings):
     prefilter_batch_size: int = Field(default=30, ge=1, le=500)
 
     # Full-text analysis selection.
-    deep_analysis_limit: int = Field(default=5, ge=0, le=100)
+    deep_analysis_limit: int = Field(default=0, ge=0, le=100)
     deep_analysis_threshold: float = Field(default=90.0, ge=0.0, le=100.0)
 
     # Model analysis and daily synthesis.
     analysis_budget: Literal["economy", "balanced", "deep"] = "balanced"
-    daily_synthesis_enabled: bool = True
+    daily_synthesis_enabled: bool = False
 
     # Analysis prompt selection and overrides.
     prompt_template_id: str = "balanced-review"

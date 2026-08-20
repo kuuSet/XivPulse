@@ -80,7 +80,7 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
         ]
         settings = load_runtime_settings(session)
         assert settings.prefilter_batch_size == 30
-        assert settings.deep_analysis_limit == 5
+        assert settings.deep_analysis_limit == 0
         assert settings.deep_analysis_threshold == 90
         assert settings.providers.prefilter.model_name == "gpt-4o-mini"
         assert settings.providers.synthesis.model_name == "gpt-4o-mini"
