@@ -70,7 +70,14 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
     with Session(engine) as session:
         profiles = list(session.scalars(select(Profile)).all())
         assert len(profiles) == 1
-        assert len(profiles[0].topics) == 6
+        assert [topic.name for topic in profiles[0].topics] == [
+            "具身智能与通用机器人",
+            "视觉-语言-动作模型",
+            "大语言模型与基础模型",
+            "AI 智能体与工具使用",
+            "机器学习系统与基础设施",
+            "高效模型推理与服务",
+        ]
         settings = load_runtime_settings(session)
         assert settings.prefilter_batch_size == 30
         assert settings.deep_analysis_limit == 5
