@@ -103,7 +103,8 @@ class ProcessSettings(BaseSettings):
         return f"sqlite:///{(self.data_dir / 'xivpulse.db').as_posix()}"
 
 
-def _build_process_settings() -> ProcessSettings:
+@lru_cache(maxsize=1)
+def get_process_settings() -> ProcessSettings:
     process = ProcessSettings()
     auth_secure_cookies = (
         process.auth_enabled if process.auth_secure_cookies is None else process.auth_secure_cookies
@@ -113,11 +114,6 @@ def _build_process_settings() -> ProcessSettings:
             "auth_secure_cookies": auth_secure_cookies,
         }
     )
-
-
-@lru_cache(maxsize=1)
-def get_process_settings() -> ProcessSettings:
-    return _build_process_settings()
 
 
 __all__ = [

@@ -127,13 +127,6 @@ class PaperAnalyzer:
         generated.prompt_metadata = self.prompt_metadata("prefilter")
         return generated
 
-    async def screen(
-        self,
-        paper: Paper | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]],
-    ) -> ScreeningResult:
-        return (await self.screen_with_metadata(paper, topics)).data
-
     async def screen_with_metadata(
         self,
         paper: Paper | Mapping[str, Any],
@@ -164,18 +157,6 @@ class PaperAnalyzer:
         )
         generated.data = generated.data.model_copy(update={"matched_topics": verified_topics})
         return generated
-
-    async def deep_analyze(
-        self,
-        paper: Paper | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]],
-        *,
-        include_fulltext: bool = True,
-    ) -> DeepAnalysisResult:
-        result, _ = await self.deep_analyze_with_metadata(
-            paper, topics, include_fulltext=include_fulltext
-        )
-        return result.data
 
     async def deep_analyze_with_metadata(
         self,

@@ -4,14 +4,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import date, datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-
-class ORMModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra="ignore")
 
 
 class TopicBase(BaseModel):
@@ -81,55 +76,6 @@ class InterestsUpdate(BaseModel):
         return self
 
 
-class PaperVersionRead(ORMModel):
-    id: int
-    version: int
-    arxiv_version_id: str
-    title: str
-    abstract: str
-    authors: list[str]
-    affiliations: list[str]
-    categories: list[str]
-    abs_url: str
-    html_url: str
-    pdf_url: str
-    published_at: datetime | None
-    arxiv_updated_at: datetime | None
-    discovered_at: datetime
-
-
-class AnalysisRead(ORMModel):
-    id: int
-    paper_id: int
-    profile_id: int
-    kind: str
-    status: str
-    provider: str
-    model: str
-    transport: str
-    content_source: str
-    budget_mode: str
-    usage_available: bool
-    input_tokens: int | None
-    cached_input_tokens: int | None
-    output_tokens: int | None
-    reasoning_tokens: int | None
-    total_tokens: int | None
-    summary: str
-    verdict: str
-    relevance_score: float | None
-    novelty_score: float | None
-    rigor_score: float | None
-    impact_score: float | None
-    strengths: list[str]
-    weaknesses: list[str]
-    tags: list[str]
-    payload: dict[str, Any]
-    error: str | None
-    created_at: datetime
-    updated_at: datetime
-
-
 FeedbackAction = Literal["neutral", "save", "like", "dislike", "skip", "read"]
 FeedbackReasonCode = Literal[
     "not_relevant",
@@ -148,44 +94,6 @@ class FeedbackWrite(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=5)
     note: str = Field(default="", max_length=5000)
     reasons: list[FeedbackReasonCode] = Field(default_factory=list)
-
-
-class FeedbackRead(FeedbackWrite, ORMModel):
-    id: int
-    paper_id: int
-    profile_id: int
-    created_at: datetime
-    updated_at: datetime
-
-
-class PaperRead(ORMModel):
-    id: int
-    arxiv_id: str
-    latest_version: int
-    title: str
-    abstract: str
-    authors: list[str]
-    affiliations: list[str]
-    categories: list[str]
-    primary_category: str | None
-    comment: str | None
-    journal_ref: str | None
-    doi: str | None
-    abs_url: str
-    html_url: str
-    pdf_url: str
-    published_at: datetime | None
-    arxiv_updated_at: datetime | None
-    first_seen_at: datetime
-    last_seen_at: datetime
-    ingestion_source: str
-    withdrawn: bool
-
-
-class PaperDetail(PaperRead):
-    versions: list[PaperVersionRead] = Field(default_factory=list)
-    analyses: list[AnalysisRead] = Field(default_factory=list)
-    feedback_items: list[FeedbackRead] = Field(default_factory=list)
 
 
 class PrefilterDecision(BaseModel):
@@ -225,45 +133,6 @@ class DeepAnalysisResult(BaseModel):
     tags: list[str]
 
 
-class RecommendationRead(BaseModel):
-    paper_id: int
-    score: float = Field(ge=0, le=100)
-    rank: int | None = None
-    explanation: str
-    matched_topics: list[str] = Field(default_factory=list)
-
-
-class RankedPaperRead(BaseModel):
-    paper: PaperRead
-    recommendation: RecommendationRead
-
-
-class DigestRead(ORMModel):
-    id: int
-    profile_id: int
-    digest_date: date
-    title: str
-    summary: str
-    paper_ids: list[int]
-    stats: dict[str, Any]
-    status: str
-    created_at: datetime
-
-
-class JobRead(ORMModel):
-    id: str
-    kind: str
-    status: str
-    progress: int
-    total: int
-    message: str
-    error: str | None
-    result: dict[str, Any]
-    created_at: datetime
-    started_at: datetime | None
-    completed_at: datetime | None
-
-
 class ProviderTestResult(BaseModel):
     ok: bool
     provider_name: str
@@ -273,23 +142,14 @@ class ProviderTestResult(BaseModel):
 
 
 __all__ = [
-    "AnalysisRead",
     "DeepAnalysisResult",
-    "DigestRead",
     "FeedbackAction",
     "FeedbackReasonCode",
-    "FeedbackRead",
     "FeedbackWrite",
-    "JobRead",
-    "PaperDetail",
-    "PaperRead",
-    "PaperVersionRead",
     "PrefilterDecision",
     "PrefilterResult",
     "InterestsUpdate",
     "ProviderTestResult",
-    "RankedPaperRead",
-    "RecommendationRead",
     "ScreeningResult",
     "TopicWrite",
 ]

@@ -87,13 +87,13 @@ def test_process_settings_use_only_xivpulse_environment_names(
 ) -> None:
     monkeypatch.setenv("ARXIV_DAILY_MODEL", "legacy-model")
     monkeypatch.delenv("XIVPULSE_MODEL_NAME", raising=False)
-    assert settings_module._build_process_settings().provider.model_name == "gpt-4o-mini"
+    assert settings_module.ProcessSettings().provider.model_name == "gpt-4o-mini"
     monkeypatch.setenv("XIVPULSE_MODEL_NAME", "current-model")
     monkeypatch.setenv(
         "XIVPULSE_SERVER_ALLOWED_HOSTS",
         '["localhost", "127.0.0.1"]',
     )
-    settings = settings_module._build_process_settings()
+    settings = settings_module.ProcessSettings()
     assert settings.provider.model_name == "current-model"
     assert settings.server_allowed_hosts == ("localhost", "127.0.0.1")
 
@@ -105,7 +105,7 @@ def test_process_settings_derive_storage_from_one_data_directory(
     data_dir = tmp_path / "xivpulse-data"
     monkeypatch.setenv("XIVPULSE_DATA_DIR", str(data_dir))
 
-    settings = settings_module._build_process_settings()
+    settings = settings_module.ProcessSettings()
 
     assert settings.data_dir == data_dir.resolve()
     assert settings.database_url == f"sqlite:///{data_dir.resolve().as_posix()}/xivpulse.db"
@@ -117,7 +117,7 @@ def test_environment_key_fallback_and_secrets_are_hidden(
     monkeypatch.delenv("XIVPULSE_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
     monkeypatch.setenv("XIVPULSE_AUTH_SESSION_SECRET", "session-secret")
-    settings = settings_module._build_process_settings()
+    settings = settings_module.ProcessSettings()
 
     assert settings.provider.api_key == "openai-secret"
     assert "openai-secret" not in repr(settings.provider)
@@ -129,7 +129,7 @@ def test_environment_key_fallback_and_secrets_are_hidden(
 def test_invalid_settings_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XIVPULSE_API_TIMEOUT_SECONDS", "601")
     with pytest.raises(ValidationError, match="api_timeout_seconds"):
-        settings_module._build_process_settings()
+        settings_module.ProcessSettings()
 
     monkeypatch.delenv("XIVPULSE_API_TIMEOUT_SECONDS")
     engine = make_engine("sqlite:///:memory:")
@@ -173,7 +173,7 @@ def test_runtime_settings_use_environment_then_database_then_defaults(
             "XIVPULSE_EMAIL_RECIPIENTS",
             '["first@example.com", "second@example.com"]',
         )
-        process = settings_module._build_process_settings()
+        process = settings_module.ProcessSettings()
         settings = load_runtime_settings(session, process=process)
         monkeypatch.setenv("OPENAI_API_KEY", "environment-secret")
         settings_with_environment_key = load_runtime_settings(session, process=process)
@@ -646,12 +646,12 @@ async def test_responses_adapter_uses_strict_schema() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         adapter = OpenAICompatibleAdapter(_provider_settings(), http_client=client)
-        output = await adapter.generate_json(
+        output = await adapter.generate_json_with_metadata(
             system_prompt="Return JSON.",
             user_prompt="screen it",
             response_model=ScreeningResult,
         )
-    assert output.relevance_score == 91
+    assert output.data.relevance_score == 91
     format_spec = captured[0]["text"]["format"]  # type: ignore[index]
     assert format_spec["type"] == "json_schema"
     assert format_spec["strict"] is True
@@ -950,7 +950,7 @@ async def test_responses_error_stops_without_calling_chat() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         adapter = OpenAICompatibleAdapter(_provider_settings(), http_client=client)
         with pytest.raises(ProviderError, match="HTTP 404"):
-            await adapter.generate_json(
+            await adapter.generate_json_with_metadata(
                 system_prompt="Return JSON.", user_prompt="screen", response_model=ScreeningResult
             )
     assert paths == ["/v1/responses"]
@@ -961,7 +961,7 @@ async def test_responses_error_stops_without_calling_chat() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(must_not_call)) as client:
         adapter = OpenAICompatibleAdapter(_provider_settings(api_key=None), http_client=client)
         with pytest.raises(ProviderError, match="No API key"):
-            await adapter.generate_json(
+            await adapter.generate_json_with_metadata(
                 system_prompt="Return JSON.",
                 user_prompt="screen",
                 response_model=ScreeningResult,

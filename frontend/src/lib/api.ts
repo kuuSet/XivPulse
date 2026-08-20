@@ -51,17 +51,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export interface FeedbackPayload {
+interface FeedbackPayload {
   action: FeedbackWriteAction
   rating?: number | null
   note?: string
   reasons?: FeedbackReason[]
 }
 
-export type ReadingPayload = Partial<Pick<ReadingData, 'state' | 'priority' | 'notes' | 'tags'>>
-export type MembershipPayload = Partial<Pick<ProjectMembership, 'reading_state' | 'priority' | 'notes' | 'tags'>>
+type ReadingPayload = Partial<Pick<ReadingData, 'state' | 'priority' | 'notes' | 'tags'>>
+type MembershipPayload = Partial<Pick<ProjectMembership, 'reading_state' | 'priority' | 'notes' | 'tags'>>
 
-export interface PaperQuery {
+interface PaperQuery {
   q?: string
   category?: string
   priority?: 'high' | 'medium' | 'low'

@@ -17,13 +17,6 @@ def load_setting_values(db: Session) -> dict[str, Any]:
     return {item.key: item.value_json for item in settings}
 
 
-def setting_value(db: Session, key: str, default: Any = None) -> Any:
-    from ..models import AppSetting
-
-    setting = db.get(AppSetting, key)
-    return setting.value_json if setting is not None else default
-
-
 def set_setting(db: Session, key: str, value: Any) -> None:
     from ..models import AppSetting
 
@@ -46,5 +39,4 @@ __all__ = [
     "delete_setting",
     "load_setting_values",
     "set_setting",
-    "setting_value",
 ]

@@ -236,24 +236,6 @@ class OpenAICompatibleAdapter:
         self._client = http_client
         self.last_transport: Literal["responses", "chat"] = self.settings.api_protocol
 
-    async def generate_json(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        response_model: type[TModel],
-        schema_name: str | None = None,
-        max_output_tokens: int = 3000,
-    ) -> TModel:
-        result = await self.generate_json_with_metadata(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            response_model=response_model,
-            schema_name=schema_name,
-            max_output_tokens=max_output_tokens,
-        )
-        return result.data
-
     async def generate_json_with_metadata(
         self,
         *,

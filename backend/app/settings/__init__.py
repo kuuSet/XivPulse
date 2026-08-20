@@ -6,7 +6,7 @@ from .process import (
     get_process_settings,
 )
 from .runtime import RuntimeSettings, load_runtime_settings
-from .store import delete_setting, set_setting, setting_value
+from .store import delete_setting, set_setting
 
 __all__ = [
     "ProcessSettings",
@@ -16,5 +16,4 @@ __all__ = [
     "get_process_settings",
     "load_runtime_settings",
     "set_setting",
-    "setting_value",
 ]
