@@ -1,5 +1,5 @@
-import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, RotateCcw, Save, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi, X } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, RotateCcw, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
 import { samplePromptCatalog, sampleSettings } from '../../sample'
@@ -15,7 +15,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const [smtpPassword, setSmtpPassword] = useState('')
   const [state, setState] = useState<LoadState>('loading')
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [methodCatalog, setMethodCatalog] = useState<MethodCatalog | null>(null)
@@ -24,11 +24,14 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const [candidateNames, setCandidateNames] = useState<Record<string, string>>({})
   const [methodBusy, setMethodBusy] = useState(false)
   const [emailTesting, setEmailTesting] = useState(false)
+  const savedSettings = useRef('')
+  const autoSaveTimer = useRef<number>()
 
   const load = useCallback(async () => {
     setState('loading')
     try {
       if (isDemo) {
+        savedSettings.current = JSON.stringify(sampleSettings)
         setSettings(sampleSettings)
         onFontSizeChange(sampleSettings.ui_font_size_pt)
         setPromptCatalog(samplePromptCatalog)
@@ -36,6 +39,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
         const [loadedSettings, catalog, candidates, prompts] = await Promise.all([
           api.settings(), api.methodCatalog(), api.methodCandidates(), api.promptCatalog(),
         ])
+        savedSettings.current = JSON.stringify(loadedSettings)
         setSettings(loadedSettings)
         onFontSizeChange(loadedSettings.ui_font_size_pt)
         setMethodCatalog(catalog)
@@ -53,30 +57,59 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
 
   useEffect(() => { void load() }, [load])
 
-  const save = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!settings) return
-    setSaving(true)
+  const persistSettings = useCallback(async (next: Settings, secrets: { api_key?: string; smtp_password?: string } = {}) => {
+    window.clearTimeout(autoSaveTimer.current)
+    setSaveState('saving')
     try {
-      const saved = isDemo ? { ...settings, api_key_configured: Boolean(apiKey) || settings.api_key_configured, smtp_password_configured: Boolean(smtpPassword) || settings.smtp_password_configured } : await api.saveSettings({ ...settings, ...(apiKey ? { api_key: apiKey } : {}), ...(smtpPassword ? { smtp_password: smtpPassword } : {}) })
+      const saved = isDemo
+        ? { ...next, api_key_configured: Boolean(secrets.api_key) || next.api_key_configured, smtp_password_configured: Boolean(secrets.smtp_password) || next.smtp_password_configured }
+        : await api.saveSettings({ ...next, ...secrets })
+      savedSettings.current = JSON.stringify(saved)
       setSettings(saved)
-      onFontSizeChange(saved.ui_font_size_pt)
-      setApiKey('')
-      setSmtpPassword('')
-      onToast('success', '系统设置已保存')
+      setSaveState('saved')
+      return saved
     } catch (saveError) {
-      onToast('error', saveError instanceof Error ? saveError.message : '保存失败')
-    } finally {
-      setSaving(false)
+      setSaveState('error')
+      onToast('error', saveError instanceof Error ? saveError.message : '自动保存失败')
+      return null
     }
+  }, [onToast])
+
+  useEffect(() => {
+    if (state !== 'ready' || !settings) return
+    const signature = JSON.stringify(settings)
+    if (signature === savedSettings.current) return
+    setSaveState('pending')
+    window.clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = window.setTimeout(() => {
+      void persistSettings(settings)
+    }, 600)
+    return () => window.clearTimeout(autoSaveTimer.current)
+  }, [persistSettings, settings, state])
+
+  const saveSecret = async (kind: 'api_key' | 'smtp_password') => {
+    if (!settings) return
+    const value = kind === 'api_key' ? apiKey : smtpPassword
+    if (!value) return
+    const saved = await persistSettings(settings, kind === 'api_key' ? { api_key: value } : { smtp_password: value })
+    if (!saved) return
+    if (kind === 'api_key') setApiKey('')
+    else setSmtpPassword('')
   }
 
   const test = async () => {
     if (!settings) return
     setTesting(true)
     setTestResult(null)
+    const saved = await persistSettings(settings, apiKey ? { api_key: apiKey } : {})
+    if (!saved) {
+      setTestResult({ ok: false, message: '设置自动保存失败，未执行连接测试' })
+      setTesting(false)
+      return
+    }
+    setApiKey('')
     try {
-      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ model_source: settings.model_source, provider_name: settings.provider_name, model_name: settings.model_name, api_base_url: settings.api_base_url, codex_model: settings.codex_model, ...(apiKey ? { api_key: apiKey } : {}) })
+      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection({ model_source: saved.model_source, provider_name: saved.provider_name, model_name: saved.model_name, api_base_url: saved.api_base_url, codex_model: saved.codex_model })
       setTestResult(result)
     } catch (testError) {
       setTestResult({ ok: false, message: testError instanceof Error ? testError.message : '连接测试失败' })
@@ -88,14 +121,21 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const testEmail = async () => {
     if (!settings) return
     setEmailTesting(true)
+    if (isDemo) {
+      onToast('success', '演示模式不发送真实邮件')
+      setEmailTesting(false)
+      return
+    }
+    const saved = await persistSettings(settings, smtpPassword ? { smtp_password: smtpPassword } : {})
+    if (!saved) {
+      setEmailTesting(false)
+      return
+    }
+    setSmtpPassword('')
     try {
-      if (!isDemo) {
-        const saved = await api.saveSettings({ ...settings, ...(smtpPassword ? { smtp_password: smtpPassword } : {}) })
-        setSettings(saved); setSmtpPassword('')
-        const result = await api.testEmail()
-        if (!result.ok) throw new Error(`测试邮件发送失败（${result.email_failed} 个收件人）`)
-        onToast('success', `测试邮件已发送给 ${result.email_sent} 个收件人`)
-      } else onToast('success', '演示模式不发送真实邮件')
+      const result = await api.testEmail()
+      if (!result.ok) throw new Error(`测试邮件发送失败（${result.email_failed} 个收件人）`)
+      onToast('success', `测试邮件已发送给 ${result.email_sent} 个收件人`)
     } catch (emailError) {
       onToast('error', emailError instanceof Error ? emailError.message : '测试邮件发送失败')
     } finally { setEmailTesting(false) }
@@ -162,10 +202,10 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     <div className="standard-page settings-page">
       <section className="page-heading">
         <div><div className="eyebrow-row"><SettingsIcon size={14} /> 本地服务配置</div><h1>系统设置</h1><p>配置界面字号、模型连接、报告时区和分析规模。</p></div>
-        <button className="button primary" type="submit" form="settings-form" disabled={saving} aria-label={saving ? '正在保存系统设置' : '保存系统设置'} title={saving ? '正在保存' : '保存更改'}><Save size={16} /><span>{saving ? '保存中' : '保存更改'}</span></button>
+        <span className={`auto-save-status ${saveState}`} aria-live="polite">{saveState === 'pending' ? '等待自动保存' : saveState === 'saving' ? '正在自动保存' : saveState === 'error' ? '自动保存失败' : '已自动保存'}</span>
       </section>
 
-      <form id="settings-form" className="form-layout" onSubmit={save}>
+      <div className="form-layout">
         <div className="form-main">
           <FormSection title="界面显示" description="以 12pt 为当前视觉基准，调整时保留标题、正文和辅助文字的层级比例。">
             <label className="field font-size-field"><span>界面基准字号</span><div><input type="number" min="10" max="16" step="0.5" value={settings.ui_font_size_pt} onChange={(event) => { const value = Math.min(16, Math.max(10, Number(event.target.value) || 10)); setSettings({ ...settings, ui_font_size_pt: value }); onFontSizeChange(value) }} /><em>pt</em></div><small>可设置 10–16pt，修改时立即预览，保存后长期生效。</small></label>
@@ -186,7 +226,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
               </div>
               <label className="field"><span>Base URL</span><input value={settings.api_base_url} onChange={(event) => { setSettings({ ...settings, api_base_url: event.target.value }); setTestResult(null) }} placeholder="https://api.openai.com/v1" /></label>
               {insecure && <div className="warning-banner"><ShieldAlert size={18} /><div><strong>连接未加密</strong><span>这个地址使用 HTTP，API 密钥可能在网络中明文传输。除本机调试外请使用 HTTPS。</span></div></div>}
-              <label className="field"><span>API Key</span><div className="secret-input"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" placeholder={settings.api_key_configured ? '已配置，留空则不修改' : '输入 API Key'} />{settings.api_key_configured && !apiKey && <span className="configured-label"><Check size={13} /> 已配置</span>}</div><small>不会返回到浏览器；保存后界面只显示配置状态。</small></label>
+              <label className="field"><span>API Key</span><div className="secret-input"><KeyRound size={16} /><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} onBlur={() => void saveSecret('api_key')} autoComplete="new-password" placeholder={settings.api_key_configured ? '已配置，留空则不修改' : '输入 API Key'} />{settings.api_key_configured && !apiKey && <span className="configured-label"><Check size={13} /> 已配置</span>}</div><small>移开焦点后自动保存；浏览器只能读取配置状态。</small></label>
             </>}
             <div className="connection-row">
               <button type="button" className="button secondary" onClick={test} disabled={testing || (!usingCodex && (!settings.api_base_url || !settings.model_name))}><Wifi size={16} /> {testing ? '正在测试' : '测试连接'}</button>
@@ -204,10 +244,10 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
           <FormSection title="日报邮件" description="完整日更保存日报后自动发送态势摘要和前 10 篇重点论文；授权码只保存在后端。">
             <label className="toggle-field"><input type="checkbox" checked={settings.email_enabled} onChange={(event) => setSettings({ ...settings, email_enabled: event.target.checked })} /><span><strong>自动发送日报邮件</strong><small>初筛未完成时邮件会明确标记失败数量</small></span></label>
             <div className="field-grid two"><label className="field"><span>SMTP 主机</span><input value={settings.smtp_host} onChange={(event) => setSettings({ ...settings, smtp_host: event.target.value })} placeholder="smtp.example.com" /></label><label className="field"><span>端口与安全模式</span><div className="smtp-port-row"><input type="number" min="1" max="65535" value={settings.smtp_port} onChange={(event) => setSettings({ ...settings, smtp_port: Number(event.target.value) })} /><select value={settings.smtp_security} onChange={(event) => setSettings({ ...settings, smtp_security: event.target.value as Settings['smtp_security'] })}><option value="starttls">STARTTLS</option><option value="ssl">SSL</option></select></div></label></div>
-            <div className="field-grid two"><label className="field"><span>SMTP 用户名</span><input value={settings.smtp_username} onChange={(event) => setSettings({ ...settings, smtp_username: event.target.value })} autoComplete="username" /></label><label className="field"><span>授权码</span><div className="secret-input"><KeyRound size={16} /><input type="password" value={smtpPassword} onChange={(event) => setSmtpPassword(event.target.value)} autoComplete="new-password" placeholder={settings.smtp_password_configured ? '已配置，留空则不修改' : '输入 SMTP 授权码'} />{settings.smtp_password_configured && !smtpPassword && <span className="configured-label"><Check size={13} /> 已配置</span>}</div></label></div>
+            <div className="field-grid two"><label className="field"><span>SMTP 用户名</span><input value={settings.smtp_username} onChange={(event) => setSettings({ ...settings, smtp_username: event.target.value })} autoComplete="username" /></label><label className="field"><span>授权码</span><div className="secret-input"><KeyRound size={16} /><input type="password" value={smtpPassword} onChange={(event) => setSmtpPassword(event.target.value)} onBlur={() => void saveSecret('smtp_password')} autoComplete="new-password" placeholder={settings.smtp_password_configured ? '已配置，留空则不修改' : '输入 SMTP 授权码'} />{settings.smtp_password_configured && !smtpPassword && <span className="configured-label"><Check size={13} /> 已配置</span>}</div></label></div>
             <div className="field-grid two"><label className="field"><span>发件人</span><input type="email" value={settings.smtp_sender} onChange={(event) => setSettings({ ...settings, smtp_sender: event.target.value })} placeholder="radar@example.com" /></label><label className="field"><span>收件人</span><input value={settings.email_recipients.join(', ')} onChange={(event) => setSettings({ ...settings, email_recipients: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="you@example.com, team@example.com" /></label></div>
             <label className="field"><span>公网基础地址</span><input value={settings.public_url} onChange={(event) => setSettings({ ...settings, public_url: event.target.value })} placeholder="https://203.0.113.10" /><small>邮件中的完整日报和论文详情链接使用此同源地址。</small></label>
-            <button type="button" className="button secondary" disabled={emailTesting || !settings.smtp_host || !settings.smtp_sender || !settings.email_recipients.length} onClick={() => void testEmail()}><Mail size={16} />{emailTesting ? '正在发送' : '保存并发送测试邮件'}</button>
+            <button type="button" className="button secondary" disabled={emailTesting || !settings.smtp_host || !settings.smtp_sender || !settings.email_recipients.length} onClick={() => void testEmail()}><Mail size={16} />{emailTesting ? '正在发送' : '发送测试邮件'}</button>
           </FormSection>
 
           <FormSection title="处理规模与门槛" description="每日流水线依次执行批量标题预筛、逐篇摘要评分和高分论文全文深读；每一级完成后立即保存结果。">
@@ -293,7 +333,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
               : <ul><li>API Key 不写入前端代码</li><li>浏览器无法读取已保存密钥</li><li>建议使用限额独立密钥</li><li>本地服务不要暴露到公网</li></ul>}
           </div>
         </aside>
-      </form>
+      </div>
     </div>
   )
 }

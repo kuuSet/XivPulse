@@ -153,9 +153,6 @@
   .page-heading p { font-size: 10px; }
   .dashboard-heading .button span { display: none; }
   .page-heading > .button { min-width: 38px; padding: 0 10px; }
-  .settings-page .page-heading > .button { width: 38px; min-width: 38px; padding: 0; }
-  .settings-page .page-heading > .button svg { flex: 0 0 auto; }
-  .settings-page .page-heading > .button span { display: none; }
   .heading-actions { flex-direction: column; align-items: stretch; }
   .heading-actions .button { min-height: 34px; }
   .metric-band { width: 100%; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
