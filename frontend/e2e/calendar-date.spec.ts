@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('calendar dates load only papers from the selected day', async ({ page }) => {
   const requestedDates: Array<string | null> = []
+  const runDates: string[] = []
   const paper = (day: string) => ({
     id: Number(day),
     arxiv_id: `2608.100${day}`,
@@ -58,6 +59,14 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
       }),
     })
   })
+  await page.route('**/api/run-daily', async (route) => {
+    runDates.push(String(route.request().postDataJSON().date))
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'job-13', status: 'queued', message: 'started', date: '2026-08-13' }),
+    })
+  })
 
   await page.goto('/?view=today')
   const titles = page.locator('.paper-list h2')
@@ -69,6 +78,8 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
   await expect(titles).toHaveText(['Paper for August 13'])
   await expect(page).toHaveURL(/date=2026-08-13/)
   expect(requestedDates).toContain('2026-08-13')
+  await page.locator('.page-heading').getByRole('button', { name: '补跑这一天' }).click()
+  await expect.poll(() => runDates).toContain('2026-08-13')
 
   await page.getByRole('button', { name: '展开日期日历' }).click()
   await page.locator('.calendar-day strong').getByText('14', { exact: true }).click()

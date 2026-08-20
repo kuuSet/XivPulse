@@ -145,6 +145,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   const selected = papersWithMemberships.find((paper) => String(paper.id) === String(selectedId))
     ?? (linkedPaper && String(linkedPaper.id) === String(selectedId) ? linkedPaper : null)
     ?? (selectedId === null ? papersWithMemberships[0] : null)
+  const selectedDate = new URLSearchParams(window.location.search).get('date') ?? undefined
   const detailOpen = new URLSearchParams(window.location.search).has('paper')
   const sortOptions: Array<[PaperSort, string]> = [
     ['recommendation', '推荐优先'],
@@ -213,9 +214,9 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
           <h1>{mode === 'today' ? '今日论文' : '论文库'}</h1>
           <p>{mode === 'today' ? '已按你的关注标签筛选并排序今日更新。' : '检索和回看经过摘要粗排的论文。'}</p>
         </div>
-        <button className="button primary" onClick={() => onRefresh()} disabled={refreshing}>
+        <button className="button primary" onClick={() => onRefresh(selectedDate)} disabled={refreshing}>
           <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
-          {refreshing ? '正在启动' : '抓取最新'}
+          {refreshing ? '正在启动' : selectedDate ? '补跑这一天' : '抓取最新'}
         </button>
       </section>
 
@@ -324,8 +325,9 @@ function JobStatusBanner({ job }: { job: JobInfo }) {
   const running = job.status === 'queued' || job.status === 'running'
   const failed = job.status === 'failed'
   const result = job.result ?? {}
+  const jobDate = String(result.fetch_date ?? result.report_date ?? '')
   const summary = job.status === 'completed'
-    ? `抓取 ${Number(result.fetched ?? 0)} 篇 · 标题预筛 ${Number(result.prefiltered ?? 0)} 篇 · 保留 ${Number(result.prefilter_kept ?? 0)} 篇 · 摘要粗排 ${Number(result.screened ?? 0)} 篇 · 深读 ${Number(result.analyzed ?? 0)} 篇`
+    ? `${jobDate ? `${jobDate} · ` : ''}同步 ${Number(result.fetched ?? 0)} 篇 · 本次新增预筛 ${Number(result.prefiltered ?? 0)} 篇 · 保留 ${Number(result.prefilter_kept ?? 0)} 篇 · 新增粗排 ${Number(result.screened ?? 0)} 篇`
     : failed ? (job.error || job.message || '任务失败') : (job.message || '正在执行每日流程')
   return <section className={`job-status-banner ${failed ? 'failed' : running ? 'running' : 'completed'}`} aria-live="polite"><div>{running ? <LoaderCircle className="spin" size={17} /> : failed ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}<span><strong>{running ? '每日任务进行中' : failed ? '最近一次任务失败' : '最近一次任务已完成'}</strong><small>{summary}</small></span></div><div className="job-progress"><span style={{ width: `${Math.max(running ? 4 : 0, Math.min(100, job.progress ?? 0))}%` }} /></div></section>
 }
