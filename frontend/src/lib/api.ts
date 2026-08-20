@@ -11,7 +11,7 @@ import type {
   ResearchProject,
 } from '../types/projects'
 import type { DailyReport, DailyReportArchiveItem, DailyResearchGap } from '../types/reports'
-import type { AnalysisPromptCatalog, Settings } from '../types/settings'
+import type { AnalysisPromptCatalog, ModelStage, Settings } from '../types/settings'
 import type { AppStatus, AuthSession, JobCalendarData, JobInfo } from '../types/system'
 import type { ResearchRoadmap, TopicTrends } from '../types/trends'
 
@@ -116,10 +116,10 @@ export const api = {
   saveCustomMethods: (items: Array<{ name: string; aliases: string[] }>) => request<MethodCatalog>('/methods/custom', {
     method: 'PUT', body: JSON.stringify({ items }),
   }),
-  saveSettings: (settings: Settings & { api_key?: string; smtp_password?: string }) =>
+  saveSettings: (settings: Settings & { api_keys?: Partial<Record<ModelStage, string>>; smtp_password?: string }) =>
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
-  testConnection: (settings: Pick<Settings, 'model_source' | 'provider_name' | 'model_name' | 'api_base_url' | 'codex_model' | 'codex_reasoning_effort'> & { api_key?: string }) =>
-    request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
+  testConnection: (stage: ModelStage) =>
+    request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify({ stage }) }),
   testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
   feedback: (paperId: PaperId, actionOrPayload: FeedbackWriteAction | FeedbackPayload, note?: string) => {
     const payload: FeedbackPayload = typeof actionOrPayload === 'string'
@@ -261,14 +261,18 @@ function interestsUpdatePayload(interests: Interests) {
   }
 }
 
-function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_password?: string }) {
+function settingsUpdatePayload(settings: Settings & { api_keys?: Partial<Record<ModelStage, string>>; smtp_password?: string }) {
   return {
-    model_source: settings.model_source,
-    provider_name: settings.provider_name,
-    model_name: settings.model_name,
-    api_base_url: settings.api_base_url,
-    codex_model: settings.codex_model,
-    codex_reasoning_effort: settings.codex_reasoning_effort,
+    providers: Object.fromEntries(Object.entries(settings.providers).map(([stage, provider]) => [stage, {
+      model_source: provider.model_source,
+      provider_name: provider.provider_name,
+      model_name: provider.model_name,
+      api_base_url: provider.api_base_url,
+      api_protocol: provider.api_protocol,
+      codex_model: provider.codex_model,
+      codex_reasoning_effort: provider.codex_reasoning_effort,
+      ...(settings.api_keys?.[stage as ModelStage] ? { api_key: settings.api_keys[stage as ModelStage] } : {}),
+    }])),
     ui_font_size_pt: settings.ui_font_size_pt,
     schedule_time: settings.schedule_time,
     schedule_timezone: settings.schedule_timezone,
@@ -279,7 +283,6 @@ function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_pas
     analysis_budget: settings.analysis_budget,
     daily_synthesis_enabled: settings.daily_synthesis_enabled,
     prompt_template_id: settings.prompt_template_id,
-    screening_prompt: settings.screening_prompt,
     deep_analysis_prompt: settings.deep_analysis_prompt,
     email_enabled: settings.email_enabled,
     email_recipients: settings.email_recipients,
@@ -289,7 +292,6 @@ function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_pas
     smtp_username: settings.smtp_username,
     smtp_sender: settings.smtp_sender,
     public_url: settings.public_url,
-    ...(settings.api_key ? { api_key: settings.api_key } : {}),
     ...(settings.smtp_password ? { smtp_password: settings.smtp_password } : {}),
   }
 }

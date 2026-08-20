@@ -226,7 +226,7 @@ def dashboard(
             "prefiltered_count": prefiltered_today,
             "prefilter_kept_count": prefilter_kept_today,
             "screened_count": screened_today,
-            "ai_configured": current_settings.provider.configured,
+            "ai_configured": current_settings.providers.screening.configured,
             "deep_analysis_limit": current_settings.deep_analysis_limit,
             "deep_analysis_threshold": deep_threshold,
         },

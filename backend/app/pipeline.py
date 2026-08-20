@@ -121,7 +121,7 @@ class PipelineCoordinator:
             update_job_progress(
                 job_id,
                 progress=40,
-                message="正在进行标题预筛、摘要评分与全文深读",
+                message="正在进行标题预筛、摘要粗排与全文深读",
             )
             result.update(await self._analyze_stage(job_id=job_id, report_date=pipeline_date))
         if kind == "daily":

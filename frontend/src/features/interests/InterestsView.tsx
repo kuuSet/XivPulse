@@ -278,7 +278,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       </Modal>}
       {editingTopicIndex !== null && <Modal title={`编辑 ${englishDirectionLabel(interests.topics[editingTopicIndex])}`} onClose={() => { setEditingTopicIndex(null); setDescriptionDraft('') }}>
         <div className="interest-picker">
-          <label className="field interest-description-field"><span>Tag description (English)</span><textarea autoFocus value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>标题预筛和摘要评分都会读取这段描述。</small></label>
+          <label className="field interest-description-field"><span>Tag description (English)</span><textarea autoFocus value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>标题预筛和摘要粗排都会读取这段描述。</small></label>
           <button className="button primary" type="button" onClick={saveTopicDescription}>保存描述</button>
         </div>
       </Modal>}

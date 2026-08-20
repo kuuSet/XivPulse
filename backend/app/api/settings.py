@@ -20,23 +20,32 @@ from ..services.prompt_catalog import (
 from ..services.reporting.records import current_date_in_timezone
 from ..services.reporting.service import persist_daily_report, send_daily_report_email
 from ..services.state import active_profile
-from ..settings import delete_setting, load_runtime_settings, set_setting
+from ..settings import ModelStage, delete_setting, load_runtime_settings, set_setting
+from ..settings.store import load_setting_values
 from .system_views import _settings_wire
 
 router = APIRouter()
 
 
-class SettingsPayload(BaseModel):
+class StageProviderPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Model source and provider connection.
+    # Model source and API connection for one pipeline stage.
     model_source: Literal["api", "codex"] | None = None
     provider_name: str | None = None
     model_name: str | None = Field(default=None, max_length=200)
     api_base_url: str | None = Field(default=None, max_length=2000)
+    api_protocol: Literal["responses", "chat"] | None = None
     api_key: str | None = Field(default=None, max_length=10000)
     codex_model: CodexModel | None = None
     codex_reasoning_effort: CodexReasoningEffort | None = None
+
+
+class SettingsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Independent model connection for each pipeline stage.
+    providers: dict[ModelStage, StageProviderPayload] | None = None
 
     # Interface display preferences.
     ui_font_size_pt: float | None = Field(default=None, ge=10.0, le=16.0, multiple_of=0.5)
@@ -61,9 +70,6 @@ class SettingsPayload(BaseModel):
 
     # Analysis prompt selection and overrides.
     prompt_template_id: str | None = Field(default=None, max_length=80)
-    screening_prompt: str | None = Field(
-        default=None, min_length=20, max_length=MAX_EDITABLE_PROMPT_CHARS
-    )
     deep_analysis_prompt: str | None = Field(
         default=None, min_length=20, max_length=MAX_EDITABLE_PROMPT_CHARS
     )
@@ -90,7 +96,7 @@ class SettingsPayload(BaseModel):
             raise ValueError("未知的论文分析提示词模板")
         return value
 
-    @field_validator("screening_prompt", "deep_analysis_prompt")
+    @field_validator("deep_analysis_prompt")
     @classmethod
     def normalize_editable_prompt(cls, value: str | None) -> str | None:
         if value is None:
@@ -118,14 +124,7 @@ class SettingsPayload(BaseModel):
 class ProviderTestPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Model source and provider connection to test.
-    model_source: Literal["api", "codex"] | None = None
-    provider_name: str | None = None
-    model_name: str | None = None
-    api_base_url: str | None = None
-    api_key: str | None = None
-    codex_model: CodexModel | None = None
-    codex_reasoning_effort: CodexReasoningEffort | None = None
+    stage: ModelStage
 
 
 @router.get("/api/settings")
@@ -136,10 +135,21 @@ def get_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
 @router.put("/api/settings")
 def update_settings(payload: SettingsPayload, db: Session = Depends(get_db)) -> dict[str, Any]:
     values = payload.model_dump(exclude_none=True)
+    provider_updates = values.pop("providers", None)
+    if provider_updates:
+        providers = dict(load_setting_values(db).get("providers", {}))
+        for stage, update in provider_updates.items():
+            provider = dict(providers.get(stage, {}))
+            if update.get("api_key") == "":
+                provider.pop("api_key", None)
+                update.pop("api_key")
+            provider.update(update)
+            providers[stage] = provider
+        set_setting(db, "providers", providers)
     for key, value in values.items():
-        if key in {"api_key", "smtp_password"} and value == "":
+        if key == "smtp_password" and value == "":
             delete_setting(db, key)
-        elif key not in {"api_key", "smtp_password"} or value:
+        elif key != "smtp_password" or value:
             set_setting(db, key, value)
     db.commit()
     return _settings_wire(db)
@@ -155,34 +165,10 @@ async def test_provider(
     payload: ProviderTestPayload, db: Session = Depends(get_db)
 ) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    source = payload.model_source or settings.provider.model_source
-    model_name = payload.model_name or settings.provider.model_name
+    provider_settings = settings.providers.for_stage(payload.stage)
     try:
         from ..services.provider import create_model_adapter
 
-        provider_settings = settings.provider.model_copy(
-            update={
-                "model_source": source,
-                "provider_name": payload.provider_name
-                or settings.provider.provider_name
-                or "openai-compatible",
-                "api_base_url": (
-                    payload.api_base_url or settings.provider.api_base_url
-                ).rstrip("/"),
-                "model_name": model_name,
-                "api_key": payload.api_key or settings.provider.api_key,
-                "codex_model": (
-                    payload.codex_model
-                    if payload.codex_model is not None
-                    else settings.provider.codex_model
-                ),
-                "codex_reasoning_effort": (
-                    payload.codex_reasoning_effort
-                    if payload.codex_reasoning_effort is not None
-                    else settings.provider.codex_reasoning_effort
-                ),
-            }
-        )
         result = await create_model_adapter(provider_settings).test_connection()
         return result.model_dump()
     except Exception as exc:
@@ -191,15 +177,19 @@ async def test_provider(
             "message": f"连接失败：{exc}",
             "provider_name": (
                 "codex"
-                if source == "codex"
-                else payload.provider_name or "openai-compatible"
+                if provider_settings.model_source == "codex"
+                else provider_settings.provider_name
             ),
             "model": (
-                payload.codex_model or settings.provider.codex_model
-                if source == "codex"
-                else model_name
+                provider_settings.codex_model
+                if provider_settings.model_source == "codex"
+                else provider_settings.model_name
             ),
-            "transport": "codex" if source == "codex" else settings.provider.api_protocol,
+            "transport": (
+                "codex"
+                if provider_settings.model_source == "codex"
+                else provider_settings.api_protocol
+            ),
         }
 
 

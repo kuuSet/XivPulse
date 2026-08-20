@@ -17,7 +17,6 @@ from .presenters.common import _as_utc
 
 def _settings_wire(db: Session) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    provider_settings = settings.provider
     bind = db.get_bind()
     database_path: str | None = None
     database_size_bytes: int | None = None
@@ -30,14 +29,10 @@ def _settings_wire(db: Session) -> dict[str, Any]:
             pass
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
-        "model_source": provider_settings.model_source,
-        "provider_name": provider_settings.provider_name,
-        "model_name": provider_settings.model_name,
-        "api_base_url": provider_settings.api_base_url,
-        "api_protocol": provider_settings.api_protocol,
-        "api_key_configured": bool(provider_settings.api_key),
-        "codex_model": provider_settings.codex_model,
-        "codex_reasoning_effort": provider_settings.codex_reasoning_effort,
+        "providers": {
+            stage: settings.providers.for_stage(stage).public_dict()
+            for stage in ("prefilter", "screening", "deep", "synthesis")
+        },
         "codex_model_options": CODEX_MODEL_OPTIONS,
         "codex_reasoning_options": CODEX_REASONING_OPTIONS,
         "ui_font_size_pt": settings.ui_font_size_pt,
@@ -190,4 +185,8 @@ def _token_usage_summary(db: Session) -> dict[str, Any]:
 
 
 def _provider_public_status(db: Session) -> dict[str, Any]:
-    return load_runtime_settings(db).provider.public_dict()
+    providers = load_runtime_settings(db).providers
+    return {
+        stage: providers.for_stage(stage).public_dict()
+        for stage in ("prefilter", "screening", "deep", "synthesis")
+    }

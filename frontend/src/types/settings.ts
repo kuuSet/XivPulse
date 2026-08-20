@@ -2,7 +2,6 @@ interface AnalysisPromptTemplate {
   id: string
   name: string
   description: string
-  screening_prompt: string
   deep_analysis_prompt: string
 }
 
@@ -19,6 +18,7 @@ export interface AnalysisPromptCatalog {
 
 export type CodexModel = 'gpt-5.6-sol' | 'gpt-5.6-terra' | 'gpt-5.6-luna'
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+export type ModelStage = 'prefilter' | 'screening' | 'deep' | 'synthesis'
 
 interface CodexOption<T extends string> {
   value: T
@@ -26,15 +26,19 @@ interface CodexOption<T extends string> {
   description: string
 }
 
-export interface Settings {
+export interface StageProviderSettings {
   model_source: 'api' | 'codex'
   provider_name: string
   model_name: string
   api_base_url: string
-  api_protocol?: string
+  api_protocol: 'responses' | 'chat'
   api_key_configured: boolean
   codex_model: CodexModel
   codex_reasoning_effort: CodexReasoningEffort
+}
+
+export interface Settings {
+  providers: Record<ModelStage, StageProviderSettings>
   codex_model_options: CodexOption<CodexModel>[]
   codex_reasoning_options: CodexOption<CodexReasoningEffort>[]
   ui_font_size_pt: number
@@ -47,7 +51,6 @@ export interface Settings {
   analysis_budget: 'economy' | 'balanced' | 'deep'
   daily_synthesis_enabled: boolean
   prompt_template_id: string
-  screening_prompt: string
   deep_analysis_prompt: string
   prompt_version: string
   prompt_customized: boolean

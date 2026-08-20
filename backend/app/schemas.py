@@ -106,12 +106,7 @@ class PrefilterResult(BaseModel):
 
 
 class ScreeningResult(BaseModel):
-    relevant: bool
-    relevance_score: float = Field(ge=0, le=100)
-    reason: str
-    matched_topics: list[str]
-    key_contributions: list[str]
-    tags: list[str]
+    score: int = Field(ge=0, le=100)
 
 
 class DeepAnalysisResult(BaseModel):

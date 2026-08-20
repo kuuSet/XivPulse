@@ -247,7 +247,7 @@ async def synthesize_daily_report(
             and previous.get("source_hash") == source_hash
         ):
             return {"report_synthesis_status": "ready", "report_date": report_date.isoformat()}
-        provider_settings = settings.provider
+        provider_settings = settings.providers.synthesis
         if not provider_settings.configured:
             report["ai_synthesis"] = _synthesis_state(
                 previous, status_name="not_configured", source_hash=source_hash

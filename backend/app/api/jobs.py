@@ -162,7 +162,7 @@ def job_calendar(
         if job_complete and pending_prefilter:
             message = f"有 {pending_prefilter} 篇论文等待标题预筛"
         elif job_complete and pending_screening:
-            message = f"有 {pending_screening} 篇论文等待摘要评分"
+            message = f"有 {pending_screening} 篇论文等待摘要粗排"
         elif complete:
             message = "任务完整完成"
         elif job.status in RUNNING_STATUSES:

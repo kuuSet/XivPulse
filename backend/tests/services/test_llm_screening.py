@@ -13,7 +13,7 @@ from app.schemas import PrefilterDecision, PrefilterResult
 from app.services.analyzer import PaperAnalyzer
 from app.services.paper_sync import sync_papers
 from app.services.provider import GenerationResult, ProviderError
-from app.settings import ProviderSettings, set_setting
+from app.settings import ProviderSettings, StageProviders
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
@@ -72,7 +72,8 @@ async def test_title_prefilter_batches_papers_without_sending_abstracts() -> Non
                 model="test",
             )
 
-    analyzer = PaperAnalyzer(FakeAdapter())  # type: ignore[arg-type]
+    adapter = FakeAdapter()
+    analyzer = PaperAnalyzer(adapter, adapter, adapter)  # type: ignore[arg-type]
     result = await analyzer.prefilter_with_metadata(
         [
             {
@@ -131,7 +132,6 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
     Base.metadata.create_all(engine)
     with factory() as session:
         seed_defaults(session)
-        set_setting(session, "api_key", "test-key")
         profile = session.query(Profile).one()
         for index in range(3):
             paper = Paper(
@@ -143,7 +143,6 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
             session.add(paper)
             session.flush()
             session.add(PaperMatch(paper_id=paper.id, profile_id=profile.id))
-        direction = profile.topics[0].name
         session.commit()
 
     screened_titles: list[str] = []
@@ -168,19 +167,10 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
                 model="test",
             )
 
-        async def screen_with_metadata(
-            self, paper: Paper, _topics: object
-        ) -> GenerationResult:
+        async def screen_with_metadata(self, paper: Paper, _topics: object) -> GenerationResult:
             screened_titles.append(paper.title)
             return GenerationResult(
-                data=ScreeningResult(
-                    relevant=True,
-                    relevance_score=80,
-                    reason="Relevant after reading the abstract",
-                    matched_topics=[direction],
-                    key_contributions=[],
-                    tags=[],
-                ),
+                data=ScreeningResult(score=80),
                 transport="responses",
                 provider="test",
                 model="test",
@@ -250,7 +240,12 @@ async def test_provider_failure_stops_the_pipeline(
             "Settings",
             (),
             {
-                "provider": ProviderSettings(api_key="test"),
+                "providers": StageProviders(
+                    prefilter=ProviderSettings(api_key="test"),
+                    screening=ProviderSettings(api_key="test"),
+                    deep=ProviderSettings(api_key="test"),
+                    synthesis=ProviderSettings(api_key="test"),
+                ),
                 "deep_analysis_limit": 0,
                 "deep_analysis_threshold": 90,
                 "prefilter_batch_size": 30,

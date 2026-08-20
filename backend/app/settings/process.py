@@ -99,7 +99,7 @@ class ProcessSettings(BaseSettings):
     # Persistent application data.
     data_dir: Path = Path("data")
 
-    # Model provider settings applied at process startup.
+    # Environment fallback shared by stages without a saved model connection.
     provider: ProviderSettings = Field(default_factory=ProviderSettings)
 
     # Optional read-only Codex login file mounted into the process.

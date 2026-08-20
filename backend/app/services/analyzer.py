@@ -9,10 +9,7 @@ from typing import Any, Literal
 
 from ..models import Paper, Topic
 from ..schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
-from .directions.matching import (
-    canonical_requested_direction_names,
-    terms,
-)
+from .directions.matching import terms
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompt_catalog import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,
@@ -32,14 +29,13 @@ class AnalysisBudget:
     max_fulltext_chars: int
     max_pdf_pages: int
     prefilter_output_tokens: int
-    screening_output_tokens: int
     deep_output_tokens: int
 
 
 ANALYSIS_BUDGETS: dict[str, AnalysisBudget] = {
-    "economy": AnalysisBudget("economy", "经济", 16_000, 12, 900, 900, 2_000),
-    "balanced": AnalysisBudget("balanced", "平衡", 30_000, 25, 1_200, 1_200, 3_500),
-    "deep": AnalysisBudget("deep", "深度", 45_000, 40, 1_600, 1_600, 5_000),
+    "economy": AnalysisBudget("economy", "经济", 16_000, 12, 900, 2_000),
+    "balanced": AnalysisBudget("balanced", "平衡", 30_000, 25, 1_200, 3_500),
+    "deep": AnalysisBudget("deep", "深度", 45_000, 40, 1_600, 5_000),
 }
 
 
@@ -79,19 +75,21 @@ def _xml_text(value: object) -> str:
 class PaperAnalyzer:
     def __init__(
         self,
-        adapter: StructuredModelAdapter,
+        prefilter_adapter: StructuredModelAdapter,
+        screening_adapter: StructuredModelAdapter,
+        deep_adapter: StructuredModelAdapter,
         *,
         fulltext_fetcher: FullTextFetcher | None = None,
         budget_mode: str = "balanced",
         prompt_template_id: str = DEFAULT_PROMPT_TEMPLATE_ID,
-        screening_prompt: str | None = None,
         deep_analysis_prompt: str | None = None,
     ) -> None:
-        self.adapter = adapter
+        self.prefilter_adapter = prefilter_adapter
+        self.screening_adapter = screening_adapter
+        self.deep_adapter = deep_adapter
         self.budget = analysis_budget(budget_mode)
         selected_prompt = prompt_template(prompt_template_id)
         self.prompt_template_id = selected_prompt.id
-        self.screening_prompt = str(screening_prompt or selected_prompt.screening_prompt).strip()
         self.deep_analysis_prompt = str(
             deep_analysis_prompt or selected_prompt.deep_analysis_prompt
         ).strip()
@@ -117,7 +115,7 @@ class PaperAnalyzer:
             f"<followed_topics>\n{_xml_text(_topic_context(topics))}\n</followed_topics>\n\n"
             f"<papers>\n{'\n'.join(paper_blocks)}\n</papers>"
         )
-        generated = await self.adapter.generate_json_with_metadata(
+        generated = await self.prefilter_adapter.generate_json_with_metadata(
             system_prompt=PREFILTER_SYSTEM_PROMPT,
             user_prompt=prompt,
             response_model=PrefilterResult,
@@ -134,28 +132,20 @@ class PaperAnalyzer:
     ) -> GenerationResult[ScreeningResult]:
         topics = list(topics)
         prompt = (
-            f"<analysis_preferences>\n{_xml_text(self.screening_prompt)}\n"
-            f"</analysis_preferences>\n\n"
             f"<followed_topics>\n关注标签：\n{_xml_text(_topic_context(topics))}\n"
             f"</followed_topics>\n\n"
             f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
             f"分类：{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
             f"摘要：{_xml_text(_paper_value(paper, 'abstract'))}\n</paper_data>"
         )
-        generated = await self.adapter.generate_json_with_metadata(
+        generated = await self.screening_adapter.generate_json_with_metadata(
             system_prompt=SCREENING_SYSTEM_PROMPT,
             user_prompt=prompt,
             response_model=ScreeningResult,
             schema_name="paper_screening",
-            max_output_tokens=self.budget.screening_output_tokens,
+            max_output_tokens=64,
         )
         generated.prompt_metadata = self.prompt_metadata("screening")
-        verified_topics = canonical_requested_direction_names(
-            generated.data.matched_topics,
-            topics,
-            relevant=generated.data.relevant,
-        )
-        generated.data = generated.data.model_copy(update={"matched_topics": verified_topics})
         return generated
 
     async def deep_analyze_with_metadata(
@@ -189,7 +179,7 @@ class PaperAnalyzer:
             f"分析文本来源：{source_label}{'（已截断）' if fulltext.truncated else ''}\n\n"
             f"论文文本：\n{_xml_text(source_text)}\n</paper_data>"
         )
-        result = await self.adapter.generate_json_with_metadata(
+        result = await self.deep_adapter.generate_json_with_metadata(
             system_prompt=DEEP_ANALYSIS_SYSTEM_PROMPT,
             user_prompt=prompt,
             response_model=DeepAnalysisResult,
@@ -202,7 +192,6 @@ class PaperAnalyzer:
     def prompt_metadata(self, stage: Literal["prefilter", "screening", "deep"]) -> dict[str, Any]:
         return analysis_prompt_metadata(
             self.prompt_template_id,
-            self.screening_prompt,
             self.deep_analysis_prompt,
             stage,
         )

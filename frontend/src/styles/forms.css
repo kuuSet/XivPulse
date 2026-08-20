@@ -362,6 +362,14 @@
 .budget-mode-list strong { color: #2e463c; font-size: 11px; }
 .budget-mode-list small { min-height: 37px; margin-top: 6px; color: var(--muted); font-size: 8px; line-height: 1.55; }
 
+.stage-provider-list { display: grid; gap: 12px; }
+.stage-provider-card { display: grid; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: #fafbfa; }
+.stage-provider-card > header span { color: #2e463c; font-size: 12px; font-weight: 700; }
+.stage-provider-card > header p { margin: 3px 0 0; color: var(--muted); font-size: 9px; }
+.stage-provider-card .budget-mode-list label { padding: 9px 11px; }
+.stage-provider-card .budget-mode-list small { min-height: 0; }
+.stage-provider-card .connection-row { margin-top: 0; }
+
 .prompt-template-toolbar {
   display: grid;
   grid-template-columns: minmax(170px, 0.7fr) minmax(220px, 1.3fr) auto;

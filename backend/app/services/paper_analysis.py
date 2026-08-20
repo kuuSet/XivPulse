@@ -45,10 +45,11 @@ async def analyze_papers(
     budget_mode = settings.analysis_budget
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
-        create_model_adapter(settings.provider),
+        create_model_adapter(settings.providers.prefilter),
+        create_model_adapter(settings.providers.screening),
+        create_model_adapter(settings.providers.deep),
         budget_mode=budget_mode,
         prompt_template_id=prompt_settings["prompt_template_id"],
-        screening_prompt=prompt_settings["screening_prompt"],
         deep_analysis_prompt=prompt_settings["deep_analysis_prompt"],
     )
     date_condition = _date_condition(report_date)
@@ -148,9 +149,9 @@ async def analyze_papers(
         timestamp = utcnow()
         with session_scope() as db:
             stored = db.get(PaperMatch, match.id)
-            stored.matched_topics_json = result.matched_topics
-            stored.screening_relevance_score = result.relevance_score
-            stored.reason = result.reason
+            stored.matched_topics_json = []
+            stored.screening_relevance_score = result.score
+            stored.reason = ""
             stored.screened_at = timestamp
             db.add(
                 Analysis(
@@ -162,10 +163,7 @@ async def analyze_papers(
                     model=generated.model,
                     transport=generated.transport,
                     content_source="abstract",
-                    summary=result.reason,
-                    verdict="relevant" if result.relevant else "not_relevant",
-                    relevance_score=result.relevance_score,
-                    tags_json=result.tags,
+                    relevance_score=result.score,
                     payload_json={
                         **result.model_dump(),
                         "_analysis_prompt": generated.prompt_metadata,
@@ -178,7 +176,7 @@ async def analyze_papers(
         update_job_progress(
             job_id,
             progress=70,
-            message=f"摘要评分 {screened}/{len(pending_screening)}",
+            message=f"摘要粗排 {screened}/{len(pending_screening)}",
             details={"screened": screened, "screening_total": len(pending_screening)},
         )
 

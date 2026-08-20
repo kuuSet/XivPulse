@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -18,6 +18,21 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
+ModelStage = Literal["prefilter", "screening", "deep", "synthesis"]
+
+
+class StageProviders(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    prefilter: ProviderSettings
+    screening: ProviderSettings
+    deep: ProviderSettings
+    synthesis: ProviderSettings
+
+    def for_stage(self, stage: ModelStage) -> ProviderSettings:
+        return getattr(self, stage)
+
+
 class RuntimeSettings(BaseSettings):
     # Defines how Pydantic merges environment, database, and default values.
     model_config = SettingsConfigDict(
@@ -27,8 +42,8 @@ class RuntimeSettings(BaseSettings):
         str_strip_whitespace=True,
     )
 
-    # Effective model provider settings.
-    provider: ProviderSettings
+    # Effective model connection for each LLM stage.
+    providers: StageProviders
 
     # Interface base font size in points.
     ui_font_size_pt: float = Field(default=12.0, ge=10.0, le=16.0, multiple_of=0.5)
@@ -53,7 +68,6 @@ class RuntimeSettings(BaseSettings):
 
     # Analysis prompt selection and overrides.
     prompt_template_id: str = "balanced-review"
-    screening_prompt: str | None = None
     deep_analysis_prompt: str | None = None
 
     # Method catalog customization.
@@ -98,25 +112,36 @@ class RuntimeSettings(BaseSettings):
     def prompt_values(self) -> dict[str, Any]:
         return {
             "prompt_template_id": self.prompt_template_id,
-            "screening_prompt": self.screening_prompt,
             "deep_analysis_prompt": self.deep_analysis_prompt,
         }
 
 
-def _effective_provider(values: dict[str, Any], process: ProcessSettings) -> ProviderSettings:
+def _effective_provider(
+    values: dict[str, Any], process: ProcessSettings, stage: ModelStage
+) -> ProviderSettings:
     configured = process.provider
+    stage_values = dict(values.get("providers", {}).get(stage, {}))
     return ProviderSettings(
-        model_source=values.get("model_source") or configured.model_source,
-        provider_name=values.get("provider_name") or configured.provider_name,
-        model_name=values.get("model_name") or configured.model_name,
-        api_base_url=values.get("api_base_url") or configured.api_base_url,
-        api_protocol=configured.api_protocol,
-        api_key=values.get("api_key") or configured.api_key,
+        model_source=stage_values.get("model_source") or configured.model_source,
+        provider_name=stage_values.get("provider_name") or configured.provider_name,
+        model_name=stage_values.get("model_name") or configured.model_name,
+        api_base_url=stage_values.get("api_base_url") or configured.api_base_url,
+        api_protocol=stage_values.get("api_protocol") or configured.api_protocol,
+        api_key=stage_values.get("api_key") or configured.api_key,
         api_timeout_seconds=configured.api_timeout_seconds,
-        codex_model=values.get("codex_model") or configured.codex_model,
+        codex_model=stage_values.get("codex_model") or configured.codex_model,
         codex_reasoning_effort=(
-            values.get("codex_reasoning_effort") or configured.codex_reasoning_effort
+            stage_values.get("codex_reasoning_effort") or configured.codex_reasoning_effort
         ),
+    )
+
+
+def _effective_providers(values: dict[str, Any], process: ProcessSettings) -> StageProviders:
+    return StageProviders(
+        **{
+            stage: _effective_provider(values, process, stage)
+            for stage in ("prefilter", "screening", "deep", "synthesis")
+        }
     )
 
 
@@ -127,10 +152,16 @@ def load_runtime_settings(
 ) -> RuntimeSettings:
     process = process or get_process_settings()
     values = load_setting_values(db)
-    return RuntimeSettings(provider=_effective_provider(values, process), **values)
+    runtime_values = {key: value for key, value in values.items() if key != "providers"}
+    return RuntimeSettings(
+        providers=_effective_providers(values, process),
+        **runtime_values,
+    )
 
 
 __all__ = [
     "RuntimeSettings",
+    "ModelStage",
+    "StageProviders",
     "load_runtime_settings",
 ]
