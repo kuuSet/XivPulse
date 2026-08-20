@@ -83,8 +83,8 @@ class CodexAdapter:
                 await process.communicate()
                 raise ProviderError("Codex CLI timed out") from exc
             if process.returncode != 0:
-                detail = stderr.decode("utf-8", errors="replace").strip().splitlines()
-                suffix = f": {detail[-1][:500]}" if detail else ""
+                detail = " ".join(stderr.decode("utf-8", errors="replace").split())
+                suffix = f": {detail[-2000:]}" if detail else ""
                 raise ProviderError(f"Codex CLI failed with exit code {process.returncode}{suffix}")
             try:
                 data = response_model.model_validate_json(output_path.read_text(encoding="utf-8"))

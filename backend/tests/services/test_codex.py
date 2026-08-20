@@ -18,9 +18,16 @@ class _Answer(BaseModel):
 
 
 class _Process:
-    def __init__(self, output_path: Path, *, returncode: int = 0) -> None:
+    def __init__(
+        self,
+        output_path: Path,
+        *,
+        returncode: int = 0,
+        error: bytes = b"login required",
+    ) -> None:
         self.output_path = output_path
         self.returncode = returncode
+        self.error = error
         self.input: bytes | None = None
         self.killed = False
 
@@ -29,7 +36,7 @@ class _Process:
         if self.returncode == 0:
             self.output_path.write_text('{"ok": true}', encoding="utf-8")
             return b"", b""
-        return b"", b"login required"
+        return b"", self.error
 
     def kill(self) -> None:
         self.killed = True
@@ -102,13 +109,17 @@ async def test_codex_failure_is_returned_without_retry(
         nonlocal calls
         calls += 1
         output_path = Path(command[command.index("--output-last-message") + 1])
-        return _Process(output_path, returncode=1)
+        return _Process(
+            output_path,
+            returncode=1,
+            error=b'ERROR: unexpected status 429: {\n  "error": "rate limited"\n}',
+        )
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     provider = ProviderSettings(model_source="codex")
     process_settings = ProcessSettings(data_dir=tmp_path, provider=provider)
 
-    with pytest.raises(ProviderError, match="login required"):
+    with pytest.raises(ProviderError, match="unexpected status 429.*rate limited"):
         await CodexAdapter(provider, process=process_settings).generate_json_with_metadata(
             system_prompt="System rules",
             user_prompt="Paper data",
