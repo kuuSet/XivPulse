@@ -73,16 +73,13 @@ export interface Paper {
   pdf_url: string
   html_url?: string | null
   screening_relevance_score?: number | null
+  prefilter_decision?: 'relevant' | 'uncertain' | 'irrelevant' | null
   effective_score: number
-  score_source: 'semantic' | 'ai'
   quality_score?: number | null
   novelty_score?: number | null
   priority?: string
   match_reasons: string[]
   matched_topics?: string[]
-  semantic_score?: number | null
-  semantic_candidate_topics?: Array<{ name: string; score: number }>
-  matched_keywords?: string[]
   analysis_tags?: string[]
   summary?: string | null
   why_recommended?: string | null

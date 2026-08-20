@@ -14,7 +14,6 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
     abs_url: `https://arxiv.org/abs/2608.100${day}`,
     pdf_url: `https://arxiv.org/pdf/2608.100${day}`,
     effective_score: 90,
-    score_source: 'ai',
     match_reasons: ['Test topic'],
   })
   await page.route('**/api/dashboard*', async (route) => {
@@ -27,7 +26,8 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
       body: JSON.stringify({
         date: date ?? '2026-08-14',
         total_papers: 1,
-        semantic_candidate_papers: 1,
+        prefiltered_papers: 1,
+        prefilter_kept_papers: 1,
         screened_papers: 1,
         high_priority_papers: 1,
         items: [paper(day)],
@@ -47,8 +47,10 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
           date: `2026-08-${day}`,
           status: 'completed',
           fetched: 1,
-          candidates: 1,
+          prefiltered: 1,
+          prefilter_kept: 1,
           screened: 1,
+          pending_prefilter: 0,
           pending_screening: 0,
           analyzed: 0,
           message: '任务完整完成',
@@ -93,7 +95,6 @@ test('opening a paper preserves the workspace position and resets only the reade
     abs_url: `https://arxiv.org/abs/2608.2000${id}`,
     pdf_url: `https://arxiv.org/pdf/2608.2000${id}`,
     effective_score: 90 - id,
-    score_source: 'ai',
     match_reasons: ['Test topic'],
   })
   await page.route('**/api/dashboard*', async (route) => {
@@ -103,7 +104,8 @@ test('opening a paper preserves the workspace position and resets only the reade
       body: JSON.stringify({
         date: '2026-08-14',
         total_papers: 2,
-        semantic_candidate_papers: 2,
+        prefiltered_papers: 2,
+        prefilter_kept_papers: 2,
         screened_papers: 2,
         high_priority_papers: 2,
         items: [paper(1), paper(2)],

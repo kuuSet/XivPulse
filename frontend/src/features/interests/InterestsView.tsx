@@ -112,7 +112,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       return
     }
     const { slug: _slug, group: _group, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
-    setInterests({ ...interests, topics: [...interests.topics, { ...topic, description: catalogSemanticDescription(item), query: '' }] })
+    setInterests({ ...interests, topics: [...interests.topics, { ...topic, description: catalogDescription(item), query: '' }] })
     setCatalogQuery('')
     setDescriptionDraft('')
   }
@@ -228,10 +228,10 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       </section>
       <div className="form-layout interests-form-layout">
         <div className="form-main">
-          <FormSection title="关注标签" description="研究方向决定论文的语义召回范围。">
+          <FormSection title="关注标签" description="标签名称和英文描述共同决定 LLM 的筛选范围。">
             <div className="interest-tag-editor">
               <div className="interest-tags">
-                {interests.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" title={topic.description || '尚未填写语义描述'} key={topic.id ?? `new-${index}`}>
+                {interests.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" title={topic.description || '尚未填写标签描述'} key={topic.id ?? `new-${index}`}>
                   {englishDirectionLabel(topic)}
                   <button type="button" onClick={() => { setEditingTopicIndex(index); setDescriptionDraft(topic.description) }} aria-label={`编辑 ${englishDirectionLabel(topic)}`} title="编辑描述"><Pencil size={12} /></button>
                   <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
@@ -264,7 +264,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setCatalogQuery(''); setDescriptionDraft('') }}>
         <div className="interest-picker">
           <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (pickerKind !== 'topic') addNamedWatch() } }} placeholder={pickerKind === 'topic' ? 'Search presets or type a new interest' : pickerKind === 'author' ? 'Type an author name' : 'Type an organization name'} />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
-          {pickerKind === 'topic' && catalogQuery.trim() && !catalog?.items.some((item) => [item.name, ...item.aliases].some((label) => directionIdentity(label) === directionIdentity(catalogQuery))) && <label className="field interest-description-field"><span>Semantic description (English)</span><textarea value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>This text is embedded together with the title. Be specific enough to exclude adjacent fields.</small></label>}
+          {pickerKind === 'topic' && catalogQuery.trim() && !catalog?.items.some((item) => [item.name, ...item.aliases].some((label) => directionIdentity(label) === directionIdentity(catalogQuery))) && <label className="field interest-description-field"><span>Tag description (English)</span><textarea value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>The LLM reads this text during title prefiltering and abstract scoring. Be specific enough to exclude adjacent fields.</small></label>}
           {catalogQuery.trim() && <button className={`interest-custom-option ${pickerKind === 'topic' && !isEnglishDirectionLabel(catalogQuery) ? 'invalid' : ''}`} type="button" onClick={pickerKind === 'topic' ? addCustomTopic : addNamedWatch}>
             <Plus size={15} />
             <span><strong>Add “{catalogQuery.trim()}”</strong><small>{pickerKind === 'topic' ? isEnglishDirectionLabel(catalogQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语' : pickerKind === 'author' ? '使用论文中的完整作者姓名进行精确匹配' : '使用完整机构词组进行匹配'}</small></span>
@@ -278,7 +278,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       </Modal>}
       {editingTopicIndex !== null && <Modal title={`编辑 ${englishDirectionLabel(interests.topics[editingTopicIndex])}`} onClose={() => { setEditingTopicIndex(null); setDescriptionDraft('') }}>
         <div className="interest-picker">
-          <label className="field interest-description-field"><span>Semantic description (English)</span><textarea autoFocus value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>标题和这段描述会共同决定语义召回范围。</small></label>
+          <label className="field interest-description-field"><span>Tag description (English)</span><textarea autoFocus value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>标题预筛和摘要评分都会读取这段描述。</small></label>
           <button className="button primary" type="button" onClick={saveTopicDescription}>保存描述</button>
         </div>
       </Modal>}
@@ -309,7 +309,7 @@ function isEnglishDescription(value: string) {
   return value.trim().length >= 12 && /[A-Za-z]/.test(value) && !/[\u3400-\u9fff]/.test(value)
 }
 
-function catalogSemanticDescription(item: DirectionCatalogItem) {
+function catalogDescription(item: DirectionCatalogItem) {
   const terms = Array.from(new Set([...item.keywords, ...item.context_keywords])).slice(0, 12)
   return `Research on ${englishDirectionLabel(item)}${terms.length ? `, including ${terms.join(', ')}` : ''}.`
 }

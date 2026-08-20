@@ -10,14 +10,12 @@ from sqlalchemy.orm import Session
 
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..services.prompt_catalog import resolve_prompt_settings
-from ..services.semantic import get_semantic_services
-from ..settings import get_process_settings, load_runtime_settings
+from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 
 
 def _settings_wire(db: Session) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    semantic = get_process_settings().semantic
     provider_settings = settings.provider
     bind = db.get_bind()
     database_path: str | None = None
@@ -40,16 +38,7 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         "schedule_time": settings.schedule_time,
         "schedule_timezone": settings.schedule_timezone,
         "arxiv_fetch_limit": settings.arxiv_fetch_limit,
-        "screening_batch_size": settings.screening_batch_size,
-        "semantic_recall_mode": settings.semantic_recall_mode,
-        "semantic_recall_presets": {
-            mode: {"semantic_threshold": threshold}
-            for mode, threshold in semantic.thresholds.items()
-        },
-        "embedding": {
-            **get_semantic_services().model.status(),
-            "rescore": get_semantic_services().rescorer.status(db),
-        },
+        "prefilter_batch_size": settings.prefilter_batch_size,
         "deep_analysis_limit": settings.deep_analysis_limit,
         "deep_analysis_threshold": settings.deep_analysis_threshold,
         "analysis_budget": settings.analysis_budget,

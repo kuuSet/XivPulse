@@ -43,8 +43,6 @@ SYNTHESIS_OUTPUT_TOKENS: dict[str, int] = {
 _SOURCE_KEYS = (
     "report_date",
     "coverage",
-    "incomplete",
-    "screening_status",
     "executive_summary",
     "research_situation",
     "topic_insights",

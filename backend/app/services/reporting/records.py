@@ -1,4 +1,3 @@
-
 """Deterministic direction trends, research maps, and daily research reports.
 
 The analytics in this module deliberately stay local and model-free.  They
@@ -23,12 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ...models import Analysis, Paper, PaperMatch, Profile, Topic
-from ...settings import get_process_settings, load_runtime_settings
-from ..directions.matching import canonical_requested_direction_names, direction_evidence
-from ..directions.taxonomy import (
-    direction_taxonomy_fingerprint,
-    has_current_direction_attribution,
-)
+from ..directions.matching import canonical_requested_direction_names
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_TREND_LIMIT = 12
@@ -212,67 +206,19 @@ def _labels(
     match: PaperMatch,
     *,
     topics_by_key: Mapping[str, _Label],
-    topics_by_id: Mapping[int, _Label],
     configured_topics: Sequence[Topic],
-    profile_id: int,
-    taxonomy_fingerprint: str,
 ) -> tuple[_Label, ...]:
+    """Return current followed topics selected by abstract LLM screening."""
 
-    """Return only current, enabled followed topics matched by this paper.
-
-    ``matched_topics_json`` is a historical snapshot and can contain model-created
-    phrases, special match reasons, or topics later removed from the followed list. A
-    bare ``topic_id`` also has no evidence or taxonomy provenance.  The current
-    taxonomy plus current keyword or stamped-screening evidence is therefore the
-    authority for analytics labels.
-    """
-
-    result: list[_Label] = []
-    seen: set[str] = set()
-    candidates: list[_Label] = []
-
-    searchable = f"{match.paper.title}\n{match.paper.abstract}"
-    for topic in configured_topics:
-        label = topics_by_id.get(topic.id)
-        if label is not None and direction_evidence(searchable, topic).matched:
-            candidates.append(label)
-
-    screening = [
-        analysis
-        for analysis in match.paper.analyses
-        if analysis.profile_id == profile_id
-        and analysis.kind == "screening"
-        and analysis.status == "completed"
-    ]
-    if screening:
-        latest_screening = max(
-            screening,
-            key=lambda item: (_as_utc(item.created_at), item.id or 0),
-        )
-        screening_payload = _payload(latest_screening)
-        if has_current_direction_attribution(screening_payload, taxonomy_fingerprint):
-            payload_topics = canonical_requested_direction_names(
-                _payload_list(screening_payload, "matched_topics"),
-                configured_topics,
-                relevant=screening_payload.get("relevant") is True,
-            )
-            for raw in payload_topics:
-                matched_topic = topics_by_key.get(_key(_clean_phrase(raw, max_length=120)))
-                if matched_topic is not None:
-                    candidates.append(matched_topic)
-    for label in candidates:
-        if label.key in seen:
-            continue
-        seen.add(label.key)
-        result.append(label)
-    return tuple(result)
+    names = canonical_requested_direction_names(
+        match.matched_topics,
+        configured_topics,
+        relevant=True,
+    )
+    return tuple(topics_by_key[_key(name)] for name in names)
 
 
 def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
-    settings = load_runtime_settings(session)
-    semantic_threshold = get_process_settings().semantic.threshold(
-        settings.semantic_recall_mode
-    )
     profile = session.scalar(
         select(Profile)
         .where(Profile.id == profile_id)
@@ -280,9 +226,7 @@ def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
         .execution_options(populate_existing=True)
     )
     configured_topics = profile.topics if profile is not None else []
-    taxonomy_fingerprint = direction_taxonomy_fingerprint(configured_topics)
     topics_by_key: dict[str, _Label] = {}
-    topics_by_id: dict[int, _Label] = {}
     for topic in configured_topics:
         if not topic.enabled:
             continue
@@ -290,18 +234,16 @@ def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
         normalized = _key(name)
         if not name or not normalized:
             continue
-        label = topics_by_key.setdefault(
+        topics_by_key.setdefault(
             normalized,
             _Label(normalized, name, "followed_topic", tuple(topic.keywords)),
         )
-        if topic.id is not None:
-            topics_by_id[topic.id] = label
 
     matches = session.scalars(
         select(PaperMatch)
         .where(
             PaperMatch.profile_id == profile_id,
-            PaperMatch.semantic_score >= semantic_threshold,
+            PaperMatch.screened_at.is_not(None),
         )
         .options(selectinload(PaperMatch.paper).selectinload(Paper.analyses))
         .execution_options(populate_existing=True)
@@ -321,10 +263,7 @@ def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
                 labels=_labels(
                     match,
                     topics_by_key=topics_by_key,
-                    topics_by_id=topics_by_id,
                     configured_topics=[topic for topic in configured_topics if topic.enabled],
-                    profile_id=profile_id,
-                    taxonomy_fingerprint=taxonomy_fingerprint,
                 ),
             )
         )
@@ -445,7 +384,6 @@ def _period_payload(
         "previous_paper_count": len(previous),
         "candidate_paper_count": candidate_count,
         "previous_candidate_paper_count": previous_candidate_count,
-
         "direction_attributed_paper_count": len(current),
         "previous_direction_attributed_paper_count": len(previous),
         "relevant_paper_count": len(current),

@@ -57,7 +57,7 @@ interface DailyReadingQueueItem {
 }
 
 interface DailyAiSynthesis {
-  status: 'ready' | 'not_configured' | 'insufficient_data' | 'disabled' | 'error' | string
+  status: 'ready' | 'not_configured' | 'insufficient_data' | 'disabled' | string
   headline?: string
   overall_assessment?: string
   core_threads?: Array<{
@@ -77,7 +77,6 @@ interface DailyAiSynthesis {
   budget_mode?: string
   source_hash?: string
   stale?: boolean
-  last_error?: string
   usage?: {
     available: boolean
     input_tokens: number | null
@@ -98,9 +97,12 @@ export interface DailyReport {
   generated_at?: string
   updated_at?: string
   version?: number
-  incomplete?: boolean
-  screening_status?: { total: number; completed: number; failed: number; batches: number }
   coverage?: {
+    fetched?: number
+    prefiltered?: number
+    prefilter_kept?: number
+    screened?: number
+    deep_analyzed?: number
     paper_count: number
     candidate_paper_count?: number
     unattributed_candidate_count?: number
@@ -112,9 +114,6 @@ export interface DailyReport {
     analysis_coverage_percent?: number
     deep_analysis_coverage_percent?: number
     high_score_paper_count?: number
-    screening_queue_total?: number
-    screening_completed?: number
-    screening_failed?: number
   }
   executive_summary: string
   ai_synthesis?: DailyAiSynthesis

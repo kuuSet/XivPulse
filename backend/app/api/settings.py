@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import re
 from typing import Any, Literal
 from uuid import uuid4
@@ -19,9 +18,8 @@ from ..services.prompt_catalog import (
 )
 from ..services.reporting.records import current_date_in_timezone
 from ..services.reporting.service import persist_daily_report, send_daily_report_email
-from ..services.semantic import get_semantic_services
 from ..services.state import active_profile
-from ..settings import RecallMode, delete_setting, load_runtime_settings, set_setting
+from ..settings import delete_setting, load_runtime_settings, set_setting
 from .system_views import _settings_wire
 
 router = APIRouter()
@@ -37,9 +35,7 @@ class SettingsPayload(BaseModel):
     api_key: str | None = Field(default=None, max_length=10000)
 
     # Interface display preferences.
-    ui_font_size_pt: float | None = Field(
-        default=None, ge=10.0, le=16.0, multiple_of=0.5
-    )
+    ui_font_size_pt: float | None = Field(default=None, ge=10.0, le=16.0, multiple_of=0.5)
 
     # Daily job schedule.
     schedule_time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -48,9 +44,8 @@ class SettingsPayload(BaseModel):
     # arXiv synchronization limits.
     arxiv_fetch_limit: int | None = Field(default=None, ge=1, le=1000)
 
-    # Candidate screening and semantic recall.
-    screening_batch_size: int | None = Field(default=None, ge=0, le=500)
-    semantic_recall_mode: RecallMode | None = None
+    # Number of paper titles sent in one prefilter request.
+    prefilter_batch_size: int | None = Field(default=None, ge=1, le=500)
 
     # Full-text analysis selection.
     deep_analysis_limit: int | None = Field(default=None, ge=0, le=100)
@@ -159,7 +154,7 @@ async def test_provider(
     if not key:
         return {
             "ok": False,
-            "message": "请先配置 API Key。未配置时只运行本地语义匹配。",
+            "message": "请先配置 API Key。",
             "provider_name": settings.provider.provider_name,
             "model": model_name,
             "transport": settings.provider.api_protocol,
@@ -187,11 +182,6 @@ async def test_provider(
             "model": model_name,
             "transport": "http",
         }
-
-
-@router.post("/api/settings/embedding/test")
-async def test_embedding_model() -> dict[str, Any]:
-    return await asyncio.to_thread(get_semantic_services().model.status, warm=True)
 
 
 @router.post("/api/settings/email/test")

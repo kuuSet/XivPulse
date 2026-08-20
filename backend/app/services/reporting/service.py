@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ...database import SessionLocal, session_scope
@@ -16,16 +16,16 @@ from ...models import (
     DailyResearchReport,
     Digest,
     EmailDelivery,
+    Paper,
     PaperMatch,
     ReportSynthesisRun,
-    ScreeningQueueItem,
     utcnow,
 )
-from ...settings import get_process_settings, load_runtime_settings
+from ...settings import load_runtime_settings
 from ..jobs import update_job_progress
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ..methods.catalog import clean_custom_methods
-from ..provider import OpenAICompatibleAdapter, ProviderError
+from ..provider import OpenAICompatibleAdapter
 from ..state import active_profile
 from .builder import build_daily_research_report
 from .records import current_date_in_timezone
@@ -48,20 +48,19 @@ def create_digest(digest_date: date | None = None) -> dict[str, Any]:
     with session_scope() as db:
         profile = active_profile(db)
         settings = load_runtime_settings(db)
-        semantic_threshold = get_process_settings().semantic.threshold(
-            settings.semantic_recall_mode
-        )
+        today = digest_date or current_date_in_timezone(settings.schedule_timezone)
+        start = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
+        end = datetime.combine(today, datetime.max.time(), tzinfo=UTC)
         matches = db.scalars(
             select(PaperMatch)
             .where(
                 PaperMatch.profile_id == profile.id,
-                PaperMatch.semantic_score >= semantic_threshold,
+                PaperMatch.screened_at.is_not(None),
+                PaperMatch.paper.has((Paper.published_at >= start) & (Paper.published_at <= end)),
             )
             .order_by(desc(PaperMatch.effective_score_expression()))
             .limit(20)
         ).all()
-        timezone_name = settings.schedule_timezone
-        today = digest_date or current_date_in_timezone(timezone_name)
         digest = db.scalar(
             select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == today)
         )
@@ -118,9 +117,7 @@ def persist_daily_report(
         timezone_name=timezone_name,
         highlight_limit=min(max_papers, 10),
         reading_queue_limit=max_papers,
-        custom_method_terms=clean_custom_methods(
-            list(load_runtime_settings(db).custom_methods)
-        ),
+        custom_method_terms=clean_custom_methods(list(load_runtime_settings(db).custom_methods)),
     )
     encoded = jsonable_encoder(report)
     if not isinstance(encoded, dict):
@@ -149,7 +146,7 @@ def persist_daily_report(
 def create_daily_report(
     *,
     report_date: date | None = None,
-    screening_status: dict[str, Any] | None = None,
+    pipeline_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Refresh one deterministic report after the daily analysis pipeline."""
 
@@ -164,26 +161,19 @@ def create_daily_report(
             timezone_name=timezone_name,
             refresh=True,
         )
-        if screening_status:
+        if pipeline_status:
             payload = snapshot.payload
             coverage = dict(payload.get("coverage") or {})
             coverage.update(
                 {
-                    "screening_queue_total": int(
-                        screening_status.get("screening_queue_total", 0) or 0
-                    ),
-                    "screening_completed": int(screening_status.get("screening_completed", 0) or 0),
-                    "screening_failed": int(screening_status.get("screening_failed", 0) or 0),
+                    "fetched": int(pipeline_status.get("fetched", 0) or 0),
+                    "prefiltered": int(pipeline_status.get("prefiltered", 0) or 0),
+                    "prefilter_kept": int(pipeline_status.get("prefilter_kept", 0) or 0),
+                    "screened": int(pipeline_status.get("screened", 0) or 0),
+                    "deep_analyzed": int(pipeline_status.get("analyzed", 0) or 0),
                 }
             )
             payload["coverage"] = coverage
-            payload["incomplete"] = bool(screening_status.get("report_incomplete", False))
-            payload["screening_status"] = {
-                "total": coverage["screening_queue_total"],
-                "completed": coverage["screening_completed"],
-                "failed": coverage["screening_failed"],
-                "batches": int(screening_status.get("screening_batches", 0) or 0),
-            }
             snapshot.payload_json = payload
             snapshot.updated_at = utcnow()
         return {
@@ -197,7 +187,6 @@ def _synthesis_state(
     *,
     status_name: str,
     source_hash: str,
-    error: str | None = None,
 ) -> dict[str, Any]:
     state = dict(previous or {})
     previous_hash = str(state.get("source_hash") or "")
@@ -208,10 +197,6 @@ def _synthesis_state(
             "stale": bool(previous_hash and previous_hash != source_hash),
         }
     )
-    if error:
-        state["last_error"] = error
-    else:
-        state.pop("last_error", None)
     return state
 
 
@@ -274,93 +259,57 @@ async def synthesize_daily_report(
                 "report_date": report_date.isoformat(),
             }
         budget_mode = settings.analysis_budget
-        run = ReportSynthesisRun(
-            profile_id=profile.id,
-            report_id=snapshot.id,
-            report_date=report_date,
-            status="running",
-            source_hash=source_hash,
-            provider=provider_settings.provider_name,
-            model=provider_settings.model_name,
-            transport=provider_settings.api_protocol,
-            budget_mode=budget_mode,
-        )
-        db.add(run)
-        db.flush()
-        run_id = run.id
+        profile_id = profile.id
+        report_id = snapshot.id
 
-    try:
-        generated = await generate_daily_report_synthesis(
-            OpenAICompatibleAdapter(provider_settings),
-            report,
-            budget_mode=budget_mode,
+    generated = await generate_daily_report_synthesis(
+        OpenAICompatibleAdapter(provider_settings),
+        report,
+        budget_mode=budget_mode,
+    )
+    usage = generated.usage
+    generated_at = utcnow()
+    synthesis = {
+        "status": "ready",
+        **generated.data.model_dump(),
+        "generated_at": generated_at.isoformat(),
+        "provider": generated.provider,
+        "model": generated.model,
+        "transport": generated.transport,
+        "budget_mode": budget_mode,
+        "source_hash": source_hash,
+        "stale": False,
+        "usage": {
+            "available": usage.available,
+            "input_tokens": usage.input_tokens,
+            "cached_input_tokens": usage.cached_input_tokens,
+            "output_tokens": usage.output_tokens,
+            "reasoning_tokens": usage.reasoning_tokens,
+            "total_tokens": usage.total_tokens,
+        },
+    }
+    with session_scope() as db:
+        snapshot = db.execute(
+            select(DailyResearchReport).where(DailyResearchReport.id == report_id)
+        ).scalar_one()
+        db.add(
+            ReportSynthesisRun(
+                profile_id=profile_id,
+                report_id=report_id,
+                report_date=report_date,
+                source_hash=source_hash,
+                provider=generated.provider,
+                model=generated.model,
+                transport=generated.transport,
+                payload_json=synthesis,
+                **usage.analysis_fields(budget_mode),
+            )
         )
-        usage = generated.usage
-        generated_at = utcnow()
-        synthesis = {
-            "status": "ready",
-            **generated.data.model_dump(),
-            "generated_at": generated_at.isoformat(),
-            "provider": generated.provider,
-            "model": generated.model,
-            "transport": generated.transport,
-            "budget_mode": budget_mode,
-            "source_hash": source_hash,
-            "stale": False,
-            "usage": {
-                "available": usage.available,
-                "input_tokens": usage.input_tokens,
-                "cached_input_tokens": usage.cached_input_tokens,
-                "output_tokens": usage.output_tokens,
-                "reasoning_tokens": usage.reasoning_tokens,
-                "total_tokens": usage.total_tokens,
-            },
-        }
-        with session_scope() as db:
-            run = db.get(ReportSynthesisRun, run_id)
-            snapshot = db.get(DailyResearchReport, run.report_id) if run is not None else None
-            if run is None or snapshot is None:
-                raise RuntimeError("日报或研判记录在生成过程中被删除")
-            run.status = "ready"
-            run.transport = generated.transport
-            run.provider = generated.provider
-            run.model = generated.model
-            run.payload_json = synthesis
-            for key, value in usage.analysis_fields(budget_mode).items():
-                setattr(run, key, value)
-            payload = snapshot.payload
-            payload["ai_synthesis"] = synthesis
-            snapshot.payload_json = payload
-            snapshot.updated_at = generated_at
-        return {"report_synthesis_status": "ready", "report_date": report_date.isoformat()}
-    except Exception as exc:
-        LOG.exception("Daily report AI synthesis failed for %s", report_date)
-        safe_error = (
-            str(exc)[:500]
-            if isinstance(exc, ProviderError)
-            else "AI 综合研判生成失败，请检查模型配置或稍后重试"
-        )
-        with session_scope() as db:
-            run = db.get(ReportSynthesisRun, run_id)
-            if run is not None:
-                run.status = "failed"
-                run.error = safe_error
-                snapshot = db.get(DailyResearchReport, run.report_id)
-                if snapshot is not None:
-                    payload = snapshot.payload
-                    payload["ai_synthesis"] = _synthesis_state(
-                        previous,
-                        status_name="error",
-                        source_hash=source_hash,
-                        error=safe_error,
-                    )
-                    snapshot.payload_json = payload
-                    snapshot.updated_at = utcnow()
-        return {
-            "report_synthesis_status": "error",
-            "report_synthesis_error": safe_error,
-            "report_date": report_date.isoformat(),
-        }
+        payload = snapshot.payload
+        payload["ai_synthesis"] = synthesis
+        snapshot.payload_json = payload
+        snapshot.updated_at = generated_at
+    return {"report_synthesis_status": "ready", "report_date": report_date.isoformat()}
 
 
 async def send_daily_report_email(
@@ -421,14 +370,7 @@ async def send_daily_report_email(
             delivery.attempts += 1
             delivery_id = delivery.id
         try:
-            failure_count = int(dict(report.get("coverage") or {}).get("screening_failed", 0) or 0)
-            message = build_daily_message(
-                mail_settings,
-                report,
-                recipient,
-                incomplete=bool(report.get("incomplete", False)),
-                failure_count=failure_count,
-            )
+            message = build_daily_message(mail_settings, report, recipient)
             await asyncio.to_thread(deliver_message, mail_settings, message)
             with session_scope() as db:
                 delivery = db.get(EmailDelivery, delivery_id)
@@ -463,39 +405,8 @@ async def finalize_daily_stage(
 ) -> dict[str, Any]:
     update_job_progress(job_id, progress=88, message="正在重排推荐并保存当日研究日报")
     result.update(create_digest(pipeline_date))
-    result.update(create_daily_report(report_date=pipeline_date, screening_status=result))
+    result.update(create_daily_report(report_date=pipeline_date, pipeline_status=result))
     current_report_date = date.fromisoformat(str(result["report_date"]))
-    refreshed_report_dates: list[str] = []
-    for value in result.get("screening_report_dates", []):
-        selected_date = date.fromisoformat(str(value))
-        if selected_date == current_report_date:
-            continue
-        with SessionLocal() as db:
-            profile = active_profile(db)
-            status_rows = dict(
-                db.execute(
-                    select(ScreeningQueueItem.status, func.count(ScreeningQueueItem.id))
-                    .where(
-                        ScreeningQueueItem.profile_id == profile.id,
-                        ScreeningQueueItem.report_date == selected_date,
-                    )
-                    .group_by(ScreeningQueueItem.status)
-                ).all()
-            )
-        total = sum(int(count) for count in status_rows.values())
-        failed = int(status_rows.get("failed", 0))
-        create_daily_report(
-            report_date=selected_date,
-            screening_status={
-                "screening_queue_total": total,
-                "screening_completed": int(status_rows.get("completed", 0)),
-                "screening_failed": failed,
-                "screening_batches": 0,
-                "report_incomplete": failed > 0,
-            },
-        )
-        refreshed_report_dates.append(selected_date.isoformat())
-    result["refreshed_report_dates"] = refreshed_report_dates
     update_job_progress(job_id, progress=94, message="正在生成并保存 AI 综合研判")
     result.update(
         await synthesize_daily_report(

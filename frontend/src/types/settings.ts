@@ -27,18 +27,7 @@ export interface Settings {
   schedule_time: string
   schedule_timezone: string
   arxiv_fetch_limit: number
-  screening_batch_size: number
-  semantic_recall_mode: 'high' | 'balanced' | 'precise'
-  semantic_recall_presets: Record<string, { semantic_threshold: number }>
-  embedding: {
-    model: string
-    dimensions: number | null
-    cache_dir: string
-    loaded: boolean
-    available: boolean
-    message?: string
-    rescore: { status: string; processed?: number; total?: number; error?: string }
-  }
+  prefilter_batch_size: number
   deep_analysis_limit: number
   deep_analysis_threshold?: number
   analysis_budget: 'economy' | 'balanced' | 'deep'

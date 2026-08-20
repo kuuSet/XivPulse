@@ -1,21 +1,11 @@
 .project-paper-link { cursor: pointer; }
 .project-paper-link:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-.embedding-status { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 6px; background: #f1f6fb; }
-.embedding-status > div { min-width: 0; display: flex; align-items: center; gap: 10px; }
-.embedding-status > div > svg { flex: 0 0 auto; color: var(--green); }
-.embedding-status > div > span { min-width: 0; display: grid; gap: 2px; }
-.embedding-status small { color: var(--muted); overflow-wrap: anywhere; }
-.embedding-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 .smtp-port-row { display: grid; grid-template-columns: minmax(90px, 0.7fr) minmax(120px, 1fr); gap: 8px; }
 .toggle-field { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 5px; background: #f3f8fc; cursor: pointer; }
 .toggle-field input { margin-top: 3px; accent-color: var(--green); }
 .toggle-field > span { display: grid; gap: 2px; }
 .toggle-field small { color: var(--muted); }
-.report-incomplete { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 10px 12px; margin: 13px 0; color: #854429; border: 1px solid #e7c8b7; border-radius: 5px; background: #fff3eb; }
-.report-incomplete span { flex-basis: 100%; }
 
 @media (max-width: 680px) {
-  .embedding-status { align-items: stretch; flex-direction: column; }
-  .embedding-actions { align-items: flex-start; flex-direction: column; }
   .smtp-port-row { grid-template-columns: 1fr; }
 }

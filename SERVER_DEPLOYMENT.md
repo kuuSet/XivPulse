@@ -42,7 +42,7 @@ docker compose -f docker-compose.server.yml ps
 docker compose -f docker-compose.server.yml logs -f xivpulse caddy
 ```
 
-首次使用语义召回时会下载量化的 `BAAI/bge-small-en-v1.5`。模型与数据库统一保存到 `xivpulse-data` 卷，重建容器不会重复下载。打开 `https://公网IP`；在客户端信任 Caddy 根证书之前，浏览器会显示证书不受信任，这是内部 CA 的预期行为。
+数据库保存在 `xivpulse-data` 卷，重建容器不会删除论文、设置、分析或日报。打开 `https://公网IP`；在客户端信任 Caddy 根证书之前，浏览器会显示证书不受信任，这是内部 CA 的预期行为。
 
 ## 3. 信任自签名根证书
 
@@ -97,7 +97,7 @@ docker compose -f docker-compose.server.yml pull
 docker compose -f docker-compose.server.yml up -d --build
 ```
 
-不要执行 `docker compose ... down -v`，除非明确要删除论文、分析、配置、日报、模型缓存和 Caddy CA。普通 `down`、重建和镜像升级不会删除命名卷。
+不要执行 `docker compose ... down -v`，除非明确要删除论文、分析、配置、日报和 Caddy CA。普通 `down`、重建和镜像升级不会删除命名卷。
 
 ## 6. 故障排查
 
@@ -112,5 +112,4 @@ docker compose -f docker-compose.server.yml logs --tail=200 caddy
 - 浏览器仍提示证书：确认访问的是 `.env.server` 中的同一个 IP，并重新导入当前 Caddy 数据卷导出的根证书。
 - 登录后仍返回 401：确认始终使用 HTTPS；服务器模式的会话 Cookie 强制 `Secure`，通过 HTTP 不会发送。
 - 邮件中的链接错误：把 `XIVPULSE_PUBLIC_URL` 设为客户端实际访问的 `https://公网IP`。
-- 模型反复下载：确认应用和调度器都挂载同一个 `xivpulse-data` 卷。
-- 模型下载源不可达：任务会明确标记语义降级，并只保留关注作者召回，不会中断整条日更；恢复外网后在设置页执行“下载并预热”。
+- Provider 请求失败：检查 API Key、Base URL、协议和模型名称；流水线不会自动切换协议或使用本地分数兜底。

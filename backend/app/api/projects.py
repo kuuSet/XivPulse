@@ -45,14 +45,6 @@ class ProjectUpdatePayload(BaseModel):
     due_date: date | None = None
 
 
-class ProjectPaperPayload(BaseModel):
-    paper_id: int = Field(gt=0)
-    reading_state: ReadingStateValue = "queued"
-    priority: int = Field(default=3, ge=1, le=5)
-    notes: str = Field(default="", max_length=20000)
-    tags: list[str] = Field(default_factory=list, max_length=50)
-
-
 class ProjectPaperUpdatePayload(BaseModel):
     reading_state: ReadingStateValue | None = None
     priority: int | None = Field(default=None, ge=1, le=5)
@@ -176,41 +168,6 @@ def delete_project(project_id: int, db: Session = Depends(get_db)) -> Response:
     db.delete(project)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/api/projects/{project_id}/papers")
-def save_project_paper(
-    project_id: int, payload: ProjectPaperPayload, db: Session = Depends(get_db)
-) -> dict[str, Any]:
-    profile = active_profile(db)
-    project = _project_or_404(db, project_id, profile.id)
-    paper = db.get(Paper, payload.paper_id)
-    if paper is None:
-        raise HTTPException(status_code=404, detail="论文不存在")
-    link = db.scalar(
-        select(ProjectPaper).where(
-            ProjectPaper.project_id == project.id,
-            ProjectPaper.paper_id == paper.id,
-        )
-    )
-    created = link is None
-    if link is None:
-        link = ProjectPaper(project_id=project.id, paper_id=paper.id)
-        db.add(link)
-    link.reading_state = payload.reading_state
-    link.priority = payload.priority
-    link.notes = payload.notes.strip()
-    link.tags = _clean_tags(payload.tags)
-    if project.kind == FAVORITES_LIBRARY_KIND:
-        set_saved_feedback(db, profile.id, paper.id, True)
-    db.commit()
-    saved = db.scalar(
-        select(ProjectPaper)
-        .options(joinedload(ProjectPaper.project), joinedload(ProjectPaper.paper))
-        .where(ProjectPaper.id == link.id)
-    )
-    assert saved is not None
-    return {"ok": True, "created": created, **_project_membership_wire(saved, include_paper=True)}
 
 
 def _save_project_paper_by_id(

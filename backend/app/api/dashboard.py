@@ -19,13 +19,11 @@ from ..models import (
     Paper,
     PaperMatch,
     Profile,
-    ScreeningQueueItem,
     utcnow,
 )
-from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.jobs import RUNNING_STATUSES
 from ..services.state import active_profile
-from ..settings import get_process_settings, load_runtime_settings
+from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.interests import _interests_wire
 from .presenters.jobs import _job_wire
@@ -60,10 +58,7 @@ def dashboard(
     paper_day = func.coalesce(Paper.published_at, Paper.first_seen_at)
     day_condition = (paper_day >= start) & (paper_day < end)
     current_settings = load_runtime_settings(db)
-    semantic_threshold = get_process_settings().semantic.threshold(
-        current_settings.semantic_recall_mode
-    )
-    candidate_condition = PaperMatch.semantic_score >= semantic_threshold
+    candidate_condition = PaperMatch.screened_at.is_not(None)
     fetched_today = (
         db.scalar(
             select(func.count(Paper.id))
@@ -109,13 +104,25 @@ def dashboard(
         )
         or 0
     )
-    semantic_candidates_today = (
+    prefiltered_today = (
         db.scalar(
             select(func.count(PaperMatch.id))
             .join(Paper, Paper.id == PaperMatch.paper_id)
             .where(
                 PaperMatch.profile_id == profile.id,
-                candidate_condition,
+                PaperMatch.prefiltered_at.is_not(None),
+                day_condition,
+            )
+        )
+        or 0
+    )
+    prefilter_kept_today = (
+        db.scalar(
+            select(func.count(PaperMatch.id))
+            .join(Paper, Paper.id == PaperMatch.paper_id)
+            .where(
+                PaperMatch.profile_id == profile.id,
+                PaperMatch.prefilter_decision.in_(("relevant", "uncertain")),
                 day_condition,
             )
         )
@@ -133,17 +140,7 @@ def dashboard(
         .unique()
         .all()
     )
-    profile_topics = list(profile.topics)
-    taxonomy_fingerprint = direction_taxonomy_fingerprint(profile_topics)
-    items = [
-        _paper_wire(
-            paper,
-            profile.id,
-            topics=profile_topics,
-            taxonomy_fingerprint=taxonomy_fingerprint,
-        )
-        for paper in papers
-    ]
+    items = [_paper_wire(paper, profile.id) for paper in papers]
     topics = Counter(direction for item in items for direction in item["matched_topics"])
     daily_jobs = db.scalars(
         select(Job)
@@ -158,28 +155,31 @@ def dashboard(
                 latest_daily_job = job
                 break
     latest_result = latest_daily_job.result if latest_daily_job is not None else {}
-    recent_cutoff = utcnow() - timedelta(days=7)
-    pending_screening = (
+    pending_prefilter = (
         db.scalar(
-            select(func.count(ScreeningQueueItem.id)).where(
-                ScreeningQueueItem.profile_id == profile.id,
-                ScreeningQueueItem.status.in_(("queued", "processing", "failed")),
+            select(func.count(PaperMatch.id))
+            .join(Paper, Paper.id == PaperMatch.paper_id)
+            .where(
+                PaperMatch.profile_id == profile.id,
+                PaperMatch.prefiltered_at.is_(None),
+                day_condition,
             )
         )
         or 0
-    ) if current_settings.provider.configured else 0
-    queue_counts = dict(
-        db.execute(
-            select(ScreeningQueueItem.status, func.count(ScreeningQueueItem.id))
-            .where(
-                ScreeningQueueItem.profile_id == profile.id,
-                ScreeningQueueItem.report_date == day,
-            )
-            .group_by(ScreeningQueueItem.status)
-        ).all()
     )
-    screening_queue_total = sum(int(count) for count in queue_counts.values())
-    screening_failed = int(queue_counts.get("failed", 0))
+    pending_screening = (
+        db.scalar(
+            select(func.count(PaperMatch.id))
+            .join(Paper, Paper.id == PaperMatch.paper_id)
+            .where(
+                PaperMatch.profile_id == profile.id,
+                PaperMatch.prefilter_decision.in_(("relevant", "uncertain")),
+                PaperMatch.screened_at.is_(None),
+                day_condition,
+            )
+        )
+        or 0
+    )
     deep_threshold = current_settings.deep_analysis_threshold
     pending_deep = (
         db.scalar(
@@ -187,7 +187,7 @@ def dashboard(
                 PaperMatch.profile_id == profile.id,
                 PaperMatch.screened_at.is_not(None),
                 PaperMatch.screening_relevance_score >= deep_threshold,
-                PaperMatch.paper.has(Paper.last_seen_at >= recent_cutoff),
+                PaperMatch.paper.has(day_condition),
                 ~PaperMatch.paper.has(
                     Paper.analyses.any(
                         (Analysis.profile_id == profile.id)
@@ -208,7 +208,8 @@ def dashboard(
     return {
         "date": day,
         "total_papers": fetched_today or len(papers),
-        "semantic_candidate_papers": semantic_candidates_today,
+        "prefiltered_papers": prefiltered_today,
+        "prefilter_kept_papers": prefilter_kept_today,
         "screened_papers": screened_today,
         "high_priority_papers": high_priority_today,
         "processing_summary": {
@@ -218,26 +219,13 @@ def dashboard(
             "latest_fetched_count": int(latest_result.get("fetched", 0) or 0),
             "latest_screened_count": screened_today,
             "latest_deep_analyzed_count": deep_analyzed_today,
+            "pending_prefilter_count": pending_prefilter,
             "pending_screening_count": pending_screening,
             "pending_deep_count": pending_deep,
-            "screening_limit": current_settings.screening_batch_size,
-            "screening_semantic_threshold": get_process_settings().semantic.threshold(
-                current_settings.semantic_recall_mode
-            ),
-            "screening_queue_total": screening_queue_total,
-            "screening_completed": screened_today,
-            "screening_failed": screening_failed,
-            "screening_current_batch": (
-                int(latest_result.get("screening_batches", 0) or 0)
-                if current_settings.provider.configured
-                else 0
-            ),
-            "screening_total_batches": (
-                int(latest_result.get("screening_total_batches", 0) or 0)
-                if current_settings.provider.configured
-                else 0
-            ),
-            "report_incomplete": screening_failed > 0,
+            "prefilter_batch_size": current_settings.prefilter_batch_size,
+            "prefiltered_count": prefiltered_today,
+            "prefilter_kept_count": prefilter_kept_today,
+            "screened_count": screened_today,
             "ai_configured": current_settings.provider.configured,
             "deep_analysis_limit": current_settings.deep_analysis_limit,
             "deep_analysis_threshold": deep_threshold,
@@ -263,7 +251,6 @@ def dashboard(
                     "score": item["effective_score"],
                     "explanation": item["why_recommended"] or "符合关注标签",
                     "matched_topics": item["match_reasons"],
-                    "matched_keywords": item["match_reasons"],
                 },
             }
             for item in items

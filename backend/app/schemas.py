@@ -188,6 +188,15 @@ class PaperDetail(PaperRead):
     feedback_items: list[FeedbackRead] = Field(default_factory=list)
 
 
+class PrefilterDecision(BaseModel):
+    paper_id: int
+    decision: Literal["relevant", "uncertain", "irrelevant"]
+
+
+class PrefilterResult(BaseModel):
+    items: list[PrefilterDecision]
+
+
 class ScreeningResult(BaseModel):
     relevant: bool
     relevance_score: float = Field(ge=0, le=100)
@@ -195,13 +204,6 @@ class ScreeningResult(BaseModel):
     matched_topics: list[str]
     key_contributions: list[str]
     tags: list[str]
-
-    @field_validator("relevance_score", mode="before")
-    @classmethod
-    def normalize_relevance_score(cls, value: Any) -> Any:
-        if isinstance(value, int | float) and 0 < float(value) <= 1:
-            return float(value) * 100
-        return value
 
 
 class DeepAnalysisResult(BaseModel):
@@ -222,15 +224,6 @@ class DeepAnalysisResult(BaseModel):
     follow_up_questions: list[str]
     tags: list[str]
 
-    @field_validator(
-        "relevance_score", "novelty_score", "rigor_score", "impact_score", mode="before"
-    )
-    @classmethod
-    def normalize_scores(cls, value: Any) -> Any:
-        if isinstance(value, int | float) and 0 < float(value) <= 1:
-            return float(value) * 100
-        return value
-
 
 class RecommendationRead(BaseModel):
     paper_id: int
@@ -238,7 +231,6 @@ class RecommendationRead(BaseModel):
     rank: int | None = None
     explanation: str
     matched_topics: list[str] = Field(default_factory=list)
-    matched_keywords: list[str] = Field(default_factory=list)
 
 
 class RankedPaperRead(BaseModel):
@@ -292,6 +284,8 @@ __all__ = [
     "PaperDetail",
     "PaperRead",
     "PaperVersionRead",
+    "PrefilterDecision",
+    "PrefilterResult",
     "InterestsUpdate",
     "ProviderTestResult",
     "RankedPaperRead",

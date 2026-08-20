@@ -124,20 +124,9 @@ def _schema_name(model: type[BaseModel]) -> str:
 
 
 def _parse_json_text(value: str) -> Any:
-    text = value.strip()
-    fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.IGNORECASE | re.DOTALL)
-    if fenced:
-        text = fenced.group(1).strip()
     try:
-        return json.loads(text)
+        return json.loads(value)
     except json.JSONDecodeError as exc:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                return json.loads(text[start : end + 1])
-            except json.JSONDecodeError:
-                pass
         raise ProviderProtocolError("Provider returned invalid JSON output") from exc
 
 
@@ -234,7 +223,7 @@ def _provider_usage(payload: Mapping[str, Any], transport: str) -> TokenUsage:
 
 
 class OpenAICompatibleAdapter:
-    """Responses-first adapter with a Chat Completions compatibility fallback."""
+    """Structured-output adapter for the configured provider protocol."""
 
     def __init__(
         self,
@@ -283,23 +272,15 @@ class OpenAICompatibleAdapter:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-        if self.settings.api_protocol == "chat":
+        transport: Literal["responses", "chat"] = self.settings.api_protocol
+        if transport == "chat":
             data, usage = await self._call_chat(
                 common_input, response_model, schema_name, schema, max_output_tokens
             )
-            transport: Literal["responses", "chat"] = "chat"
         else:
-            try:
-                data, usage = await self._call_responses(
-                    common_input, response_model, schema_name, schema, max_output_tokens
-                )
-                transport = "responses"
-            except _FallbackToChat as fallback:
-                data, chat_usage = await self._call_chat(
-                    common_input, response_model, schema_name, schema, max_output_tokens
-                )
-                usage = fallback.usage.plus(chat_usage)
-                transport = "chat"
+            data, usage = await self._call_responses(
+                common_input, response_model, schema_name, schema, max_output_tokens
+            )
         self.last_transport = transport
         return GenerationResult(
             data=data,
@@ -369,20 +350,15 @@ class OpenAICompatibleAdapter:
             },
             "max_output_tokens": min(max(128, max_output_tokens), 16000),
         }
-        raw: dict[str, Any] | None = None
         try:
             raw = await self._request("responses", payload)
             output = _parse_json_text(_responses_text(raw))
             return response_model.model_validate(output), _provider_usage(raw, "responses")
         except _ProviderHTTPError as exc:
-            if exc.status_code in {400, 404, 405, 415, 422, 501}:
-                raise _FallbackToChat() from exc
             raise ProviderError(f"Model provider returned HTTP {exc.status_code}") from exc
-        except (ProviderProtocolError, ValidationError) as exc:
-            # Several OpenAI-compatible providers expose /responses but only
-            # partially implement its output format; Chat may still be valid.
-            raise _FallbackToChat(
-                _provider_usage(raw, "responses") if raw is not None else TokenUsage()
+        except ValidationError as exc:
+            raise ProviderProtocolError(
+                "Provider output did not match the required schema"
             ) from exc
 
     async def _call_chat(
@@ -407,16 +383,7 @@ class OpenAICompatibleAdapter:
             "max_completion_tokens": min(max(128, max_output_tokens), 16000),
         }
         try:
-            try:
-                raw = await self._request("chat/completions", payload)
-            except _ProviderHTTPError as exc:
-                if exc.status_code not in {400, 422}:
-                    raise
-                # Older OpenAI-compatible servers may only implement the
-                # legacy field. A rejected request has not generated tokens.
-                legacy_payload = dict(payload)
-                legacy_payload["max_tokens"] = legacy_payload.pop("max_completion_tokens")
-                raw = await self._request("chat/completions", legacy_payload)
+            raw = await self._request("chat/completions", payload)
             output = _parse_json_text(_chat_text(raw))
             return response_model.model_validate(output), _provider_usage(raw, "chat")
         except _ProviderHTTPError as exc:
@@ -461,12 +428,6 @@ class OpenAICompatibleAdapter:
             transport=result.transport,
             message="模型接口连接成功。",
         )
-
-
-class _FallbackToChat(Exception):
-    def __init__(self, usage: TokenUsage | None = None) -> None:
-        self.usage = usage or TokenUsage()
-        super().__init__("fall back to Chat Completions")
 
 
 class _ProviderHTTPError(Exception):

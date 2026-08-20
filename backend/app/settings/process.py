@@ -13,8 +13,6 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-RecallMode = Literal["high", "balanced", "precise"]
-
 
 class ProviderSettings(BaseSettings):
     # Defines how Pydantic reads environment variables and validates this group.
@@ -68,38 +66,6 @@ class ProviderSettings(BaseSettings):
         return payload
 
 
-class SemanticSettings(BaseSettings):
-    # Defines how Pydantic reads semantic settings from the process environment.
-    model_config = SettingsConfigDict(
-        env_prefix="XIVPULSE_SEMANTIC_",
-        env_ignore_empty=True,
-        extra="ignore",
-        frozen=True,
-        str_strip_whitespace=True,
-    )
-
-    # Local embedding model execution.
-    model_name: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1, max_length=200)
-    threads: int = Field(default=2, ge=1, le=16)
-    batch_size: int = Field(default=8, ge=1, le=256)
-
-    # Semantic recall thresholds.
-    threshold_high: float = Field(default=0.66, ge=0.0, le=1.0)
-    threshold_balanced: float = Field(default=0.68, ge=0.0, le=1.0)
-    threshold_precise: float = Field(default=0.70, ge=0.0, le=1.0)
-
-    @property
-    def thresholds(self) -> dict[RecallMode, float]:
-        return {
-            "high": self.threshold_high,
-            "balanced": self.threshold_balanced,
-            "precise": self.threshold_precise,
-        }
-
-    def threshold(self, mode: RecallMode) -> float:
-        return self.thresholds[mode]
-
-
 class ProcessSettings(BaseSettings):
     # Defines how Pydantic reads environment variables and validates this group.
     model_config = SettingsConfigDict(
@@ -119,9 +85,6 @@ class ProcessSettings(BaseSettings):
     # Server request filtering.
     server_allowed_hosts: tuple[str, ...] = ()
 
-    # Local semantic retrieval settings applied at process startup.
-    semantic: SemanticSettings = Field(default_factory=SemanticSettings)
-
     # Single-user server authentication.
     auth_enabled: bool = False
     auth_username: str = ""
@@ -139,17 +102,11 @@ class ProcessSettings(BaseSettings):
     def database_url(self) -> str:
         return f"sqlite:///{(self.data_dir / 'xivpulse.db').as_posix()}"
 
-    @property
-    def model_cache(self) -> Path:
-        return self.data_dir / "model-cache"
-
 
 def _build_process_settings() -> ProcessSettings:
     process = ProcessSettings()
     auth_secure_cookies = (
-        process.auth_enabled
-        if process.auth_secure_cookies is None
-        else process.auth_secure_cookies
+        process.auth_enabled if process.auth_secure_cookies is None else process.auth_secure_cookies
     )
     return process.model_copy(
         update={
@@ -166,7 +123,5 @@ def get_process_settings() -> ProcessSettings:
 __all__ = [
     "ProcessSettings",
     "ProviderSettings",
-    "RecallMode",
-    "SemanticSettings",
     "get_process_settings",
 ]

@@ -8,7 +8,7 @@ from html import escape
 from typing import Any, Literal
 
 from ..models import Paper, Topic
-from ..schemas import DeepAnalysisResult, ScreeningResult
+from ..schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
 from .directions.matching import (
     canonical_requested_direction_names,
     terms,
@@ -17,6 +17,7 @@ from .fulltext import FullTextDocument, FullTextFetcher
 from .prompt_catalog import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,
     DEFAULT_PROMPT_TEMPLATE_ID,
+    PREFILTER_SYSTEM_PROMPT,
     SCREENING_SYSTEM_PROMPT,
     analysis_prompt_metadata,
     prompt_template,
@@ -30,14 +31,15 @@ class AnalysisBudget:
     label: str
     max_fulltext_chars: int
     max_pdf_pages: int
+    prefilter_output_tokens: int
     screening_output_tokens: int
     deep_output_tokens: int
 
 
 ANALYSIS_BUDGETS: dict[str, AnalysisBudget] = {
-    "economy": AnalysisBudget("economy", "经济", 16_000, 12, 900, 2_000),
-    "balanced": AnalysisBudget("balanced", "平衡", 30_000, 25, 1_200, 3_500),
-    "deep": AnalysisBudget("deep", "深度", 45_000, 40, 1_600, 5_000),
+    "economy": AnalysisBudget("economy", "经济", 16_000, 12, 900, 900, 2_000),
+    "balanced": AnalysisBudget("balanced", "平衡", 30_000, 25, 1_200, 1_200, 3_500),
+    "deep": AnalysisBudget("deep", "深度", 45_000, 40, 1_600, 1_600, 5_000),
 }
 
 
@@ -57,26 +59,8 @@ def _topic_context(topics: Sequence[Topic | Mapping[str, Any]]) -> str:
         )
         description = str(raw_description or "").strip()
         aliases = terms(topic, "aliases")
-        keywords = (
-            topic.get("keywords", topic.get("keywords_json", []))
-            if isinstance(topic, Mapping)
-            else topic.keywords
-        )
-        negatives = (
-            topic.get("negative_keywords", topic.get("negative_keywords_json", []))
-            if isinstance(topic, Mapping)
-            else topic.negative_keywords
-        )
-        anchors = terms(topic, "context_keywords")
-        positive_text = ", ".join(str(value) for value in keywords[:12]) or "无"
         alias_text = ", ".join(aliases[:12]) or "无"
-        anchor_text = ", ".join(anchors[:12]) or "无需额外领域锚点"
-        negative_text = ", ".join(str(value) for value in negatives[:12]) or "无"
-        lines.append(
-            f"- {name}；范围：{description or '未补充'}；可接受别名：{alias_text}；"
-            f"方向词：{positive_text}；"
-            f"领域锚点：{anchor_text}；排除词：{negative_text}"
-        )
+        lines.append(f"- {name}；范围：{description or '未补充'}；可接受别名：{alias_text}")
     return "\n".join(lines) or "- 未配置关注标签"
 
 
@@ -116,6 +100,33 @@ class PaperAnalyzer:
             max_pdf_pages=self.budget.max_pdf_pages,
         )
 
+    async def prefilter_with_metadata(
+        self,
+        papers: Sequence[Paper | Mapping[str, Any]],
+        topics: Sequence[Topic | Mapping[str, Any]],
+    ) -> GenerationResult[PrefilterResult]:
+        paper_blocks = []
+        for paper in papers:
+            paper_blocks.append(
+                f'<paper id="{_paper_value(paper, "id")}">\n'
+                f"标题：{_xml_text(_paper_value(paper, 'title'))}\n"
+                f"分类：{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
+                "</paper>"
+            )
+        prompt = (
+            f"<followed_topics>\n{_xml_text(_topic_context(topics))}\n</followed_topics>\n\n"
+            f"<papers>\n{'\n'.join(paper_blocks)}\n</papers>"
+        )
+        generated = await self.adapter.generate_json_with_metadata(
+            system_prompt=PREFILTER_SYSTEM_PROMPT,
+            user_prompt=prompt,
+            response_model=PrefilterResult,
+            schema_name="paper_title_prefilter",
+            max_output_tokens=self.budget.prefilter_output_tokens,
+        )
+        generated.prompt_metadata = self.prompt_metadata("prefilter")
+        return generated
+
     async def screen(
         self,
         paper: Paper | Mapping[str, Any],
@@ -132,7 +143,7 @@ class PaperAnalyzer:
         prompt = (
             f"<analysis_preferences>\n{_xml_text(self.screening_prompt)}\n"
             f"</analysis_preferences>\n\n"
-            f"<followed_topics>\n关注标签及归因词：\n{_xml_text(_topic_context(topics))}\n"
+            f"<followed_topics>\n关注标签：\n{_xml_text(_topic_context(topics))}\n"
             f"</followed_topics>\n\n"
             f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
             f"分类：{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
@@ -188,7 +199,7 @@ class PaperAnalyzer:
         prompt = (
             f"<analysis_preferences>\n{_xml_text(self.deep_analysis_prompt)}\n"
             f"</analysis_preferences>\n\n"
-            f"<followed_topics>\n关注标签及归因词：\n{_xml_text(_topic_context(topics))}\n"
+            f"<followed_topics>\n关注标签：\n{_xml_text(_topic_context(topics))}\n"
             f"</followed_topics>\n\n"
             f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
             f"作者：{_xml_text(', '.join(_paper_value(paper, 'authors', []) or []))}\n"
@@ -207,13 +218,14 @@ class PaperAnalyzer:
         result.prompt_metadata = self.prompt_metadata("deep")
         return result, fulltext
 
-    def prompt_metadata(self, stage: Literal["screening", "deep"]) -> dict[str, Any]:
+    def prompt_metadata(self, stage: Literal["prefilter", "screening", "deep"]) -> dict[str, Any]:
         return analysis_prompt_metadata(
             self.prompt_template_id,
             self.screening_prompt,
             self.deep_analysis_prompt,
             stage,
         )
+
 
 __all__ = [
     "ANALYSIS_BUDGETS",

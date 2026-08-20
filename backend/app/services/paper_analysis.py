@@ -1,30 +1,31 @@
-"""Screen queued papers and run bounded deep analysis."""
+"""Run the title, abstract, and full-text LLM stages."""
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import joinedload
 
+from ..arxiv.affiliations import fetch_affiliations
+from ..arxiv.repository import PaperRepository
 from ..database import SessionLocal, session_scope
-from ..models import Analysis, Paper, PaperMatch, Profile, ScreeningQueueItem, utcnow
+from ..models import Analysis, Paper, PaperMatch, utcnow
 from ..settings import load_runtime_settings
 from .analyzer import PaperAnalyzer
-from .directions.matching import canonical_requested_direction_names
-from .directions.taxonomy import stamp_direction_attribution
 from .jobs import update_job_progress
 from .prompt_catalog import resolve_prompt_settings
-from .provider import OpenAICompatibleAdapter, ProviderError
-from .reporting.records import current_date_in_timezone
-from .semantic import get_semantic_services
+from .provider import OpenAICompatibleAdapter, TokenUsage
 from .state import active_profile
 
-LOG = logging.getLogger("xivpulse")
-SCREENING_RETRY_DELAYS = (5.0, 30.0)
+
+def _date_condition(report_date: date | None):
+    if report_date is None:
+        return PaperMatch.paper.has(Paper.last_seen_at >= datetime.now(UTC) - timedelta(days=7))
+    start = datetime.combine(report_date, time.min, tzinfo=UTC)
+    end = datetime.combine(report_date + timedelta(days=1), time.min, tzinfo=UTC)
+    return PaperMatch.paper.has((Paper.published_at >= start) & (Paper.published_at < end))
 
 
 async def analyze_papers(
@@ -36,420 +37,224 @@ async def analyze_papers(
     with SessionLocal() as db:
         profile = active_profile(db)
         settings = load_runtime_settings(db)
-        limit = int(limit if limit is not None else settings.deep_analysis_limit)
-        threshold = settings.deep_analysis_threshold
-        screening_batch_size = max(1, settings.screening_batch_size)
-        selected_recall_mode = settings.semantic_recall_mode
-        recall_service = get_semantic_services().recall
-        today = report_date or current_date_in_timezone(settings.schedule_timezone)
-        paper_date_condition = (
-            PaperMatch.paper.has(
-                (Paper.published_at >= datetime.combine(report_date, time.min, tzinfo=UTC))
-                & (
-                    Paper.published_at
-                    < datetime.combine(report_date + timedelta(days=1), time.min, tzinfo=UTC)
-                )
-            )
-            if report_date
-            else PaperMatch.paper.has(
-                Paper.last_seen_at >= datetime.now(UTC) - timedelta(days=7)
-            )
-        )
-        if not settings.provider.configured:
-            unscreened_papers = select(PaperMatch.paper_id).where(
-                PaperMatch.profile_id == profile.id,
-                PaperMatch.screened_at.is_(None),
-            )
-            db.execute(
-                delete(ScreeningQueueItem).where(
-                    ScreeningQueueItem.profile_id == profile.id,
-                    ScreeningQueueItem.paper_id.in_(unscreened_papers),
-                )
-            )
-            db.commit()
-            return {
-                "ai_configured": False,
-                "screening_skipped": "not_configured",
-                "screened": 0,
-                "screening_queue_total": 0,
-                "screening_completed": 0,
-                "screening_failed": 0,
-                "screening_batches": 0,
-                "screening_total_batches": 0,
-                "report_incomplete": False,
-                "screening_report_dates": [],
-                "eligible": 0,
-                "threshold": threshold,
-                "analyzed": 0,
-                "screening_errors": [],
-                "analysis_errors": [],
-            }
-        recent_matches = (
-            db.scalars(
-                select(PaperMatch)
-                .options(
-                    joinedload(PaperMatch.paper),
-                    joinedload(PaperMatch.profile).selectinload(Profile.topics),
-                )
-                .where(
-                    PaperMatch.profile_id == profile.id,
-                    PaperMatch.screened_at.is_(None),
-                    paper_date_condition,
-                )
-            )
-            .unique()
-            .all()
-        )
-        existing_queue_keys = set(
-            db.scalars(
-                select(ScreeningQueueItem.paper_id).where(
-                    ScreeningQueueItem.profile_id == profile.id
-                )
-            ).all()
-        )
-        for match in recent_matches:
-            if match.paper_id in existing_queue_keys or not recall_service.is_candidate(
-                match.semantic_score,
-                selected_recall_mode,
-            ):
-                continue
-            db.add(
-                ScreeningQueueItem(
-                    paper_id=match.paper_id,
-                    profile_id=profile.id,
-                    report_date=today,
-                    recall_mode=selected_recall_mode,
-                    semantic_score=match.semantic_score,
-                    semantic_topics_json=dict(match.semantic_topics_json or {}),
-                )
-            )
-        queue_query = select(ScreeningQueueItem).where(
-            ScreeningQueueItem.profile_id == profile.id
-        )
-        if report_date:
-            queue_query = queue_query.where(ScreeningQueueItem.report_date == report_date)
-        queue_items = db.scalars(queue_query).all()
-        for item in queue_items:
-            match = db.scalar(
-                select(PaperMatch).where(
-                    PaperMatch.paper_id == item.paper_id,
-                    PaperMatch.profile_id == profile.id,
-                )
-            )
-            if match is not None and match.screened_at is not None:
-                item.status = "completed"
-                item.completed_at = item.completed_at or match.screened_at
-                item.last_error = None
-            elif item.status in {"failed", "processing"}:
-                item.status = "queued"
-                item.attempts = 0
-                item.last_error = None
-                item.completed_at = None
-        db.commit()
-    provider_settings = settings.provider
-    adapter = OpenAICompatibleAdapter(settings=provider_settings)
+        profile_id = profile.id
+        topics = list(profile.topics)
+
+    deep_limit = settings.deep_analysis_limit if limit is None else int(limit)
+    batch_size = settings.prefilter_batch_size
     budget_mode = settings.analysis_budget
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
-        adapter,
+        OpenAICompatibleAdapter(settings=settings.provider),
         budget_mode=budget_mode,
         prompt_template_id=prompt_settings["prompt_template_id"],
         screening_prompt=prompt_settings["screening_prompt"],
         deep_analysis_prompt=prompt_settings["deep_analysis_prompt"],
     )
-
-    screened = 0
-    screening_errors: list[str] = []
-    screening_failed = 0
-    screening_batches = 0
-    screening_report_dates: set[date] = set()
-    with SessionLocal() as db:
-        profile = active_profile(db)
-        count_query = select(func.count(ScreeningQueueItem.id)).where(
-            ScreeningQueueItem.profile_id == profile.id,
-            ScreeningQueueItem.status.in_(("queued", "processing", "failed")),
-        )
-        if report_date:
-            count_query = count_query.where(ScreeningQueueItem.report_date == report_date)
-        screening_queue_total = int(
-            db.scalar(count_query) or 0
-        )
-    total_batches = (
-        (screening_queue_total + screening_batch_size - 1) // screening_batch_size
-        if screening_queue_total
-        else 0
-    )
-
-    async def screen_one(
-        queue_id: int,
-        match: PaperMatch,
-    ) -> tuple[int, PaperMatch, Any | None, Exception | None, int]:
-        last_error: Exception | None = None
-        for attempt in range(1, 4):
-            try:
-                generated = await analyzer.screen_with_metadata(
-                    match.paper, match.profile.topics
-                )
-                return queue_id, match, generated, None, attempt
-            except ProviderError as exc:
-                last_error = exc
-                if attempt < 3:
-                    await asyncio.sleep(SCREENING_RETRY_DELAYS[attempt - 1])
-        return queue_id, match, None, last_error, 3
+    date_condition = _date_condition(report_date)
 
     with SessionLocal() as db:
-        profile = active_profile(db)
-        queue_order_query = (
-            select(ScreeningQueueItem.id)
-            .where(
-                ScreeningQueueItem.profile_id == profile.id,
-                ScreeningQueueItem.status == "queued",
-            )
-            .order_by(
-                ScreeningQueueItem.report_date,
-                desc(ScreeningQueueItem.semantic_score),
-                ScreeningQueueItem.id,
-            )
-        )
-        if report_date:
-            queue_order_query = queue_order_query.where(
-                ScreeningQueueItem.report_date == report_date
-            )
-        pending_queue_ids = list(db.scalars(queue_order_query).all())
-
-    while pending_queue_ids:
-        batch_ids = pending_queue_ids[:screening_batch_size]
-        del pending_queue_ids[:screening_batch_size]
-        with session_scope() as db:
-            profile = active_profile(db)
-            batch_query = (
-                select(ScreeningQueueItem)
-                .options(
-                    joinedload(ScreeningQueueItem.paper),
-                    joinedload(ScreeningQueueItem.profile).selectinload(Profile.topics),
-                )
+        pending_prefilter = (
+            db.scalars(
+                select(PaperMatch)
+                .options(joinedload(PaperMatch.paper))
                 .where(
-                    ScreeningQueueItem.profile_id == profile.id,
-                    ScreeningQueueItem.status == "queued",
-                    ScreeningQueueItem.id.in_(batch_ids),
+                    PaperMatch.profile_id == profile_id,
+                    PaperMatch.prefiltered_at.is_(None),
+                    date_condition,
                 )
+                .order_by(PaperMatch.id)
             )
-            items_by_id = {
-                item.id: item for item in db.scalars(batch_query).unique().all()
-            }
-            queue_batch = [
-                items_by_id[item_id] for item_id in batch_ids if item_id in items_by_id
-            ]
-            for item in queue_batch:
-                item.status = "processing"
-                screening_report_dates.add(item.report_date)
-            batch_payload = []
-            for item in queue_batch:
-                match = db.scalar(
-                    select(PaperMatch)
-                    .options(
-                        joinedload(PaperMatch.paper),
-                        joinedload(PaperMatch.profile).selectinload(Profile.topics),
-                    )
-                    .where(
-                        PaperMatch.paper_id == item.paper_id,
-                        PaperMatch.profile_id == item.profile_id,
-                    )
-                )
-                if match is None:
-                    item.status = "failed"
-                    item.attempts = 3
-                    item.last_error = "PaperMatch no longer exists"
-                    continue
-                batch_payload.append((item.id, match))
-        if not queue_batch:
-            continue
-        screening_batches += 1
-        batch_results: list[tuple[int, PaperMatch, Any | None, Exception | None, int]] = []
-        for batch_start in range(0, len(batch_payload), 4):
-            batch_results.extend(
-                await asyncio.gather(
-                    *(
-                        screen_one(queue_id, match)
-                        for queue_id, match in batch_payload[batch_start : batch_start + 4]
-                    )
-                )
-            )
-        for queue_id, match, generated, error, attempts in batch_results:
-            if error is not None or generated is None:
-                LOG.error("Screening failed for paper %s: %s", match.paper_id, error)
-                screening_errors.append(f"{match.paper_id}: {error}")
-                screening_failed += 1
-                with session_scope() as db:
-                    item = db.get(ScreeningQueueItem, queue_id)
-                    if item is not None:
-                        item.status = "failed"
-                        item.attempts = attempts
-                        item.last_error = str(error or "Unknown screening error")
-                        item.completed_at = None
-                continue
-            result = generated.data
-            with session_scope() as db:
-                stored_match = db.get(PaperMatch, match.id)
-                if stored_match is None:
-                    continue
-                stored_match.screening_relevance_score = result.relevance_score
-                stored_match.screened_at = utcnow()
-                ai_directions = canonical_requested_direction_names(
-                    result.matched_topics,
-                    list(match.profile.topics),
-                    relevant=result.relevant is True,
-                )
-                stored_match.matched_topics_json = ai_directions
-                stored_match.reason = result.reason
-                item = db.get(ScreeningQueueItem, queue_id)
-                if item is not None:
-                    item.status = "completed"
-                    item.attempts = attempts
-                    item.last_error = None
-                    item.completed_at = stored_match.screened_at
-                db.add(
-                    Analysis(
-                        paper_id=match.paper_id,
-                        profile_id=match.profile_id,
-                        kind="screening",
-                        status="completed",
-                        provider=generated.provider,
-                        model=generated.model,
-                        transport=generated.transport,
-                        content_source="abstract",
-                        summary=result.reason,
-                        verdict="relevant" if result.relevant else "not_relevant",
-                        relevance_score=result.relevance_score,
-                        tags_json=result.tags,
-                        payload_json={
-                            **stamp_direction_attribution(
-                                result.model_dump(), list(match.profile.topics)
-                            ),
-                            "_analysis_prompt": generated.prompt_metadata,
-                        },
-                        **generated.usage.analysis_fields(budget_mode),
-                    )
-                )
-            screened += 1
-        completed_or_failed = screened + screening_failed
-        progress = 35 + int(42 * completed_or_failed / max(1, screening_queue_total))
+            .unique()
+            .all()
+        )
+
+    prefiltered = 0
+    prefilter_kept = 0
+    prefilter_rejected = 0
+    prefilter_batches = 0
+    prefilter_usage = TokenUsage()
+    for start in range(0, len(pending_prefilter), batch_size):
+        batch = pending_prefilter[start : start + batch_size]
+        generated = await analyzer.prefilter_with_metadata(
+            [match.paper for match in batch],
+            topics,
+        )
+        decisions = {item.paper_id: item.decision for item in generated.data.items}
+        timestamp = utcnow()
+        with session_scope() as db:
+            for match in batch:
+                stored = db.get(PaperMatch, match.id)
+                stored.prefilter_decision = decisions[match.paper_id]
+                stored.prefiltered_at = timestamp
+        kept = sum(decisions[match.paper_id] != "irrelevant" for match in batch)
+        prefiltered += len(batch)
+        prefilter_kept += kept
+        prefilter_rejected += len(batch) - kept
+        prefilter_batches += 1
+        prefilter_usage = prefilter_usage.plus(generated.usage)
         update_job_progress(
             job_id,
-            progress=progress,
-            message=(
-                f"摘要初筛第 {screening_batches}/{max(total_batches, screening_batches)} 批："
-                f"成功 {screened}，失败 {screening_failed}，总候选 {screening_queue_total}"
-            ),
+            progress=35,
+            message=f"标题预筛 {prefiltered}/{len(pending_prefilter)}",
             details={
-                "screening_queue_total": screening_queue_total,
-                "screening_completed": screened,
-                "screening_failed": screening_failed,
-                "screening_current_batch": screening_batches,
-                "screening_total_batches": max(total_batches, screening_batches),
-                "report_incomplete": screening_failed > 0,
+                "prefiltered": prefiltered,
+                "prefilter_kept": prefilter_kept,
+                "prefilter_rejected": prefilter_rejected,
             },
         )
 
-    if screening_report_dates:
+    affiliations_enriched = 0
+    if settings.watched_organizations:
         with SessionLocal() as db:
-            screening_failed = int(
-                db.scalar(
-                    select(func.count(ScreeningQueueItem.id)).where(
-                        ScreeningQueueItem.profile_id == profile.id,
-                        ScreeningQueueItem.report_date.in_(screening_report_dates),
-                        ScreeningQueueItem.status == "failed",
+            arxiv_ids = list(
+                db.scalars(
+                    select(Paper.arxiv_id)
+                    .join(PaperMatch, PaperMatch.paper_id == Paper.id)
+                    .where(
+                        PaperMatch.profile_id == profile_id,
+                        PaperMatch.prefilter_decision.in_(("relevant", "uncertain")),
+                        date_condition,
                     )
-                )
-                or 0
+                ).all()
             )
+        affiliations = await fetch_affiliations(arxiv_ids)
+        with session_scope() as db:
+            PaperRepository(db).update_affiliations(affiliations)
+        affiliations_enriched = len(affiliations)
 
     with SessionLocal() as db:
-        profile = active_profile(db)
-        matches = (
+        pending_screening = (
             db.scalars(
                 select(PaperMatch)
-                .options(
-                    joinedload(PaperMatch.paper),
-                    joinedload(PaperMatch.profile).selectinload(Profile.topics),
-                )
+                .options(joinedload(PaperMatch.paper))
                 .where(
-                    PaperMatch.profile_id == profile.id,
-                    PaperMatch.screening_relevance_score >= threshold,
+                    PaperMatch.profile_id == profile_id,
+                    PaperMatch.prefilter_decision.in_(("relevant", "uncertain")),
+                    PaperMatch.screened_at.is_(None),
+                    date_condition,
+                )
+                .order_by(PaperMatch.id)
+            )
+            .unique()
+            .all()
+        )
+
+    screened = 0
+    screening_usage = TokenUsage()
+    for match in pending_screening:
+        generated = await analyzer.screen_with_metadata(match.paper, topics)
+        result = generated.data
+        timestamp = utcnow()
+        with session_scope() as db:
+            stored = db.get(PaperMatch, match.id)
+            stored.matched_topics_json = result.matched_topics
+            stored.screening_relevance_score = result.relevance_score
+            stored.reason = result.reason
+            stored.screened_at = timestamp
+            db.add(
+                Analysis(
+                    paper_id=match.paper_id,
+                    profile_id=profile_id,
+                    kind="screening",
+                    status="completed",
+                    provider=generated.provider,
+                    model=generated.model,
+                    transport=generated.transport,
+                    content_source="abstract",
+                    summary=result.reason,
+                    verdict="relevant" if result.relevant else "not_relevant",
+                    relevance_score=result.relevance_score,
+                    tags_json=result.tags,
+                    payload_json={
+                        **result.model_dump(),
+                        "_analysis_prompt": generated.prompt_metadata,
+                    },
+                    **generated.usage.analysis_fields(budget_mode),
+                )
+            )
+        screened += 1
+        screening_usage = screening_usage.plus(generated.usage)
+        update_job_progress(
+            job_id,
+            progress=70,
+            message=f"摘要评分 {screened}/{len(pending_screening)}",
+            details={"screened": screened, "screening_total": len(pending_screening)},
+        )
+
+    with SessionLocal() as db:
+        deep_matches = (
+            db.scalars(
+                select(PaperMatch)
+                .options(joinedload(PaperMatch.paper))
+                .where(
+                    PaperMatch.profile_id == profile_id,
+                    PaperMatch.screening_relevance_score >= settings.deep_analysis_threshold,
                     PaperMatch.screened_at.is_not(None),
-                    paper_date_condition,
+                    date_condition,
                     ~PaperMatch.paper.has(
                         Paper.analyses.any(
-                            (Analysis.profile_id == profile.id)
+                            (Analysis.profile_id == profile_id)
                             & (Analysis.kind == "deep")
                             & (Analysis.status == "completed")
                         )
                     ),
                 )
+                .order_by(desc(PaperMatch.screening_relevance_score), PaperMatch.id)
+                .limit(deep_limit)
             )
             .unique()
             .all()
         )
-        matches = sorted(
-            matches,
-            key=lambda match: (
-                -(match.screening_relevance_score or 0.0),
-                -(match.semantic_score or 0.0),
-                match.id,
-            ),
-        )[: max(0, limit)]
-    count = 0
-    errors: list[str] = []
-    for match in matches:
-        try:
-            generated, fulltext = await analyzer.deep_analyze_with_metadata(
-                match.paper, match.profile.topics
-            )
-        except ProviderError as exc:
-            LOG.warning("Deep analysis failed for paper %s: %s", match.paper_id, exc)
-            errors.append(f"{match.paper_id}: {exc}")
-            continue
+
+    analyzed = 0
+    deep_usage = TokenUsage()
+    for match in deep_matches:
+        generated, fulltext = await analyzer.deep_analyze_with_metadata(match.paper, topics)
         result = generated.data
-        payload = result.model_dump()
-        payload["_analysis_prompt"] = generated.prompt_metadata
+        payload = {
+            **result.model_dump(),
+            "_analysis_prompt": generated.prompt_metadata,
+        }
         with session_scope() as db:
             db.add(
                 Analysis(
                     paper_id=match.paper_id,
-                    profile_id=match.profile_id,
+                    profile_id=profile_id,
                     kind="deep",
                     status="completed",
                     provider=generated.provider,
                     model=generated.model,
                     transport=generated.transport,
                     content_source=fulltext.source if fulltext.content else "abstract",
-                    summary=payload.get("summary", ""),
-                    verdict=payload.get("verdict", ""),
-                    relevance_score=payload.get("relevance_score"),
-                    novelty_score=payload.get("novelty_score"),
-                    rigor_score=payload.get("rigor_score"),
-                    impact_score=payload.get("impact_score"),
-                    strengths_json=payload.get("strengths", []),
-                    weaknesses_json=payload.get("weaknesses", []),
-                    tags_json=payload.get("tags", []),
+                    summary=result.summary,
+                    verdict=result.verdict,
+                    relevance_score=result.relevance_score,
+                    novelty_score=result.novelty_score,
+                    rigor_score=result.rigor_score,
+                    impact_score=result.impact_score,
+                    strengths_json=result.strengths,
+                    weaknesses_json=result.weaknesses,
+                    tags_json=result.tags,
                     payload_json=payload,
                     **generated.usage.analysis_fields(budget_mode),
                 )
             )
-        count += 1
+        analyzed += 1
+        deep_usage = deep_usage.plus(generated.usage)
+
     return {
-        "ai_configured": True,
-        "analyzed": count,
+        "prefiltered": prefiltered,
+        "prefilter_kept": prefilter_kept,
+        "prefilter_rejected": prefilter_rejected,
+        "prefilter_batches": prefilter_batches,
+        "prefilter_usage": prefilter_usage.analysis_fields(budget_mode),
         "screened": screened,
-        "screening_queue_total": screening_queue_total,
-        "screening_completed": screened,
-        "screening_failed": screening_failed,
-        "screening_batches": screening_batches,
-        "screening_total_batches": max(total_batches, screening_batches),
-        "report_incomplete": screening_failed > 0,
-        "screening_report_dates": sorted(value.isoformat() for value in screening_report_dates),
-        "eligible": len(matches),
-        "threshold": threshold,
-        "screening_errors": screening_errors[:10],
-        "analysis_errors": errors[:10],
+        "screening_total": len(pending_screening),
+        "screening_usage": screening_usage.analysis_fields(budget_mode),
+        "analyzed": analyzed,
+        "eligible": len(deep_matches),
+        "deep_usage": deep_usage.analysis_fields(budget_mode),
+        "threshold": settings.deep_analysis_threshold,
+        "affiliations_enriched": affiliations_enriched,
     }

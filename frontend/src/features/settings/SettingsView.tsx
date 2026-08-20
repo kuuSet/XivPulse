@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, Network, RefreshCw, RotateCcw, Save, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi, X } from 'lucide-react'
+import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, RotateCcw, Save, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi, X } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { isDemo } from '../../lib/runtime'
@@ -23,9 +23,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const [methodCandidates, setMethodCandidates] = useState<MethodCandidate[]>([])
   const [candidateNames, setCandidateNames] = useState<Record<string, string>>({})
   const [methodBusy, setMethodBusy] = useState(false)
-  const [embeddingTesting, setEmbeddingTesting] = useState(false)
-  const [semanticRescoring, setSemanticRescoring] = useState(false)
-  const [semanticRescoreProgress, setSemanticRescoreProgress] = useState('')
   const [emailTesting, setEmailTesting] = useState(false)
 
   const load = useCallback(async () => {
@@ -88,46 +85,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     }
   }
 
-  const testEmbedding = async () => {
-    if (!settings) return
-    setEmbeddingTesting(true)
-    try {
-      const result = isDemo ? { ...settings.embedding, ok: true, loaded: true, available: true } : await api.testEmbedding()
-      setSettings((current) => current ? { ...current, embedding: { ...result, rescore: current.embedding.rescore } } : current)
-      onToast(result.ok ? 'success' : 'error', result.ok ? '语义模型已下载并完成预热' : (result.message ?? '语义模型不可用'))
-    } catch (embeddingError) {
-      onToast('error', embeddingError instanceof Error ? embeddingError.message : '语义模型预热失败')
-    } finally { setEmbeddingTesting(false) }
-  }
-
-  const rescoreSemantic = async () => {
-    if (!settings) return
-    setSemanticRescoring(true)
-    setSemanticRescoreProgress('任务已排队')
-    try {
-      if (isDemo) {
-        setSettings({ ...settings, embedding: { ...settings.embedding, rescore: { status: 'completed', processed: settings.stored_paper_count, total: settings.stored_paper_count } } })
-      } else {
-        const started = await api.rescoreSemantic()
-        while (true) {
-          const job = await api.jobStatus(started.job_id)
-          setSemanticRescoreProgress(job.message || `正在重算 ${job.progress}%`)
-          if (job.status === 'failed') throw new Error(job.error || job.message || '历史语义分数重算失败')
-          if (job.status === 'completed') break
-          await new Promise((resolve) => window.setTimeout(resolve, 1500))
-        }
-        const loaded = await api.settings()
-        setSettings((current) => current ? { ...current, embedding: loaded.embedding } : current)
-      }
-      onToast('success', '历史语义候选已更新，日历会按新候选刷新；AI 初筛不会自动重跑')
-    } catch (rescoreError) {
-      onToast('error', rescoreError instanceof Error ? rescoreError.message : '历史语义分数重算失败')
-    } finally {
-      setSemanticRescoring(false)
-      setSemanticRescoreProgress('')
-    }
-  }
-
   const testEmail = async () => {
     if (!settings) return
     setEmailTesting(true)
@@ -147,15 +104,9 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   if (state === 'loading' || !settings) return state === 'error' ? <PageError message={error} onRetry={load} /> : <WorkspaceSkeleton />
   const insecure = settings.api_base_url.trim().toLowerCase().startsWith('http://')
   const budgetOptions = [
-    { id: 'economy' as const, name: '经济', detail: '正文 1.6 万字符 / PDF 12 页；初筛 900、深读 2,000 输出 Token' },
-    { id: 'balanced' as const, name: '平衡', detail: '正文 3 万字符 / PDF 25 页；初筛 1,200、深读 3,500 输出 Token' },
-    { id: 'deep' as const, name: '深度', detail: '正文 4.5 万字符 / PDF 40 页；初筛 1,600、深读 5,000 输出 Token' },
-  ]
-  const recallOptions = [
-    { id: 'high' as const, name: '高召回', detail: '语义相似度 0.66；优先减少漏检' },
-    { id: 'balanced' as const, name: '平衡', detail: '语义相似度 0.68；兼顾覆盖与成本' },
-
-    { id: 'precise' as const, name: '精准', detail: '语义相似度 0.70；减少边缘候选' },
+    { id: 'economy' as const, name: '经济', detail: '正文 1.6 万字符 / PDF 12 页；标题与摘要 900、深读 2,000 输出 Token' },
+    { id: 'balanced' as const, name: '平衡', detail: '正文 3 万字符 / PDF 25 页；标题与摘要 1,200、深读 3,500 输出 Token' },
+    { id: 'deep' as const, name: '深度', detail: '正文 4.5 万字符 / PDF 40 页；标题与摘要 1,600、深读 5,000 输出 Token' },
   ]
   const selectedPromptTemplate = promptCatalog?.templates.find((item) => item.id === settings.prompt_template_id)
   const promptModified = Boolean(selectedPromptTemplate && (
@@ -249,11 +200,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
             <button type="button" className="button secondary" disabled={emailTesting || !settings.smtp_host || !settings.smtp_sender || !settings.email_recipients.length} onClick={() => void testEmail()}><Mail size={16} />{emailTesting ? '正在发送' : '保存并发送测试邮件'}</button>
           </FormSection>
 
-          <FormSection title="处理规模与门槛" description="每次日更先用本地语义模型召回，再把所有候选分批完成摘要初筛；历史重算只刷新候选，不自动重跑 AI 初筛。">
-            <div className="embedding-status"><div><Network size={18} /><span><strong>本地语义模型</strong><small>{settings.embedding.model} · {settings.embedding.dimensions ? `${settings.embedding.dimensions} 维` : '维度待检测'} · {settings.embedding.loaded ? '已加载' : settings.embedding.available ? '等待首次加载' : '尚未下载'}{semanticRescoreProgress ? ` · ${semanticRescoreProgress}` : settings.embedding.rescore.status === 'running' ? ` · 历史候选 ${settings.embedding.rescore.processed ?? 0}/${settings.embedding.rescore.total ?? 0}` : settings.embedding.rescore.status === 'completed' ? ` · 历史候选已计算 ${settings.embedding.rescore.total ?? 0} 篇` : settings.embedding.rescore.status === 'failed' ? ' · 历史候选重算失败' : ' · 历史候选待重算'}</small></span></div><div className="embedding-actions"><button type="button" className="button secondary compact" disabled={embeddingTesting || semanticRescoring} onClick={() => void testEmbedding()}><RefreshCw className={embeddingTesting ? 'spin' : ''} size={14} />{embeddingTesting ? '预热中' : '下载并预热'}</button><button type="button" className="button secondary compact" disabled={semanticRescoring || embeddingTesting} onClick={() => void rescoreSemantic()}><RefreshCw className={semanticRescoring ? 'spin' : ''} size={14} />{semanticRescoring ? '重算中' : '重算历史语义候选'}</button></div></div>
-            <div className="budget-mode-list" role="radiogroup" aria-label="语义召回档位">
-              {recallOptions.map((option) => <label key={option.id} className={settings.semantic_recall_mode === option.id ? 'selected' : ''}><input type="radio" name="semantic-recall" checked={settings.semantic_recall_mode === option.id} onChange={() => setSettings({ ...settings, semantic_recall_mode: option.id })} /><span><strong>{option.name}</strong><small>{option.detail}</small></span></label>)}
-            </div>
+          <FormSection title="处理规模与门槛" description="每日流水线依次执行批量标题预筛、逐篇摘要评分和高分论文全文深读；每一级完成后立即保存结果。">
             <div className="budget-mode-list" role="radiogroup" aria-label="单篇分析 Token 档位">
               {budgetOptions.map((option) => <label key={option.id} className={settings.analysis_budget === option.id ? 'selected' : ''}><input type="radio" name="analysis-budget" checked={settings.analysis_budget === option.id} onChange={() => setSettings({ ...settings, analysis_budget: option.id })} /><span><strong>{option.name}</strong><small>{option.detail}</small></span></label>)}
             </div>
@@ -261,18 +208,22 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
             <label className="field compact-number-field"><span>本轮最多抓取的候选论文</span><input type="number" min="10" max="1000" value={settings.arxiv_fetch_limit} onChange={(event) => setSettings({ ...settings, arxiv_fetch_limit: Number(event.target.value) })} /></label>
             <div className="analysis-thresholds">
               <article>
-                <header><span>第 1 级</span><h3>摘要初筛</h3></header>
-                <p>语义相似度决定普通候选，关注作者可直接进入候选；方向词用于构造英文语义查询，不是硬命中门槛。</p>
-                <label className="field"><span>单批初筛大小</span><div><input type="number" min="1" max={settings.arxiv_fetch_limit} value={settings.screening_batch_size} onChange={(event) => setSettings({ ...settings, screening_batch_size: Number(event.target.value) })} /><em>篇</em></div><small>一次日更自动连续处理全部批次，每批内部最多 4 篇并发。</small></label>
+                <header><span>第 1 级</span><h3>标题预筛</h3></header>
+                <p>将标题、arXiv 分类和关注标签批量交给 LLM，只排除明显无关论文，不发送摘要。</p>
+                <label className="field"><span>单批标题数量</span><div><input type="number" min="1" max={settings.arxiv_fetch_limit} value={settings.prefilter_batch_size} onChange={(event) => setSettings({ ...settings, prefilter_batch_size: Number(event.target.value) })} /><em>篇</em></div><small>批次越大，请求次数越少，但单次输入和结构化输出越长。</small></label>
               </article>
               <article>
-                <header><span>第 2 级</span><h3>全文深读</h3></header>
+                <header><span>第 2 级</span><h3>摘要评分</h3></header>
+                <p>仅对标题预筛保留的论文逐篇阅读摘要，给出相关度、原因和匹配标签。</p>
+              </article>
+              <article>
+                <header><span>第 3 级</span><h3>全文深读</h3></header>
                 <p>摘要初筛完成后，AI 相关度达到 <strong>{settings.deep_analysis_threshold ?? 90}</strong> 分才进入全文队列。</p>
                 <label className="field"><span>每轮最多深读</span><div><input type="number" min="0" max="100" value={settings.deep_analysis_limit} onChange={(event) => setSettings({ ...settings, deep_analysis_limit: Number(event.target.value) })} /><em>篇</em></div></label>
               </article>
             </div>
             <label className="field"><span>全文深读的 AI 相关度门槛</span><div className="range-readout"><span>越高越省 Token，但可能漏掉边缘相关论文</span><strong>{settings.deep_analysis_threshold ?? 90}</strong></div><input className="range" type="range" min="0" max="100" step="5" value={settings.deep_analysis_threshold ?? 90} onChange={(event) => setSettings({ ...settings, deep_analysis_threshold: Number(event.target.value) })} /></label>
-            <div className="cost-note"><Sparkles size={16} /><span>本地向量与词法召回不消耗模型 Token；所有召回候选都会分批调用摘要初筛，全文深读每次最多 {settings.deep_analysis_limit} 篇。候选越多，摘要初筛 Token 用量越高。</span></div>
+            <div className="cost-note"><Sparkles size={16} /><span>三个筛选阶段都会消耗模型 Token。标题预筛最便宜，摘要评分只处理保留项，全文深读每次最多 {settings.deep_analysis_limit} 篇。</span></div>
           </FormSection>
 
           <FormSection title="论文分析提示词" description="模板与编辑内容从下一次摘要初筛和全文深读开始生效，不会重写已有分析。">

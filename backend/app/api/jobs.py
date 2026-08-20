@@ -13,22 +13,13 @@ from ..models import Analysis, Job, Paper, PaperMatch
 from ..services.jobs import RUNNING_STATUSES
 from ..services.paper_sync import latest_complete_submission_date
 from ..services.state import active_profile
-from ..settings import get_process_settings, load_runtime_settings
 from ..workflow import daily_pipeline
 from .presenters.jobs import _job_wire
 from .system_views import _provider_public_status
 
 router = APIRouter()
 
-_INCOMPLETE_RESULT_KEYS = (
-    "report_incomplete",
-    "semantic_degraded",
-    "semantic_rescore_failed",
-    "screening_failed",
-    "email_failed",
-    "screening_errors",
-    "analysis_errors",
-)
+_INCOMPLETE_RESULT_KEYS = ("email_failed",)
 
 
 class DailyJobPayload(BaseModel):
@@ -37,9 +28,7 @@ class DailyJobPayload(BaseModel):
 
 @router.post("/api/refresh", status_code=status.HTTP_202_ACCEPTED)
 async def refresh() -> dict[str, Any]:
-    return daily_pipeline.start_job(
-        "daily", target_date=latest_complete_submission_date()
-    )
+    return daily_pipeline.start_job("daily", target_date=latest_complete_submission_date())
 
 
 @router.post("/api/run-daily", status_code=status.HTTP_202_ACCEPTED)
@@ -51,19 +40,12 @@ async def start_daily(payload: DailyJobPayload) -> dict[str, Any]:
 
 @router.post("/api/sync", status_code=status.HTTP_202_ACCEPTED)
 async def sync() -> dict[str, Any]:
-    return daily_pipeline.start_job(
-        "sync", target_date=latest_complete_submission_date()
-    )
+    return daily_pipeline.start_job("sync", target_date=latest_complete_submission_date())
 
 
 @router.post("/api/analyze", status_code=status.HTTP_202_ACCEPTED)
 async def analyze() -> dict[str, Any]:
     return daily_pipeline.start_job("analyze")
-
-
-@router.post("/api/semantic/rescore", status_code=status.HTTP_202_ACCEPTED)
-async def semantic_rescore() -> dict[str, Any]:
-    return daily_pipeline.start_job("semantic_rescore")
 
 
 @router.get("/api/jobs/{job_id}")
@@ -105,24 +87,16 @@ def job_calendar(
         else datetime(year, month_number + 1, 1, tzinfo=UTC)
     )
     profile = active_profile(db)
-    settings = load_runtime_settings(db)
-    ai_configured = settings.provider.configured
-    threshold = get_process_settings().semantic.threshold(settings.semantic_recall_mode)
     paper_day = func.coalesce(Paper.published_at, Paper.first_seen_at)
     rows = db.execute(
         select(
             func.date(paper_day),
-            func.sum(case((PaperMatch.semantic_score >= threshold, 1), else_=0)),
+            func.count(PaperMatch.id),
+            func.sum(case((PaperMatch.prefiltered_at.is_not(None), 1), else_=0)),
             func.sum(
-                case(
-                    (
-                        (PaperMatch.semantic_score >= threshold)
-                        & PaperMatch.screening_relevance_score.is_not(None),
-                        1,
-                    ),
-                    else_=0,
-                )
+                case((PaperMatch.prefilter_decision.in_(("relevant", "uncertain")), 1), else_=0)
             ),
+            func.sum(case((PaperMatch.screened_at.is_not(None), 1), else_=0)),
         )
         .join(PaperMatch, PaperMatch.paper_id == Paper.id)
         .where(
@@ -133,8 +107,13 @@ def job_calendar(
         .group_by(func.date(paper_day))
     ).all()
     current_by_date = {
-        str(day): {"candidates": int(candidates or 0), "screened": int(screened or 0)}
-        for day, candidates, screened in rows
+        str(day): {
+            "fetched": int(fetched or 0),
+            "prefiltered": int(prefiltered or 0),
+            "kept": int(kept or 0),
+            "screened": int(screened or 0),
+        }
+        for day, fetched, prefiltered, kept, screened in rows
     }
     deep_by_date = {
         str(day): int(count or 0)
@@ -165,22 +144,25 @@ def job_calendar(
         screened = (
             current["screened"] if current is not None else int(result.get("screened", 0) or 0)
         )
-        candidates = (
-            current["candidates"]
+        fetched = current["fetched"] if current is not None else int(result.get("fetched", 0) or 0)
+        prefiltered = (
+            current["prefiltered"]
             if current is not None
-            else int(result.get("screening_queue_total", screened) or 0)
+            else int(result.get("prefiltered", 0) or 0)
         )
-        pending_screening = max(0, candidates - screened) if ai_configured else 0
+        kept = current["kept"] if current is not None else int(result.get("prefilter_kept", 0) or 0)
+        pending_prefilter = max(0, fetched - prefiltered)
+        pending_screening = max(0, kept - screened)
         job_complete = (
             job.status == "completed"
             and not job.error
             and not any(result.get(key) for key in _INCOMPLETE_RESULT_KEYS)
         )
-        complete = job_complete and pending_screening == 0
-        if job_complete and not ai_configured:
-            message = "语义筛选已完成；未配置 AI 初筛"
+        complete = job_complete and pending_prefilter == 0 and pending_screening == 0
+        if job_complete and pending_prefilter:
+            message = f"有 {pending_prefilter} 篇论文等待标题预筛"
         elif job_complete and pending_screening:
-            message = f"有 {pending_screening} 篇当前语义候选等待 AI 初筛"
+            message = f"有 {pending_screening} 篇论文等待摘要评分"
         elif complete:
             message = "任务完整完成"
         elif job.status in RUNNING_STATUSES:
@@ -191,9 +173,11 @@ def job_calendar(
             {
                 "date": day,
                 "status": "completed" if complete else "partial",
-                "fetched": int(result.get("fetched", 0) or 0),
-                "candidates": candidates,
+                "fetched": fetched,
+                "prefiltered": prefiltered,
+                "prefilter_kept": kept,
                 "screened": screened,
+                "pending_prefilter": pending_prefilter,
                 "pending_screening": pending_screening,
                 "analyzed": deep_by_date.get(day, 0),
                 "message": message,

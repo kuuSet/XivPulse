@@ -33,19 +33,13 @@ def test_pipeline_lock_is_released_only_when_the_guarded_work_fails(
 async def test_daily_pipeline_runs_stages_in_order_and_merges_results() -> None:
     calls: list[tuple[str, object]] = []
 
-    async def semantic_rescore_stage(*, force: bool, job_id: str | None) -> dict[str, Any]:
-        calls.append(("rescore", (force, job_id)))
-        return {"semantic_rescore": {"status": "completed", "skipped": True}}
-
     async def sync_stage(*, target_date: date | None) -> dict[str, Any]:
         calls.append(("sync", target_date))
         return {"fetch_date": "2026-08-14", "fetched": 3}
 
-    async def analyze_stage(
-        *, job_id: str | None, report_date: date | None
-    ) -> dict[str, Any]:
+    async def analyze_stage(*, job_id: str | None, report_date: date | None) -> dict[str, Any]:
         calls.append(("analyze", (job_id, report_date)))
-        return {"screened": 2}
+        return {"prefiltered": 3, "screened": 2}
 
     async def finalize_daily_stage(
         report_date: date,
@@ -57,25 +51,21 @@ async def test_daily_pipeline_runs_stages_in_order_and_merges_results() -> None:
 
     coordinator = PipelineCoordinator(
         initialize=lambda: None,
-        semantic_rescore_stage=semantic_rescore_stage,
         sync_stage=sync_stage,
         analyze_stage=analyze_stage,
         finalize_daily_stage=finalize_daily_stage,
     )
 
-    result = await coordinator.execute(
-        "daily", job_id=None, target_date=date(2026, 8, 14)
-    )
+    result = await coordinator.execute("daily", job_id=None, target_date=date(2026, 8, 14))
 
     assert result == {
-        "semantic_rescore": {"status": "completed", "skipped": True},
         "fetch_date": "2026-08-14",
         "fetched": 3,
+        "prefiltered": 3,
         "screened": 2,
         "report_date": "2026-08-14",
     }
     assert calls == [
-        ("rescore", (False, None)),
         ("sync", date(2026, 8, 14)),
         ("analyze", (None, date(2026, 8, 14))),
         (
@@ -84,9 +74,9 @@ async def test_daily_pipeline_runs_stages_in_order_and_merges_results() -> None:
                 None,
                 date(2026, 8, 14),
                 {
-                    "semantic_rescore": {"status": "completed", "skipped": True},
                     "fetch_date": "2026-08-14",
                     "fetched": 3,
+                    "prefiltered": 3,
                     "screened": 2,
                 },
             ),
@@ -103,12 +93,7 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
     async def unexpected_sync(*, target_date: date | None) -> dict[str, Any]:
         raise AssertionError("sync stage should not run")
 
-    async def unexpected_rescore(*, force: bool, job_id: str | None) -> dict[str, Any]:
-        raise AssertionError("semantic rescore should not run")
-
-    async def analyze_stage(
-        *, job_id: str | None, report_date: date | None
-    ) -> dict[str, Any]:
+    async def analyze_stage(*, job_id: str | None, report_date: date | None) -> dict[str, Any]:
         assert job_id == "job-1"
         assert report_date is None
         return {"analyzed": 1}
@@ -122,80 +107,12 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
 
     coordinator = PipelineCoordinator(
         initialize=lambda: None,
-        semantic_rescore_stage=unexpected_rescore,
         sync_stage=unexpected_sync,
         analyze_stage=analyze_stage,
         finalize_daily_stage=unexpected_finalize,
     )
 
     assert await coordinator.execute("analyze", job_id="job-1") == {"analyzed": 1}
-
-
-@pytest.mark.asyncio
-async def test_automatic_rescore_failure_does_not_stop_daily_pipeline() -> None:
-    calls: list[str] = []
-
-    async def failing_rescore(*, force: bool, job_id: str | None) -> dict[str, Any]:
-        assert force is False
-        calls.append("rescore")
-        raise RuntimeError("embedding unavailable")
-
-    async def sync_stage(*, target_date: date | None) -> dict[str, Any]:
-        calls.append("sync")
-        return {"fetch_date": "2026-08-14", "fetched": 1}
-
-    async def analyze_stage(*, job_id: str | None, report_date: date | None) -> dict[str, Any]:
-        calls.append("analyze")
-        return {"screened": 1}
-
-    async def finalize(
-        report_date: date,
-        result: dict[str, Any],
-        job_id: str | None,
-    ) -> dict[str, Any]:
-        calls.append("finalize")
-        return result
-
-    coordinator = PipelineCoordinator(
-        initialize=lambda: None,
-        semantic_rescore_stage=failing_rescore,
-        sync_stage=sync_stage,
-        analyze_stage=analyze_stage,
-        finalize_daily_stage=finalize,
-    )
-
-    result = await coordinator.execute("daily")
-
-    assert calls == ["rescore", "sync", "analyze", "finalize"]
-    assert result["semantic_rescore_failed"] is True
-    assert result["semantic_rescore_error"] == "embedding unavailable"
-
-
-@pytest.mark.asyncio
-async def test_manual_semantic_rescore_is_forced_and_runs_alone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(pipeline_module, "update_job_progress", lambda *args, **kwargs: None)
-
-    async def semantic_rescore_stage(*, force: bool, job_id: str | None) -> dict[str, Any]:
-        assert force is True
-        assert job_id == "job-1"
-        return {"semantic_rescore": {"status": "completed"}}
-
-    async def unexpected_stage(**_values: object) -> dict[str, Any]:
-        raise AssertionError("paper pipeline stage should not run")
-
-    coordinator = PipelineCoordinator(
-        initialize=lambda: None,
-        semantic_rescore_stage=semantic_rescore_stage,
-        sync_stage=unexpected_stage,
-        analyze_stage=unexpected_stage,
-        finalize_daily_stage=unexpected_stage,  # type: ignore[arg-type]
-    )
-
-    assert await coordinator.execute("semantic_rescore", job_id="job-1") == {
-        "semantic_rescore": {"status": "completed"}
-    }
 
 
 @pytest.mark.asyncio

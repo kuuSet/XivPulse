@@ -25,12 +25,12 @@ def _job_wire(job: Job | None) -> dict[str, Any] | None:
         "completed_at": job.completed_at,
     }
     for key in (
-        "screening_queue_total",
-        "screening_completed",
-        "screening_failed",
-        "screening_current_batch",
-        "screening_total_batches",
-        "report_incomplete",
+        "prefiltered",
+        "prefilter_kept",
+        "prefilter_rejected",
+        "screening_total",
+        "screened",
+        "analyzed",
     ):
         if key in job.result:
             data[key] = job.result[key]

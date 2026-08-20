@@ -7,13 +7,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ...models import Feedback, Paper, ProjectPaper, Topic
-from ...services.directions.matching import canonical_requested_direction_names
-from ...services.directions.taxonomy import has_current_direction_attribution
+from ...models import Feedback, Paper, ProjectPaper
 from ...services.organizations import paper_organizations
 from ...services.state import clean_string_list as _clean_string_list
 from .analyses import _analysis_wire
-from .common import _canonical_directions, _direction_key, _latest_analysis
+from .common import _latest_analysis
 from .projects import _project_membership_wire, _reading_wire
 
 
@@ -22,8 +20,6 @@ def _paper_wire(
     profile_id: int | None = None,
     *,
     detail: bool = False,
-    topics: list[Topic] | None = None,
-    taxonomy_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     match = next(
         (item for item in paper.matches if profile_id is None or item.profile_id == profile_id),
@@ -58,36 +54,7 @@ def _paper_wire(
     novelty = analysis.novelty_score if analysis else None
     rigor = analysis.rigor_score if analysis else None
     priority = "high" if score >= 80 else "medium" if score >= 60 else "low"
-    semantic_candidates: list[dict[str, Any]] = []
-    if match is not None:
-        semantic_candidates = [
-            {"name": name, "score": round(float(value), 4)}
-            for name, value in sorted(match.semantic_topics.items(), key=lambda item: -item[1])
-        ]
-    # Formal directions come only from a completed AI screening under the current
-    # controlled taxonomy. Semantic and lexical signals remain visible as candidates.
-    if topics is not None:
-        active_topics = [topic for topic in topics if topic.enabled]
-        matched_topics: list[str] = []
-        direction_names = {_direction_key(topic.name): topic.name for topic in active_topics}
-        screening = _latest_analysis(paper, "screening", profile_id=profile_id)
-        payload = dict(screening.payload_json or {}) if screening is not None else {}
-        if (
-            screening is not None
-            and screening.status == "completed"
-            and taxonomy_fingerprint is not None
-            and has_current_direction_attribution(payload, taxonomy_fingerprint)
-        ):
-            verified = canonical_requested_direction_names(
-                payload.get("matched_topics", []),
-                active_topics,
-                relevant=payload.get("relevant") is True,
-            )
-            matched_topics = _canonical_directions(verified, direction_names)
-    else:
-        matched_topics = _clean_string_list(match.matched_topics if match else [], limit=20)
-    matched_keywords = _clean_string_list(match.matched_keywords if match else [], limit=30)
-    reasons = list(dict.fromkeys([*matched_topics, *matched_keywords]))
+    matched_topics = _clean_string_list(match.matched_topics if match else [], limit=20)
     data: dict[str, Any] = {
         "id": paper.id,
         "arxiv_id": paper.arxiv_id,
@@ -111,18 +78,13 @@ def _paper_wire(
             if match is not None and match.screening_relevance_score is not None
             else None
         ),
+        "prefilter_decision": match.prefilter_decision if match is not None else None,
         "effective_score": round(float(score), 1),
-        "score_source": match.score_source if match is not None else "semantic",
-        "semantic_score": round(float(match.semantic_score), 4)
-        if match is not None and match.semantic_score is not None
-        else None,
-        "semantic_candidate_topics": semantic_candidates,
         "quality_score": rigor,
         "novelty_score": novelty,
         "priority": priority,
-        "match_reasons": reasons,
+        "match_reasons": matched_topics,
         "matched_topics": matched_topics,
-        "matched_keywords": matched_keywords,
         "analysis_tags": _clean_string_list(analysis.tags if analysis else [], limit=20),
         "summary": analysis.summary if analysis else None,
         "why_recommended": match.reason if match else None,

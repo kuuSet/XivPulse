@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, ExternalLink, Library, LoaderCircle, Mail, Network, Radar, RefreshCw, Save, Sparkles, TrendingUp } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, ExternalLink, Library, LoaderCircle, Mail, Network, Radar, RefreshCw, Save, Sparkles, TrendingUp } from 'lucide-react'
 import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { BRAND_LOGO, isDemo } from '../../lib/runtime'
@@ -89,7 +89,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
       if (status === 'ready') onToast('success', `${activeReportDate} 的 AI 综合研判已生成并保存`)
       else if (status === 'not_configured') onToast('error', '尚未配置模型 API Key，确定性日报仍可正常使用')
       else if (status === 'insufficient_data') onToast('error', '当天还没有足够的已分析论文，暂不调用 AI')
-      else onToast('error', next.ai_synthesis?.last_error ?? 'AI 综合研判生成失败')
+      else onToast('error', 'AI 综合研判未生成')
     } catch (synthesisError) {
       onToast('error', synthesisError instanceof Error ? synthesisError.message : 'AI 综合研判生成失败')
     } finally {
@@ -195,7 +195,6 @@ function StructuredReport({ report, papers }: { report: DailyReport; papers: Pap
       <header>
         <span>执行摘要</span>
         <h2>{report.title ?? `${report.report_date} 当日研究总结`}</h2>
-        {report.incomplete && <div className="report-incomplete"><AlertTriangle size={16} /><strong>初筛未完全完成</strong><span>仍有 {report.coverage?.screening_failed ?? report.screening_status?.failed ?? 0} 篇失败，缺失论文未按零相关处理。</span></div>}
         <p>{report.executive_summary}</p>
         <div>
           {report.coverage && <>
@@ -274,7 +273,6 @@ function AiSynthesisSection({ synthesis }: { synthesis?: DailyReport['ai_synthes
     not_configured: { title: '尚未配置 AI 综合研判', detail: '配置模型 API Key 后，可在日报顶部手动生成；打开或切换日期不会调用模型。' },
     insufficient_data: { title: '当天分析证据不足', detail: '至少需要一篇已完成分析并进入代表列表的论文，系统才会调用 AI。' },
     disabled: { title: '自动 AI 综合研判已关闭', detail: '确定性日报保持可用，也可以在日报顶部按需手动生成。' },
-    error: { title: '最近一次 AI 综合研判失败', detail: synthesis?.last_error ?? '已保留确定性日报和此前成功内容，可稍后重试。' },
   }
   if (!synthesis) {
     return <section className="report-section ai-synthesis-section empty"><div className="report-section-title"><Sparkles size={16} /><h3>AI 综合研判</h3></div><div className="ai-synthesis-status"><strong>尚未生成长篇综合研判</strong><p>日更完成后可自动生成，也可使用日报顶部按钮按需调用一次。</p></div></section>
@@ -282,7 +280,7 @@ function AiSynthesisSection({ synthesis }: { synthesis?: DailyReport['ai_synthes
   const status = statusCopy[synthesis.status]
   return <section className={`report-section ai-synthesis-section ${synthesis.stale ? 'stale' : ''}`}>
     <div className="report-section-title"><Sparkles size={16} /><h3>AI 综合研判</h3>{synthesis.budget_mode && <span>{synthesis.budget_mode}</span>}</div>
-    {(status || synthesis.stale) && <div className={`ai-synthesis-status ${synthesis.status === 'error' ? 'error' : ''}`}><strong>{synthesis.stale ? '底层日报已经变化，这份研判需要更新' : status?.title}</strong><p>{synthesis.stale ? '旧内容仍保留供对照；点击日报顶部“重做 AI 研判”才会再次调用模型。' : status?.detail}</p></div>}
+    {(status || synthesis.stale) && <div className="ai-synthesis-status"><strong>{synthesis.stale ? '底层日报已经变化，这份研判需要更新' : status?.title}</strong><p>{synthesis.stale ? '旧内容仍保留供对照；点击日报顶部“重做 AI 研判”才会再次调用模型。' : status?.detail}</p></div>}
     {hasSavedContent && <div className="ai-synthesis-content">
 
       <header><span>总体判断</span><h4>{synthesis.headline}</h4><p>{synthesis.overall_assessment}</p></header>

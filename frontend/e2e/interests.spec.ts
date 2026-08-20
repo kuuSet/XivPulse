@@ -44,7 +44,7 @@ test('watch categories are peer sections and auto-save independently', async ({ 
   await expect(saveStatus).toContainText('已自动保存')
 
   const customLabel = 'Playwright UI verification topic'
-  const customDescription = 'Systems research for testing semantic interest descriptions in the user interface.'
+  const customDescription = 'Systems research for testing LLM interest descriptions in the user interface.'
   await dialog.getByPlaceholder('Search presets or type a new interest').fill(customLabel)
   await dialog.getByPlaceholder('Describe the research problems, methods, systems, and application boundary covered by this tag.').fill(customDescription)
   await dialog.locator('.interest-custom-option').click()
@@ -56,7 +56,7 @@ test('watch categories are peer sections and auto-save independently', async ({ 
   await dialog.getByRole('button', { name: '关闭' }).click()
   await topicSection.getByRole('button', { name: `编辑 ${customLabel}` }).click()
   dialog = page.getByRole('dialog', { name: `编辑 ${customLabel}` })
-  const editedDescription = 'Systems research for semantic matching, ranking, and compact user-interface verification.'
+  const editedDescription = 'Systems research for LLM screening, ranking, and compact user-interface verification.'
   await dialog.getByPlaceholder('Describe the research problems, methods, systems, and application boundary covered by this tag.').fill(editedDescription)
   await dialog.getByRole('button', { name: '保存描述' }).click()
   await expect.poll(() => savedInterests.at(-1)?.topics.find((topic) => topic.name === customLabel)?.description).toBe(editedDescription)

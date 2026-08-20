@@ -14,11 +14,9 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
-    LargeBinary,
     String,
     Text,
     UniqueConstraint,
-    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -172,9 +170,6 @@ class Paper(TimestampMixin, Base):
     project_links: Mapped[list[ProjectPaper]] = relationship(
         back_populates="paper", cascade="all, delete-orphan"
     )
-    embeddings: Mapped[list[PaperEmbedding]] = relationship(
-        back_populates="paper", cascade="all, delete-orphan"
-    )
 
     @property
     def authors(self) -> list[str]:
@@ -259,91 +254,27 @@ class PaperMatch(Base):
     profile_id: Mapped[int] = mapped_column(
         ForeignKey("profiles.id", ondelete="CASCADE"), index=True
     )
-    topic_id: Mapped[int | None] = mapped_column(
-        ForeignKey("topics.id", ondelete="SET NULL"), nullable=True
-    )
     matched_topics_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    matched_keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    excluded_keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    lexical_score: Mapped[float] = mapped_column(Float, default=0.0)
-    semantic_score: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
-    semantic_topics_json: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
-    semantic_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    prefilter_decision: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    prefiltered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     screening_relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str] = mapped_column(Text, default="")
     screened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     paper: Mapped[Paper] = relationship(back_populates="matches")
     profile: Mapped[Profile] = relationship(back_populates="matches")
-    topic: Mapped[Topic | None] = relationship()
 
     @property
     def matched_topics(self) -> list[str]:
         return list(self.matched_topics_json or [])
 
     @property
-    def matched_keywords(self) -> list[str]:
-        return list(self.matched_keywords_json or [])
-
-    @property
-    def semantic_topics(self) -> dict[str, float]:
-        return {
-            str(name): float(score)
-            for name, score in dict(self.semantic_topics_json or {}).items()
-            if isinstance(score, int | float)
-        }
-
-    @property
     def effective_score(self) -> float:
-        if self.screening_relevance_score is not None:
-            return max(0.0, min(100.0, self.screening_relevance_score))
-        return max(0.0, min(100.0, (self.semantic_score or 0.0) * 100))
-
-    @property
-    def score_source(self) -> str:
-        return "ai" if self.screening_relevance_score is not None else "semantic"
+        return max(0.0, min(100.0, self.screening_relevance_score or 0.0))
 
     @classmethod
     def effective_score_expression(cls):
-        return func.coalesce(cls.screening_relevance_score, cls.semantic_score * 100, 0)
-
-
-class PaperEmbedding(TimestampMixin, Base):
-    __tablename__ = "paper_embeddings"
-    __table_args__ = (UniqueConstraint("paper_id", "model_id", name="uq_paper_embedding_model"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    paper_id: Mapped[int] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"), index=True)
-    model_id: Mapped[str] = mapped_column(String(160), index=True)
-    content_hash: Mapped[str] = mapped_column(String(64), index=True)
-    dimensions: Mapped[int] = mapped_column(Integer)
-    vector_blob: Mapped[bytes] = mapped_column(LargeBinary)
-
-    paper: Mapped[Paper] = relationship(back_populates="embeddings")
-
-
-class ScreeningQueueItem(TimestampMixin, Base):
-    __tablename__ = "screening_queue"
-    __table_args__ = (
-        UniqueConstraint("paper_id", "profile_id", name="uq_screening_queue_paper_profile"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    paper_id: Mapped[int] = mapped_column(ForeignKey("papers.id", ondelete="CASCADE"), index=True)
-    profile_id: Mapped[int] = mapped_column(
-        ForeignKey("profiles.id", ondelete="CASCADE"), index=True
-    )
-    report_date: Mapped[date] = mapped_column(Date, index=True)
-    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
-    recall_mode: Mapped[str] = mapped_column(String(20), default="high")
-    semantic_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    semantic_topics_json: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
-    attempts: Mapped[int] = mapped_column(Integer, default=0)
-    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    paper: Mapped[Paper] = relationship()
-    profile: Mapped[Profile] = relationship()
+        return cls.screening_relevance_score
 
 
 class Analysis(Base):
@@ -576,7 +507,6 @@ class ReportSynthesisRun(TimestampMixin, Base):
         ForeignKey("daily_research_reports.id", ondelete="CASCADE"), index=True
     )
     report_date: Mapped[date] = mapped_column(Date, index=True)
-    status: Mapped[str] = mapped_column(String(20), default="running", index=True)
     source_hash: Mapped[str] = mapped_column(String(64), index=True)
     provider: Mapped[str] = mapped_column(String(80), default="")
     model: Mapped[str] = mapped_column(String(120), default="")
@@ -589,7 +519,6 @@ class ReportSynthesisRun(TimestampMixin, Base):
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="report_synthesis_runs")
     report: Mapped[DailyResearchReport] = relationship()
@@ -658,6 +587,7 @@ class AppSetting(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
+
 __all__ = [
     "Analysis",
     "AppSetting",
@@ -668,7 +598,6 @@ __all__ = [
     "FeedbackReason",
     "Job",
     "Paper",
-    "PaperEmbedding",
     "PaperMatch",
     "PaperReadingState",
     "PaperVersion",
@@ -676,7 +605,6 @@ __all__ = [
     "ProjectPaper",
     "ResearchProject",
     "ReportSynthesisRun",
-    "ScreeningQueueItem",
     "Topic",
     "utcnow",
 ]

@@ -7,7 +7,6 @@ from datetime import UTC, date, datetime
 import pytest
 from app.database import Base, make_engine
 from app.models import Analysis, Digest, Paper, PaperMatch, Profile, Topic
-from app.services.directions.taxonomy import stamp_direction_attribution
 from app.services.reporting.builder import build_daily_research_report
 from app.services.reporting.roadmap import build_research_roadmap
 from app.services.reporting.trends import build_topic_trends
@@ -69,10 +68,11 @@ def analytics_session() -> Session:
                 paper_id=paper.id,
                 profile_id=profile.id,
                 matched_topics_json=topics,
-                matched_keywords_json=keywords,
-                semantic_score=score / 100,
+                prefilter_decision="relevant",
+                prefiltered_at=published_at,
                 screening_relevance_score=score,
                 reason=f"Relevant to {', '.join(topics)}",
+                screened_at=published_at,
             )
         )
         if analysis is not None:
@@ -277,7 +277,6 @@ def test_trends_and_roadmap_reject_non_followed_labels(
     )
     assert category_only_match is not None
     category_only_match.matched_topics_json = []
-    category_only_match.matched_keywords_json = ["Navigation"]
     category_only_match.paper.title = "Earlier Robot Systems Study"
     category_only_match.paper.abstract = "A simulation benchmark without a specific direction."
     first_analysis = analytics_session.scalar(select(Analysis).where(Analysis.paper_id == 1))
@@ -310,7 +309,7 @@ def test_trends_and_roadmap_reject_non_followed_labels(
     )
 
 
-def test_historical_formal_name_without_direction_evidence_is_not_counted(
+def test_llm_topic_is_counted_without_keyword_evidence(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
@@ -333,24 +332,24 @@ def test_historical_formal_name_without_direction_evidence_is_not_counted(
             paper_id=paper.id,
             profile_id=profile.id,
             matched_topics_json=["Navigation"],
-            matched_keywords_json=[],
-            semantic_score=0.25,
+            prefilter_decision="relevant",
+            prefiltered_at=paper.published_at,
             screening_relevance_score=25,
+            screened_at=paper.published_at,
         )
     )
     analytics_session.commit()
 
     trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
     daily = {item["name"]: item for item in trends["daily"]["topics"]}
-    assert "Navigation" not in daily
+    assert daily["Navigation"]["count"] == 1
 
 
-def test_valid_but_unsupported_topic_id_is_not_counted(
+def test_llm_topic_drives_reports_without_local_revalidation(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
     assert profile is not None
-    navigation = next(topic for topic in profile.topics if topic.name == "Navigation")
     paper = Paper(
         arxiv_id="2608.00996",
         title="A General Robotics Systems Benchmark",
@@ -368,11 +367,11 @@ def test_valid_but_unsupported_topic_id_is_not_counted(
         PaperMatch(
             paper_id=paper.id,
             profile_id=profile.id,
-            topic_id=navigation.id,
             matched_topics_json=["Navigation"],
-            matched_keywords_json=[],
-            semantic_score=0.99,
+            prefilter_decision="relevant",
+            prefiltered_at=paper.published_at,
             screening_relevance_score=99,
+            screened_at=paper.published_at,
         )
     )
     analytics_session.add(
@@ -405,12 +404,12 @@ def test_valid_but_unsupported_topic_id_is_not_counted(
         days=14,
     )
 
-    assert "Navigation" not in {item["name"] for item in trends["daily"]["topics"]}
+    assert "Navigation" in {item["name"] for item in trends["daily"]["topics"]}
     roadmap_nodes = {item["label"]: item for item in roadmap["nodes"]}
-    assert roadmap_nodes["Navigation"]["paper_count"] == 1
-    assert roadmap["coverage"]["paper_count"] == 4
+    assert roadmap_nodes["Navigation"]["paper_count"] == 2
+    assert roadmap["coverage"]["paper_count"] == 5
     assert roadmap["coverage"]["candidate_paper_count"] == 5
-    assert roadmap["coverage"]["direction_attributed_paper_count"] == 4
+    assert roadmap["coverage"]["direction_attributed_paper_count"] == 5
 
     report = build_daily_research_report(
         analytics_session,
@@ -419,20 +418,15 @@ def test_valid_but_unsupported_topic_id_is_not_counted(
         timezone_name="UTC",
     )
     assert report["coverage"]["candidate_paper_count"] == 3
-    assert report["coverage"]["paper_count"] == 2
-    assert report["coverage"]["direction_attributed_paper_count"] == 2
-    assert report["coverage"]["direction_attribution_coverage_percent"] == 66.7
-    assert report["research_situation"]["volume"]["today"] == 2
-    assert paper.id not in {item["paper_id"] for item in report["highlight_papers"]}
-    assert paper.id not in {item["paper_id"] for item in report["suggested_reading_queue"]}
-    assert "Contaminating method" not in {item["name"] for item in report["common_methods"]}
-    assert "Contaminating evidence" not in {item["name"] for item in report["common_evidence"]}
-    assert "Contaminating limitation" not in {
-        item["text"] for item in report["limitations_and_research_gaps"]
-    }
+    assert report["coverage"]["paper_count"] == 3
+    assert report["coverage"]["direction_attributed_paper_count"] == 3
+    assert report["coverage"]["direction_attribution_coverage_percent"] == 100.0
+    assert report["research_situation"]["volume"]["today"] == 3
+    assert paper.id in {item["paper_id"] for item in report["highlight_papers"]}
+    assert paper.id in {item["paper_id"] for item in report["suggested_reading_queue"]}
 
 
-def test_direction_context_anchor_blocks_cross_domain_trend_attribution(
+def test_context_keywords_do_not_override_llm_attribution(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
@@ -458,9 +452,10 @@ def test_direction_context_anchor_blocks_cross_domain_trend_attribution(
             paper_id=paper.id,
             profile_id=profile.id,
             matched_topics_json=["Robot Learning"],
-            matched_keywords_json=["behavior cloning"],
-            semantic_score=0.8,
+            prefilter_decision="relevant",
+            prefiltered_at=paper.published_at,
             screening_relevance_score=80,
+            screened_at=paper.published_at,
         )
     )
     analytics_session.commit()
@@ -468,12 +463,12 @@ def test_direction_context_anchor_blocks_cross_domain_trend_attribution(
     trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
     daily = {item["name"]: item for item in trends["daily"]["topics"]}
 
-    assert daily["Robot Learning"]["count"] == 1
+    assert daily["Robot Learning"]["count"] == 2
     assert trends["daily"]["candidate_paper_count"] == 3
-    assert trends["daily"]["paper_count"] == 2
+    assert trends["daily"]["paper_count"] == 3
 
 
-def test_exclusion_term_vetoes_keyword_only_direction_attribution(
+def test_negative_keywords_do_not_override_llm_attribution(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
@@ -498,19 +493,20 @@ def test_exclusion_term_vetoes_keyword_only_direction_attribution(
             paper_id=paper.id,
             profile_id=profile.id,
             matched_topics_json=["VLA"],
-            matched_keywords_json=["VLA"],
-            semantic_score=0.2,
+            prefilter_decision="relevant",
+            prefiltered_at=paper.published_at,
             screening_relevance_score=20,
+            screened_at=paper.published_at,
         )
     )
     analytics_session.commit()
 
     trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
     daily = {item["name"]: item for item in trends["daily"]["topics"]}
-    assert daily["VLA"]["count"] == 1
+    assert daily["VLA"]["count"] == 2
 
 
-def test_only_current_taxonomy_screening_can_establish_a_formal_direction(
+def test_paper_match_is_the_only_llm_topic_snapshot(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
@@ -533,9 +529,10 @@ def test_only_current_taxonomy_screening_can_establish_a_formal_direction(
             paper_id=paper.id,
             profile_id=profile.id,
             matched_topics_json=["VLA"],
-            matched_keywords_json=[],
-            semantic_score=0.8,
+            prefilter_decision="relevant",
+            prefiltered_at=paper.published_at,
             screening_relevance_score=80,
+            screened_at=paper.published_at,
         )
     )
     analytics_session.add(
@@ -554,40 +551,7 @@ def test_only_current_taxonomy_screening_can_establish_a_formal_direction(
 
     trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
     daily = {item["name"]: item for item in trends["daily"]["topics"]}
-    assert daily["VLA"]["count"] == 1
-
-    screening = analytics_session.scalar(select(Analysis).where(Analysis.paper_id == paper.id))
-    assert screening is not None
-    screening.payload_json = stamp_direction_attribution(
-        {"relevant": True, "matched_topics": ["  vla  ", "cs.RO"]},
-        profile.topics,
-    )
-    analytics_session.commit()
-
-    current = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
-    current_daily = {item["name"]: item for item in current["daily"]["topics"]}
-    # Current AI screening may confirm a controlled direction even when the
-    # paper uses new terminology that does not repeat a configured phrase.
-    assert current_daily["VLA"]["count"] == 2
-
-    paper.title = "Vision Language Action for a Multimodal Robot Policy"
-    analytics_session.commit()
-    evidenced = build_topic_trends(
-        analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC"
-    )
-    evidenced_daily = {item["name"]: item for item in evidenced["daily"]["topics"]}
-    assert evidenced_daily["VLA"]["count"] == 2
-
-    vla = next(topic for topic in profile.topics if topic.name == "VLA")
-    vla.negative_keywords = ["never-present-exclusion"]
-    analytics_session.commit()
-    changed_taxonomy = build_topic_trends(
-        analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC"
-    )
-    changed_daily = {item["name"]: item for item in changed_taxonomy["daily"]["topics"]}
-    # The stamped AI attribution is stale, but current local direction evidence
-    # remains independently sufficient for the paper.
-    assert changed_daily["VLA"]["count"] == 2
+    assert daily["VLA"]["count"] == 2
 
 
 def test_daily_report_contains_all_research_sections(analytics_session: Session) -> None:
@@ -730,7 +694,7 @@ def test_report_falls_back_to_abstract_without_any_analysis(
     assert report["suggested_reading_queue"][0]["priority"] == "skim"
 
 
-def test_daily_report_separates_candidates_from_formal_direction_papers(
+def test_daily_report_accepts_llm_topics_and_rejects_unknown_labels(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
@@ -756,8 +720,10 @@ def test_daily_report_separates_candidates_from_formal_direction_papers(
             paper_id=paper.id,
             profile_id=profile.id,
             matched_topics_json=["cs.RO", "Navigation"],
-            semantic_score=0.99,
+            prefilter_decision="relevant",
+            prefiltered_at=paper.published_at,
             screening_relevance_score=99,
+            screened_at=paper.published_at,
         )
     )
     analytics_session.add(
@@ -788,22 +754,18 @@ def test_daily_report_separates_candidates_from_formal_direction_papers(
     )
 
     assert report["coverage"]["candidate_paper_count"] == 3
-    assert report["coverage"]["paper_count"] == 2
-    assert report["coverage"]["direction_attribution_coverage_percent"] == 66.7
+    assert report["coverage"]["paper_count"] == 3
+    assert report["coverage"]["direction_attribution_coverage_percent"] == 100.0
     assert report["daily_trend"]["candidate_paper_count"] == 3
-    assert report["daily_trend"]["paper_count"] == 2
-    assert paper.id not in {item["paper_id"] for item in report["highlight_papers"]}
-    assert paper.id not in {item["paper_id"] for item in report["suggested_reading_queue"]}
-    assert "Candidate-only method" not in {item["name"] for item in report["common_methods"]}
-    assert "Candidate-only evidence" not in {item["name"] for item in report["common_evidence"]}
-    assert "Candidate-only limitation" not in {
-        item["text"] for item in report["limitations_and_research_gaps"]
-    }
+    assert report["daily_trend"]["paper_count"] == 3
+    assert paper.id in {item["paper_id"] for item in report["highlight_papers"]}
+    assert paper.id in {item["paper_id"] for item in report["suggested_reading_queue"]}
+    assert {item["name"] for item in report["daily_trend"]["topics"]} >= {"Navigation"}
     overview_ids = {
         item["paper_id"]
         for item in report["research_situation"]["quality_overview"]["paper_findings"]
     }
-    assert paper.id not in overview_ids
+    assert paper.id in overview_ids
 
 
 def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
@@ -834,9 +796,10 @@ def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
                 paper_id=paper.id,
                 profile_id=profile.id,
                 matched_topics_json=["VLA"],
-                matched_keywords_json=["vision language action"],
-                semantic_score=0.85,
+                prefilter_decision="relevant",
+                prefiltered_at=published_at,
                 screening_relevance_score=85,
+                screened_at=published_at,
             )
         )
         analytics_session.add(
@@ -848,9 +811,7 @@ def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
                 provider="mock",
                 model="mock",
                 summary="Screening only.",
-                payload_json=stamp_direction_attribution(
-                    {"matched_topics": ["VLA"]}, profile.topics
-                ),
+                payload_json={"matched_topics": ["VLA"]},
                 created_at=published_at,
             )
         )

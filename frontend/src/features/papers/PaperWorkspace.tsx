@@ -104,7 +104,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
     return [...source]
       .filter((paper) => {
         if (category !== 'all' && !paper.categories.includes(category)) return false
-        if (priority === 'recommended' && paper.score_source === 'ai' && paper.effective_score < 80) return false
+        if (priority === 'recommended' && paper.effective_score < 80) return false
         if (priority === 'saved' && paper.feedback?.action !== 'save') return false
         if (priority === 'unread' && getReading(paper).state !== 'unread') return false
         if (!normalized) return true
@@ -211,7 +211,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
             {mode === 'today' ? <><CalendarDays size={14} /> {formatFullDate(data?.date)}</> : <><Library size={14} /> 本地论文索引</>}
           </div>
           <h1>{mode === 'today' ? '今日论文' : '论文库'}</h1>
-          <p>{mode === 'today' ? '已按你的关注标签筛选并排序今日更新。' : '检索和回看本地语义筛选出的论文。'}</p>
+          <p>{mode === 'today' ? '已按你的关注标签筛选并排序今日更新。' : '检索和回看经过摘要评分的论文。'}</p>
         </div>
         <button className="button primary" onClick={() => onRefresh()} disabled={refreshing}>
           <RefreshCw size={16} className={refreshing ? 'spin' : ''} />
@@ -224,14 +224,14 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
       {mode === 'today' && data && (
         <section className="metric-band" aria-label="今日统计">
           <Metric label="本次拉取" value={data.processing_summary?.latest_fetched_count ?? data.total_papers} note="最近一次完整日更" />
-          <Metric label="语义候选" value={data.semantic_candidate_papers} note={`相似度门槛 ${Math.round((data.processing_summary?.screening_semantic_threshold ?? 0) * 100)}%`} />
-          <Metric label="AI 初筛" value={data.processing_summary?.latest_screened_count ?? data.screened_papers} note={data.processing_summary?.ai_configured ? `待处理 ${data.processing_summary.pending_screening_count} · 失败 ${data.processing_summary.screening_failed ?? 0}` : '未配置 API Key，已跳过'} />
+          <Metric label="标题预筛" value={data.prefiltered_papers} note={`保留 ${data.prefilter_kept_papers} · 待处理 ${data.processing_summary?.pending_prefilter_count ?? 0}`} />
+          <Metric label="摘要评分" value={data.processing_summary?.latest_screened_count ?? data.screened_papers} note={data.processing_summary?.ai_configured ? `待评分 ${data.processing_summary.pending_screening_count}` : '未配置 API Key'} />
           <Metric label="全文深读" value={data.processing_summary?.latest_deep_analyzed_count ?? 0} note={`达标待深读 ${data.processing_summary?.pending_deep_count ?? 0} 篇`} accent />
           <Metric label="重点推荐" value={data.high_priority_papers} note={data.processing_summary?.ai_configured ? 'AI 初筛 80 分以上' : '配置 AI 后生成'} />
           <div className="update-summary">
             <span>上次更新</span>
             <strong>{data.processing_summary?.latest_update_at ? formatDateTime(data.processing_summary.latest_update_at) : '尚无完整日更'}</strong>
-            <small>初筛每批 {data.processing_summary?.screening_limit ?? 30} · 深读最多 {data.processing_summary?.deep_analysis_limit ?? 5} · 门槛 {Math.round(data.processing_summary?.deep_analysis_threshold ?? 90)}</small>
+            <small>标题每批 {data.processing_summary?.prefilter_batch_size ?? 30} · 深读最多 {data.processing_summary?.deep_analysis_limit ?? 5} · 门槛 {Math.round(data.processing_summary?.deep_analysis_threshold ?? 90)}</small>
           </div>
         </section>
       )}
@@ -325,7 +325,7 @@ function JobStatusBanner({ job }: { job: JobInfo }) {
   const failed = job.status === 'failed'
   const result = job.result ?? {}
   const summary = job.status === 'completed'
-    ? `抓取 ${Number(result.fetched ?? 0)} 篇 · 初筛 ${Number(result.screened ?? 0)}/${Number(result.screening_queue_total ?? result.screened ?? 0)} 篇 · 失败 ${Number(result.screening_failed ?? 0)} 篇 · 深读 ${Number(result.analyzed ?? 0)} 篇`
+    ? `抓取 ${Number(result.fetched ?? 0)} 篇 · 标题预筛 ${Number(result.prefiltered ?? 0)} 篇 · 保留 ${Number(result.prefilter_kept ?? 0)} 篇 · 摘要评分 ${Number(result.screened ?? 0)} 篇 · 深读 ${Number(result.analyzed ?? 0)} 篇`
     : failed ? (job.error || job.message || '任务失败') : (job.message || '正在执行每日流程')
   return <section className={`job-status-banner ${failed ? 'failed' : running ? 'running' : 'completed'}`} aria-live="polite"><div>{running ? <LoaderCircle className="spin" size={17} /> : failed ? <CircleAlert size={17} /> : <CheckCircle2 size={17} />}<span><strong>{running ? '每日任务进行中' : failed ? '最近一次任务失败' : '最近一次任务已完成'}</strong><small>{summary}</small></span></div><div className="job-progress"><span style={{ width: `${Math.max(running ? 4 : 0, Math.min(100, job.progress ?? 0))}%` }} /></div></section>
 }
@@ -392,12 +392,12 @@ function CoverageCalendar({ activeDate, busy, refreshToken, onRun, onSelectDate 
             const date = `${month}-${String(day).padStart(2, '0')}`
             const record = daysByDate.get(date)
             const unavailable = !data || date > data.latest_available_date
-            const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；当前语义候选 ${record.candidates}，AI 初筛 ${record.screened}，待初筛 ${record.pending_screening}` : '尚未筛选，点击后可以补跑'
-            return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === activeDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => { setOpen(false); onSelectDate(date) }} title={title} key={date}><strong>{day}</strong>{record && <small>候选 {record.candidates}</small>}</button>
+            const title = unavailable ? '该论文日期尚未完整结束' : record ? `${record.message}；标题预筛 ${record.prefiltered}，保留 ${record.prefilter_kept}，摘要评分 ${record.screened}` : '尚未筛选，点击后可以补跑'
+            return <button className={`calendar-day ${record?.status ?? ''} ${date === today ? 'today' : ''} ${date === activeDate ? 'selected' : ''}`} disabled={unavailable} onClick={() => { setOpen(false); onSelectDate(date) }} title={title} key={date}><strong>{day}</strong>{record && <small>保留 {record.prefilter_kept}</small>}</button>
           })}
         </div>
         {activeDate && activeDate.startsWith(month) && data && <div className={`calendar-detail ${selectedRecord?.status ?? 'missing'}`}>
-          <div><span>{formatArchiveDate(activeDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord?.pending_screening ? '有新的语义候选待初筛' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 语义候选 ${selectedRecord.candidates} · AI 初筛 ${selectedRecord.screened} · 待初筛 ${selectedRecord.pending_screening} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
+          <div><span>{formatArchiveDate(activeDate)}</span><strong>{selectedRecord?.status === 'completed' ? '当天已完整筛选' : selectedRecord?.pending_prefilter ? '有论文等待标题预筛' : selectedRecord?.pending_screening ? '有论文等待摘要评分' : selectedRecord ? '当天需要继续补充' : '当天尚未筛选'}</strong><small>{selectedRecord ? `抓取 ${selectedRecord.fetched} · 标题预筛 ${selectedRecord.prefiltered} · 保留 ${selectedRecord.prefilter_kept} · 摘要评分 ${selectedRecord.screened} · 深读 ${selectedRecord.analyzed}；${selectedRecord.message}` : '只补跑这一天，不会自动追赶其他空缺日期。'}</small></div>
           {selectedRecord?.status !== 'completed' && <button className="button primary compact" disabled={busy} onClick={() => onRun(activeDate)}><RefreshCw className={busy ? 'spin' : ''} size={14} />{busy ? '任务进行中' : selectedRecord ? '继续补跑' : '补跑这一天'}</button>}
         </div>}
       </div>}
@@ -436,7 +436,7 @@ function PaperListItem({ paper, active, onSelect, onFeedback }: { paper: Paper; 
   return (
     <article className={`paper-row ${active ? 'active' : ''} ${dismissed ? 'dismissed' : ''}`} onClick={onSelect} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') onSelect() }}>
       <div className="paper-row-top">
-        <div className={`score-pill ${score >= 90 ? 'excellent' : score >= 80 ? 'good' : ''}`}><strong>{score}</strong><span>{paper.score_source === 'ai' ? 'AI 初筛' : '语义相似'}</span></div>
+        <div className={`score-pill ${score >= 90 ? 'excellent' : score >= 80 ? 'good' : ''}`}><strong>{score}</strong><span>摘要评分</span></div>
         <div className="paper-identifiers">
           {(paper.notable_organizations ?? []).slice(0, 2).map((organization) => <OrganizationBadge key={organization} name={organization} />)}
           {paper.categories.slice(0, 2).map((category) => <span className="category-tag" key={category}>{category}</span>)}
@@ -481,7 +481,6 @@ function compactSignals(values: Array<string | null | undefined>, limit = 4) {
 function paperMatchSignals(paper: Paper, limit = 4) {
   return compactSignals([
     ...(paper.matched_topics ?? []),
-    ...(paper.matched_keywords ?? []),
     ...paper.match_reasons,
   ], limit)
 }
@@ -569,7 +568,6 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
     ['潜力', analysis.potential_score ?? paper.effective_score, '#b54747'],
   ] as Array<[string, number | null | undefined, string]>
   const analysisSignals = paperAnalysisSignals(paper, analysis)
-  const semanticSignals = (paper.semantic_candidate_topics ?? []).slice(0, 4).map((item) => `${item.name} ${Math.round(item.score * 100)}%`)
   const analysisStage = analysis.kind === 'deep'
     ? 'AI 全文深读'
     : analysis.kind === 'screening'
@@ -629,7 +627,6 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
             <div className="decision-copy"><span>一句话结论</span><p>{paper.summary || analysis.overview || '尚未生成中文总结。刷新或等待深度分析任务完成后可在这里查看。'}</p></div>
             <div className="decision-signals">
               <SignalGroup label="AI 确认方向" values={paper.matched_topics ?? []} empty="初筛尚未确认正式方向" />
-              <SignalGroup label="语义候选方向" values={semanticSignals} empty="暂无语义候选" />
               <SignalGroup label="分析标签" values={analysisSignals} empty="待深度分析后提取" tone="analysis" />
             </div>
           </section>

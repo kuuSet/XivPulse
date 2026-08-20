@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
 from ..models import DailyResearchReport, Digest, Paper, PaperMatch
-from ..services.directions.taxonomy import direction_taxonomy_fingerprint
 from ..services.reporting.roadmap import build_research_roadmap
 from ..services.reporting.service import (
     persist_daily_report,
@@ -22,7 +21,7 @@ from ..services.reporting.service import (
 )
 from ..services.reporting.trends import build_topic_trends
 from ..services.state import active_profile
-from ..settings import get_process_settings, load_runtime_settings
+from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.papers import _paper_wire, _query_papers
 from .presenters.reports import _digest_wire
@@ -40,17 +39,13 @@ def digest_preview(
         select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == day)
     )
     if digest is None:
-        settings = load_runtime_settings(db)
-        semantic_threshold = get_process_settings().semantic.threshold(
-            settings.semantic_recall_mode
-        )
         papers = (
             db.scalars(
                 _query_papers(db)
                 .join(PaperMatch, PaperMatch.paper_id == Paper.id)
                 .where(
                     PaperMatch.profile_id == profile.id,
-                    PaperMatch.semantic_score >= semantic_threshold,
+                    PaperMatch.screened_at.is_not(None),
                 )
                 .order_by(desc(PaperMatch.effective_score_expression()))
                 .limit(10)
@@ -62,15 +57,7 @@ def digest_preview(
             "digest_date": day,
             "title": f"{day.isoformat()} arXiv 每日精选（预览）",
             "summary": f"当前有 {len(papers)} 篇候选论文。",
-            "items": [
-                _paper_wire(
-                    paper,
-                    profile.id,
-                    topics=list(profile.topics),
-                    taxonomy_fingerprint=direction_taxonomy_fingerprint(list(profile.topics)),
-                )
-                for paper in papers
-            ],
+            "items": [_paper_wire(paper, profile.id) for paper in papers],
             "persisted": False,
         }
     paper_ids = digest.paper_ids
@@ -80,20 +67,9 @@ def digest_preview(
         else []
     )
     by_id = {paper.id: paper for paper in papers}
-    profile_topics = list(profile.topics)
-    taxonomy_fingerprint = direction_taxonomy_fingerprint(profile_topics)
     return {
         **(_digest_wire(digest) or {}),
-        "items": [
-            _paper_wire(
-                by_id[item],
-                profile.id,
-                topics=profile_topics,
-                taxonomy_fingerprint=taxonomy_fingerprint,
-            )
-            for item in paper_ids
-            if item in by_id
-        ],
+        "items": [_paper_wire(by_id[item], profile.id) for item in paper_ids if item in by_id],
         "persisted": True,
     }
 

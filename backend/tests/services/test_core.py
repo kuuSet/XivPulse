@@ -26,12 +26,7 @@ from app.services.directions.catalog import (
     DIRECTION_CATALOG,
     direction_catalog_payload,
 )
-from app.services.directions.matching import (
-    contains_term,
-    direction_evidence,
-    matched_direction_names,
-    verified_requested_direction_names,
-)
+from app.services.directions.matching import canonical_requested_direction_names
 from app.services.methods.catalog import (
     METHOD_CATALOG,
     discover_method_candidates,
@@ -45,7 +40,11 @@ from app.services.prompt_catalog import (
     SCREENING_SYSTEM_PROMPT,
     prompt_catalog_payload,
 )
-from app.services.provider import OpenAICompatibleAdapter, ProviderError
+from app.services.provider import (
+    OpenAICompatibleAdapter,
+    ProviderError,
+    ProviderProtocolError,
+)
 from app.settings import ProviderSettings, load_runtime_settings, set_setting
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -73,7 +72,7 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
         assert len(profiles) == 1
         assert len(profiles[0].topics) == 6
         settings = load_runtime_settings(session)
-        assert settings.screening_batch_size == 30
+        assert settings.prefilter_batch_size == 30
         assert settings.deep_analysis_limit == 5
         assert settings.deep_analysis_threshold == 90
 
@@ -110,27 +109,6 @@ def test_process_settings_derive_storage_from_one_data_directory(
 
     assert settings.data_dir == data_dir.resolve()
     assert settings.database_url == f"sqlite:///{data_dir.resolve().as_posix()}/xivpulse.db"
-    assert settings.model_cache == data_dir.resolve() / "model-cache"
-
-
-def test_process_settings_load_semantic_group_from_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("XIVPULSE_SEMANTIC_MODEL_NAME", "test-embedding-model")
-    monkeypatch.setenv("XIVPULSE_SEMANTIC_THREADS", "1")
-    monkeypatch.setenv("XIVPULSE_SEMANTIC_BATCH_SIZE", "4")
-    monkeypatch.setenv("XIVPULSE_SEMANTIC_THRESHOLD_HIGH", "0.61")
-
-    semantic = settings_module._build_process_settings().semantic
-
-    assert semantic.model_name == "test-embedding-model"
-    assert semantic.threads == 1
-    assert semantic.batch_size == 4
-    assert semantic.thresholds == {
-        "high": 0.61,
-        "balanced": 0.68,
-        "precise": 0.70,
-    }
 
 
 def test_environment_key_fallback_and_secrets_are_hidden(
@@ -154,23 +132,12 @@ def test_invalid_settings_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
         settings_module._build_process_settings()
 
     monkeypatch.delenv("XIVPULSE_API_TIMEOUT_SECONDS")
-    monkeypatch.setenv("XIVPULSE_SEMANTIC_THREADS", "0")
-    with pytest.raises(ValidationError, match="threads"):
-        settings_module._build_process_settings()
-
-    monkeypatch.delenv("XIVPULSE_SEMANTIC_THREADS")
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
     with Session(engine) as session:
         set_setting(session, "arxiv_fetch_limit", 1001)
         session.commit()
         with pytest.raises(ValidationError, match="arxiv_fetch_limit"):
-            load_runtime_settings(session)
-
-        set_setting(session, "arxiv_fetch_limit", 1000)
-        set_setting(session, "semantic_recall_mode", "wide")
-        session.commit()
-        with pytest.raises(ValidationError, match="semantic_recall_mode"):
             load_runtime_settings(session)
 
 
@@ -634,113 +601,12 @@ def test_direction_alias_is_canonicalized_without_creating_a_new_label() -> None
             "negative_keywords": [],
         }
     ]
-    names = verified_requested_direction_names(
-        "A vision language action policy for robots.",
+    names = canonical_requested_direction_names(
         ["VLA", "Vision-Language-Action"],
         topics,
         relevant=True,
     )
     assert names == ["视觉-语言-动作模型"]
-
-
-def test_direction_context_anchor_blocks_cross_domain_keyword_collision() -> None:
-    topics = [
-        {
-            "name": "Robot Learning",
-            "enabled": True,
-            "weight": 1.0,
-            "keywords": ["reinforcement learning"],
-            "context_keywords": ["robot", "humanoid", "autonomous driving"],
-            "negative_keywords": [],
-            "arxiv_categories": ["cs.RO", "cs.LG"],
-        }
-    ]
-    unrelated = {
-        "id": 1,
-        "title": "Reinforcement Learning for Financial Guidance",
-        "abstract": "A policy optimization method for accounting logs.",
-        "categories": ["cs.LG"],
-        "published_at": datetime(2026, 8, 12, tzinfo=UTC),
-    }
-    robotics = {
-        **unrelated,
-        "id": 2,
-        "title": "Reinforcement Learning for Humanoid Locomotion",
-        "abstract": "A robot policy for whole-body control.",
-    }
-
-    unrelated_text = f"{unrelated['title']}\n{unrelated['abstract']}"
-    robotics_text = f"{robotics['title']}\n{robotics['abstract']}"
-    assert direction_evidence(unrelated_text, topics[0]).matched is False
-    assert direction_evidence(robotics_text, topics[0]).matched is True
-
-
-def test_multiword_terms_use_boundaries_and_unrelated_exclusions_do_not_penalize() -> None:
-    assert contains_term("We use predictive control.", "predictive control")
-    assert not contains_term("We compare predictive controllers.", "predictive control")
-    topics = [
-        {
-            "name": "VLA",
-            "enabled": True,
-            "weight": 1.0,
-            "keywords": ["vision-language-action"],
-            "context_keywords": [],
-            "negative_keywords": [],
-            "arxiv_categories": ["cs.RO"],
-        },
-        {
-            "name": "Navigation",
-            "enabled": True,
-            "weight": 1.0,
-            "keywords": ["robot navigation"],
-            "context_keywords": [],
-            "negative_keywords": ["video generation"],
-            "arxiv_categories": ["cs.RO"],
-        },
-    ]
-    paper = {
-        "id": 1,
-        "title": "Vision-Language-Action Models",
-        "abstract": "A robot policy initialized from video generation models.",
-        "categories": ["cs.RO"],
-        "published_at": datetime(2026, 8, 12, tzinfo=UTC),
-    }
-    text = f"{paper['title']}\n{paper['abstract']}"
-    assert matched_direction_names(text, topics) == ["VLA"]
-
-
-def test_direction_matching_does_not_turn_category_into_evidence() -> None:
-    topics = [
-        {
-            "name": "Robot Navigation",
-            "enabled": True,
-            "keywords": ["robot navigation"],
-            "negative_keywords": [],
-            "arxiv_categories": ["cs.RO"],
-        }
-    ]
-    paper = {
-        "title": "A General Robotics Benchmark",
-        "abstract": "A broad comparison without navigation experiments.",
-        "categories": ["cs.RO"],
-    }
-
-    text = f"{paper['title']}\n{paper['abstract']}"
-    assert matched_direction_names(text, topics) == []
-
-
-def test_compatible_provider_unit_interval_scores_are_normalized() -> None:
-    result = ScreeningResult.model_validate(
-        {
-            "relevant": True,
-            "relevance_score": 0.91,
-            "reason": "match",
-            "matched_topics": [],
-            "key_contributions": [],
-            "tags": [],
-        }
-    )
-    assert result.relevance_score == 91
 
 
 @pytest.mark.asyncio
@@ -979,34 +845,6 @@ async def test_adapter_records_responses_and_chat_token_usage() -> None:
     assert result.usage.reasoning_tokens == 7
     assert result.usage.total_tokens == 115
 
-    chat_attempts: list[dict[str, object]] = []
-
-    def legacy_chat_handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)
-        chat_attempts.append(body)
-        if "max_completion_tokens" in body:
-            return httpx.Response(400, json={"error": {"message": "unknown parameter"}})
-        return httpx.Response(
-            200,
-            json={
-                "choices": [
-                    {"message": {"content": response_payload["output"][0]["content"][0]["text"]}}
-                ]
-            },
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(legacy_chat_handler)) as client:
-        result = await OpenAICompatibleAdapter(
-            _provider_settings(api_protocol="chat"), http_client=client
-        ).generate_json_with_metadata(
-            system_prompt="Return JSON.",
-            user_prompt="screen",
-            response_model=ScreeningResult,
-        )
-    assert len(chat_attempts) == 2
-    assert chat_attempts[1]["max_tokens"] == 3000
-    assert result.usage.available is False
-
 
 def test_analysis_budget_modes_and_method_candidate_discovery() -> None:
     assert ANALYSIS_BUDGETS["economy"].max_fulltext_chars == 16_000
@@ -1080,7 +918,7 @@ def test_docker_scheduler_runs_at_most_once_per_local_day(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
-async def test_responses_falls_back_to_chat_and_mock_never_calls_http() -> None:
+async def test_responses_error_stops_without_calling_chat() -> None:
     paths: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1111,20 +949,17 @@ async def test_responses_falls_back_to_chat_and_mock_never_calls_http() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         adapter = OpenAICompatibleAdapter(_provider_settings(), http_client=client)
-        output = await adapter.generate_json(
-            system_prompt="Return JSON.", user_prompt="screen", response_model=ScreeningResult
-        )
-    assert output.relevant is False
-    assert paths == ["/v1/responses", "/v1/chat/completions"]
-    assert adapter.last_transport == "chat"
+        with pytest.raises(ProviderError, match="HTTP 404"):
+            await adapter.generate_json(
+                system_prompt="Return JSON.", user_prompt="screen", response_model=ScreeningResult
+            )
+    assert paths == ["/v1/responses"]
 
     def must_not_call(_: httpx.Request) -> httpx.Response:
         raise AssertionError("an unconfigured provider must remain offline")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(must_not_call)) as client:
-        adapter = OpenAICompatibleAdapter(
-            _provider_settings(api_key=None), http_client=client
-        )
+        adapter = OpenAICompatibleAdapter(_provider_settings(api_key=None), http_client=client)
         with pytest.raises(ProviderError, match="No API key"):
             await adapter.generate_json(
                 system_prompt="Return JSON.",
@@ -1134,7 +969,7 @@ async def test_responses_falls_back_to_chat_and_mock_never_calls_http() -> None:
 
 
 @pytest.mark.asyncio
-async def test_responses_protocol_fallback_adds_usage_from_both_requests() -> None:
+async def test_invalid_responses_output_stops_without_calling_chat() -> None:
     paths: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1177,17 +1012,15 @@ async def test_responses_protocol_fallback_adds_usage_from_both_requests() -> No
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await OpenAICompatibleAdapter(
-            _provider_settings(), http_client=client
-        ).generate_json_with_metadata(
-            system_prompt="Return JSON.",
-            user_prompt="screen",
-            response_model=ScreeningResult,
-        )
-    assert paths == ["/v1/responses", "/v1/chat/completions"]
-    assert result.usage.input_tokens == 190
-    assert result.usage.output_tokens == 30
-    assert result.usage.total_tokens == 220
+        with pytest.raises(ProviderProtocolError, match="invalid JSON"):
+            await OpenAICompatibleAdapter(
+                _provider_settings(), http_client=client
+            ).generate_json_with_metadata(
+                system_prompt="Return JSON.",
+                user_prompt="screen",
+                response_model=ScreeningResult,
+            )
+    assert paths == ["/v1/responses"]
 
 
 @pytest.mark.asyncio

@@ -67,13 +67,9 @@ def build_daily_message(
     settings: SmtpSettings,
     report: Mapping[str, Any],
     recipient: str,
-    *,
-    incomplete: bool = False,
-    failure_count: int = 0,
 ) -> EmailMessage:
     report_date = str(report.get("report_date") or "")
-    prefix = "[初筛未完全完成] " if incomplete else ""
-    subject = f"{prefix}{report_date} arXiv 当日研究总结"
+    subject = f"{report_date} arXiv 当日研究总结"
     coverage = dict(report.get("coverage") or {})
     situation = dict(report.get("research_situation") or {})
     highlights = list(report.get("highlight_papers") or [])[:10]
@@ -93,12 +89,7 @@ def build_daily_message(
         f"已分析 {coverage.get('analyzed_paper_count', 0)} 篇，"
         f"深读 {coverage.get('deep_analysis_count', 0)} 篇"
     )
-    warning = (
-        f"注意：仍有 {failure_count} 篇候选初筛失败，本报告不完整，缺失论文未按零相关处理。"
-        if incomplete
-        else ""
-    )
-    text_lines = [subject, "", warning, synthesis, "", coverage_text, "", "重点论文"]
+    text_lines = [subject, "", synthesis, "", coverage_text, "", "重点论文"]
     for index, paper in enumerate(highlights, start=1):
         url = _paper_url(settings, paper.get("paper_id"))
         text_lines.extend(
@@ -112,12 +103,6 @@ def build_daily_message(
     if report_url:
         text_lines.extend(["", f"完整日报：{report_url}"])
 
-    warning_html = (
-        f'<div class="warning">初筛未完全完成：仍有 {failure_count} 篇失败。'
-        "缺失论文未按零相关处理。</div>"
-        if incomplete
-        else ""
-    )
     paper_html = "".join(
         (
             '<article class="paper">'
@@ -148,7 +133,6 @@ font:15px/1.65 system-ui,-apple-system,sans-serif}}
 .wrap{{max-width:720px;margin:auto;background:#fff}}
 header{{padding:28px 32px;background:#16324a;color:#fff}}
 main{{padding:28px 32px}}h1{{font-size:24px;margin:0}}h2{{font-size:16px;margin:0 0 6px}}
-.warning{{padding:12px 14px;background:#fff1e8;border-left:4px solid #c44d28;margin-bottom:18px}}
 .coverage{{padding:12px 14px;background:#edf3f5;margin:20px 0}}
 .paper{{display:grid;grid-template-columns:40px 1fr;gap:12px;padding:18px 0;
 border-top:1px solid #dfe5e8}}
@@ -156,7 +140,7 @@ border-top:1px solid #dfe5e8}}
 a{{color:#1261a0}}.report-link{{display:inline-block;margin-top:20px;font-weight:700}}
 @media(max-width:560px){{header,main{{padding:22px 18px}}.paper{{grid-template-columns:32px 1fr}}}}
 </style></head><body><div class="wrap"><header><h1>{escape(subject)}</h1></header><main>
-{warning_html}<p>{escape(synthesis)}</p><div class="coverage">{escape(coverage_text)}</div>
+<p>{escape(synthesis)}</p><div class="coverage">{escape(coverage_text)}</div>
 <h2>重点论文</h2>{paper_html}{full_report_link}</main></div></body></html>"""
 
     message = EmailMessage()
@@ -171,9 +155,7 @@ a{{color:#1261a0}}.report-link{{display:inline-block;margin-top:20px;font-weight
 def deliver_message(settings: SmtpSettings, message: EmailMessage) -> None:
     context = ssl.create_default_context()
     if settings.security == "ssl":
-        client_context = smtplib.SMTP_SSL(
-            settings.host, settings.port, timeout=30, context=context
-        )
+        client_context = smtplib.SMTP_SSL(settings.host, settings.port, timeout=30, context=context)
     else:
         client_context = smtplib.SMTP(settings.host, settings.port, timeout=30)
     with client_context as client:

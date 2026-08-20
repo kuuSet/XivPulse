@@ -120,8 +120,6 @@ export const api = {
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
   testConnection: (settings: { provider_name: string; model_name: string; api_base_url: string; api_key?: string }) =>
     request<{ ok: boolean; message: string }>('/settings/test', { method: 'POST', body: JSON.stringify(settings) }),
-  testEmbedding: () => request<Omit<Settings['embedding'], 'rescore'> & { ok: boolean; message?: string }>('/settings/embedding/test', { method: 'POST' }),
-  rescoreSemantic: () => request<{ job_id: string; status: string; message: string }>('/semantic/rescore', { method: 'POST' }),
   testEmail: () => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>('/settings/email/test', { method: 'POST' }),
   feedback: (paperId: PaperId, actionOrPayload: FeedbackWriteAction | FeedbackPayload, note?: string) => {
     const payload: FeedbackPayload = typeof actionOrPayload === 'string'
@@ -151,20 +149,16 @@ export const api = {
   deleteProject: (projectId: ProjectId) => request<void>(`/projects/${encodeId(projectId)}`, { method: 'DELETE' }),
   addProjectPaper: async (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload = {}) => {
     const body = withMembershipDefaults(payload)
-    const result = await requestWithLegacyFallback<unknown>(
+    const result = await request<unknown>(
       `/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`,
       { method: 'POST', body: JSON.stringify(body) },
-      `/projects/${encodeId(projectId)}/papers`,
-      { method: 'POST', body: JSON.stringify({ paper_id: paperId, ...body }) },
     )
     return unwrapEntity<ProjectMembership>(result, 'membership')
   },
   updateProjectPaper: async (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload) => {
-    const result = await requestWithLegacyFallback<unknown>(
+    const result = await request<unknown>(
       `/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`,
       { method: 'PATCH', body: JSON.stringify(payload) },
-      `/projects/${encodeId(projectId)}/papers`,
-      { method: 'POST', body: JSON.stringify({ paper_id: paperId, ...withMembershipDefaults(payload) }) },
     )
     return unwrapEntity<ProjectMembership>(result, 'membership')
   },
@@ -196,15 +190,6 @@ type ProjectId = number | string
 
 function encodeId(id: PaperId | ProjectId) {
   return encodeURIComponent(String(id))
-}
-
-async function requestWithLegacyFallback<T>(path: string, init: RequestInit, fallbackPath: string, fallbackInit: RequestInit) {
-  try {
-    return await request<T>(path, init)
-  } catch (error) {
-    if (!(error instanceof ApiError) || ![404, 405].includes(error.status)) throw error
-    return request<T>(fallbackPath, fallbackInit)
-  }
 }
 
 function unwrapList<T>(value: unknown): T[] {
@@ -285,8 +270,7 @@ function settingsUpdatePayload(settings: Settings & { api_key?: string; smtp_pas
     schedule_time: settings.schedule_time,
     schedule_timezone: settings.schedule_timezone,
     arxiv_fetch_limit: settings.arxiv_fetch_limit,
-    screening_batch_size: Math.min(settings.arxiv_fetch_limit, settings.screening_batch_size),
-    semantic_recall_mode: settings.semantic_recall_mode,
+    prefilter_batch_size: Math.min(settings.arxiv_fetch_limit, settings.prefilter_batch_size),
     deep_analysis_limit: settings.deep_analysis_limit,
     deep_analysis_threshold: settings.deep_analysis_threshold ?? 90,
     analysis_budget: settings.analysis_budget,
