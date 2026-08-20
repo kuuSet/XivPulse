@@ -40,7 +40,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   const { mode, data, state, error, selectedId, refreshing, job, onRetry, onRefresh, onDateSelect, onSelect, onCloseDetail, onFeedback, onSaveReading, onSaveDetailedFeedback, projects, onProjectsChange, onToast } = props
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
-  const [priority, setPriority] = useState(mode === 'today' ? 'recommended' : 'all')
+  const [priority, setPriority] = useState('all')
   const [sort, setSort] = useState<PaperSort>('recommendation')
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [linkedPaper, setLinkedPaper] = useState<Paper | null>(null)
@@ -52,7 +52,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   const pageSize = 25
 
   useEffect(() => {
-    setPriority(mode === 'today' ? 'recommended' : 'all')
+    setPriority('all')
     setSort('recommendation')
   }, [mode])
 
@@ -263,8 +263,8 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
 
           <div className="result-summary">
             <span>{mode === 'library' && !isDemo ? `共 ${libraryPage?.total ?? 0} 篇已初筛论文` : `${papersWithMemberships.length} 篇论文`}</span>
-            {(query || category !== 'all' || priority !== (mode === 'today' ? 'recommended' : 'all')) && (
-              <button onClick={() => { setQuery(''); setCategory('all'); setPriority(mode === 'today' ? 'recommended' : 'all') }}>
+            {(query || category !== 'all' || priority !== 'all') && (
+              <button onClick={() => { setQuery(''); setCategory('all'); setPriority('all') }}>
                 <RotateCcw size={13} /> 重置
               </button>
             )}

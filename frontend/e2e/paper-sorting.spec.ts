@@ -40,9 +40,10 @@ test('today papers can prioritize watched authors or organizations', async ({ pa
     })
   })
   await page.goto('/?view=today')
-  await page.getByLabel('论文范围').selectOption('all')
   const titles = page.locator('.paper-list .paper-row h2')
 
+  await expect(page.getByLabel('论文范围')).toHaveValue('all')
+  await expect(titles).toHaveCount(3)
   await expect(titles.first()).toHaveText('Highest relevance')
   await page.getByLabel('排序').selectOption('watched_authors')
   await expect(titles.first()).toHaveText('Watched author paper')
