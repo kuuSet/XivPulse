@@ -67,7 +67,7 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
     await route.fulfill({
       status: 202,
       contentType: 'application/json',
-      body: JSON.stringify({ job_id: 'job-13', status: 'queued', message: 'started', date: '2026-08-13' }),
+      body: JSON.stringify({ id: 'job-13', status: 'queued', message: 'started', date: '2026-08-13' }),
     })
   })
 

@@ -136,7 +136,7 @@ class PipelineCoordinator:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return {
-            "job_id": job_id,
+            "id": job_id,
             "status": "queued",
             "message": "任务已在后台启动",
             "date": target_date.isoformat() if target_date else None,

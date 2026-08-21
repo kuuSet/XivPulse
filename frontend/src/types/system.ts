@@ -7,7 +7,6 @@ type JobState = 'queued' | 'running' | 'completed' | 'failed' | string
 
 export interface JobInfo {
   id: string
-  job_id?: string
   kind: string
   status: JobState
   progress: number

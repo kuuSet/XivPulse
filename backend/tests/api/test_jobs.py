@@ -8,6 +8,32 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 
+def test_job_status_uses_one_current_response_shape(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
+    with session_factory() as session:
+        session.add(Job(id="job-1", kind="sync", status="completed", result_json={"fetched": 3}))
+        session.commit()
+
+    response = client.get("/api/jobs/job-1")
+
+    assert response.status_code == 200
+    assert set(response.json()) == {
+        "id",
+        "kind",
+        "status",
+        "progress",
+        "total",
+        "message",
+        "error",
+        "result",
+        "created_at",
+        "started_at",
+        "completed_at",
+    }
+
+
 def test_job_calendar_uses_fetch_date_and_database_progress(
     client: TestClient,
     session_factory: sessionmaker[Session],

@@ -75,8 +75,8 @@ interface PaperQuery {
 export const api = {
   dashboard: (date?: string) =>
     request<DashboardData>(`/dashboard${date ? `?date=${encodeURIComponent(date)}` : ''}`),
-  refresh: () => request<{ job_id: string; status: string; message: string }>('/refresh', { method: 'POST' }),
-  runDaily: (date: string) => request<{ job_id: string; status: string; message: string; date: string }>('/run-daily', {
+  refresh: () => request<{ id: string; status: string; message: string }>('/refresh', { method: 'POST' }),
+  runDaily: (date: string) => request<{ id: string; status: string; message: string; date: string }>('/run-daily', {
     method: 'POST', body: JSON.stringify({ date }),
   }),
   status: () => request<AppStatus>('/status'),

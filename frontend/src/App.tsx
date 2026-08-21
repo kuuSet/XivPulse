@@ -230,7 +230,7 @@ function App() {
     setRefreshing(true)
     try {
       const result = targetDate ? await api.runDaily(targetDate) : await api.refresh()
-      setJob({ id: result.job_id, job_id: result.job_id, kind: 'daily', status: result.status, progress: 0, total: 0, message: result.message, created_at: new Date().toISOString() })
+      setJob({ id: result.id, kind: 'daily', status: result.status, progress: 0, total: 0, message: result.message, created_at: new Date().toISOString() })
       setRefreshing(true)
       pushToast('success', targetDate ? `${targetDate} 补跑任务已启动` : (result.message || '抓取任务已启动'))
     } catch (error) {

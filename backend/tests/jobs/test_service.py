@@ -209,7 +209,7 @@ async def test_background_job_uses_the_same_persisted_lifecycle(
     for _ in range(100):
         await asyncio.sleep(0.01)
         with job_session_factory() as db:
-            job = db.get(Job, started["job_id"])
+            job = db.get(Job, started["id"])
             if job is not None and job.status == "completed":
                 assert job.result == {"fetch_date": "2026-08-18", "fetched": 1}
                 break

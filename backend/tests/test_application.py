@@ -68,7 +68,7 @@ async def test_default_pipelines_use_their_application_database(
 
     async def run_job(app: FastAPI, factory: sessionmaker[Session], day: date) -> str:
         started = app.state.pipeline.start_job("sync", target_date=day)
-        job_id = str(started["job_id"])
+        job_id = str(started["id"])
         for _ in range(100):
             await asyncio.sleep(0.01)
             with factory() as session:
