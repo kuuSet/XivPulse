@@ -9,12 +9,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ...modules.analysis.analyzer import AnalysisBudgetMode, analysis_budget
-from ...services.provider import (
+from ...integrations.llm.contracts import (
     GenerationResult,
     ProviderProtocolError,
     StructuredModelAdapter,
 )
+from ...modules.analysis.analyzer import AnalysisBudgetMode, analysis_budget
 
 
 class SynthesisThread(BaseModel):

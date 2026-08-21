@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..integrations.llm.factory import create_model_adapter
 from ..modules.analysis.prompts import (
     MAX_EDITABLE_PROMPT_CHARS,
     PROMPT_TEMPLATE_IDS,
@@ -19,7 +20,6 @@ from ..modules.analysis.prompts import (
 from ..modules.reports.records import current_date_in_timezone
 from ..modules.reports.service import persist_daily_report, send_daily_report_email
 from ..profile import active_profile
-from ..services.provider_factory import create_model_adapter
 from ..settings import (
     ModelStage,
     ProviderOverride,

@@ -11,10 +11,10 @@ from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from ...database import SessionLocal, session_scope
 from ...integrations.arxiv.affiliations import fetch_affiliations
+from ...integrations.llm.contracts import TokenUsage
+from ...integrations.llm.factory import create_model_adapter
 from ...models import Analysis, Paper, PaperMatch, utcnow
 from ...profile import active_profile
-from ...services.provider import TokenUsage
-from ...services.provider_factory import create_model_adapter
 from ...settings import load_runtime_settings
 from ..papers.repository import PaperRepository
 from .analyzer import PaperAnalyzer

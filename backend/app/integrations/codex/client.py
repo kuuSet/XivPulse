@@ -12,14 +12,14 @@ from tempfile import TemporaryDirectory
 from pydantic import BaseModel, ValidationError
 
 from ...schemas import ProviderTestResult
-from ...services.provider import (
+from ...settings import ProcessSettings, ProviderSettings, get_process_settings
+from ..llm.contracts import (
     GenerationResult,
     ProviderError,
     ProviderProtocolError,
     TokenUsage,
     strict_json_schema,
 )
-from ...settings import ProcessSettings, ProviderSettings, get_process_settings
 
 
 class CodexAdapter:

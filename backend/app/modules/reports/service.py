@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ...database import SessionLocal, session_scope
+from ...integrations.llm.factory import create_model_adapter
 from ...integrations.mail import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ...models import (
     DailyResearchReport,
@@ -20,7 +21,6 @@ from ...models import (
     utcnow,
 )
 from ...profile import active_profile
-from ...services.provider_factory import create_model_adapter
 from ...settings import load_runtime_settings
 from .builder import build_daily_research_report
 from .records import current_date_in_timezone

@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from app.bootstrap import bootstrap_application
 from app.database import make_session_factory
+from app.integrations.llm.contracts import GenerationResult, ProviderError
 from app.models import Analysis, Paper, PaperMatch, Profile
 from app.schemas import PrefilterDecision, PrefilterResult
-from app.services.provider import GenerationResult, ProviderError
 from app.settings import ProviderSettings, StageProviders
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool

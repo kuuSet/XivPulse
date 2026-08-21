@@ -6,10 +6,10 @@ import json
 
 import httpx
 import pytest
+from app.integrations.llm.openai import OpenAICompatibleAdapter
 from app.models import Paper, Topic
 from app.modules.analysis.analyzer import PaperAnalyzer
 from app.modules.analysis.prompts import SCREENING_SYSTEM_PROMPT
-from app.services.provider import OpenAICompatibleAdapter
 from app.settings import ProviderSettings
 
 

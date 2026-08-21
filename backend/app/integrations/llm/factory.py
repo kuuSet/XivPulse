@@ -1,8 +1,9 @@
 """Select the configured structured-model transport."""
 
-from ..integrations.codex.client import CodexAdapter
-from ..settings import ProcessSettings, ProviderSettings
-from .provider import OpenAICompatibleAdapter, StructuredModelAdapter
+from ...settings import ProcessSettings, ProviderSettings
+from ..codex.client import CodexAdapter
+from .contracts import StructuredModelAdapter
+from .openai import OpenAICompatibleAdapter
 
 
 def create_model_adapter(

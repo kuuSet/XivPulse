@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from app.integrations.llm.contracts import GenerationResult
 from app.models import Paper, Topic
 from app.modules.analysis.analyzer import PaperAnalyzer
 from app.schemas import PrefilterDecision, PrefilterResult
-from app.services.provider import GenerationResult
 
 
 @pytest.mark.asyncio

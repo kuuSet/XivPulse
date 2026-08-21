@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from html import escape
 from typing import Any, Literal
 
+from ...integrations.llm.contracts import GenerationResult, StructuredModelAdapter
 from ...models import Paper, Topic
 from ...schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
-from ...services.provider import GenerationResult, StructuredModelAdapter
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompts import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,

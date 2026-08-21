@@ -6,8 +6,9 @@ import json
 
 import httpx
 import pytest
+from app.integrations.llm.contracts import ProviderError, ProviderProtocolError
+from app.integrations.llm.openai import OpenAICompatibleAdapter
 from app.schemas import ScreeningResult
-from app.services.provider import OpenAICompatibleAdapter, ProviderError, ProviderProtocolError
 from app.settings import ProviderSettings
 
 
