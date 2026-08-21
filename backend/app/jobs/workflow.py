@@ -27,6 +27,10 @@ def build_pipeline(
         finalize_daily_stage=partial(
             finalize_daily_stage,
             session_factory=session_factory,
+            progress_callback=partial(
+                update_job_progress,
+                session_factory=session_factory,
+            ),
         ),
         session_factory=session_factory,
     )

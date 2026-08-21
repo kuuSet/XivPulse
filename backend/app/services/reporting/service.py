@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -12,7 +13,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from ...database import SessionLocal, session_scope
 from ...integrations.mail import build_daily_message, deliver_message, email_enabled, smtp_settings
-from ...jobs.service import update_job_progress
 from ...models import (
     DailyResearchReport,
     EmailDelivery,
@@ -364,13 +364,14 @@ async def finalize_daily_stage(
     job_id: str | None,
     *,
     session_factory: sessionmaker[Session] = SessionLocal,
+    progress_callback: Callable[..., None] | None = None,
 ) -> dict[str, Any]:
-    update_job_progress(
-        job_id,
-        progress=88,
-        message="正在生成并保存当日研究日报",
-        session_factory=session_factory,
-    )
+    if progress_callback is not None:
+        progress_callback(
+            job_id,
+            progress=88,
+            message="正在生成并保存当日研究日报",
+        )
     result.update(
         create_daily_report(
             report_date=pipeline_date,
@@ -379,12 +380,12 @@ async def finalize_daily_stage(
         )
     )
     current_report_date = date.fromisoformat(str(result["report_date"]))
-    update_job_progress(
-        job_id,
-        progress=94,
-        message="正在生成并保存 AI 综合研判",
-        session_factory=session_factory,
-    )
+    if progress_callback is not None:
+        progress_callback(
+            job_id,
+            progress=94,
+            message="正在生成并保存 AI 综合研判",
+        )
     result.update(
         await synthesize_daily_report(
             current_report_date,

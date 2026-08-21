@@ -26,11 +26,6 @@ async def test_daily_finalize_merges_report_synthesis_and_delivery_results(
 
     monkeypatch.setattr(
         reporting_service,
-        "update_job_progress",
-        lambda job_id, **kwargs: reported_progress.append(kwargs["progress"]),
-    )
-    monkeypatch.setattr(
-        reporting_service,
         "create_daily_report",
         lambda **kwargs: {
             "report_snapshot_id": 7,
@@ -48,7 +43,12 @@ async def test_daily_finalize_merges_report_synthesis_and_delivery_results(
     monkeypatch.setattr(reporting_service, "send_daily_report_email", send)
 
     result = await reporting_service.finalize_daily_stage(
-        date(2026, 8, 13), {"fetched": 12}, "job-1"
+        date(2026, 8, 13),
+        {"fetched": 12},
+        "job-1",
+        progress_callback=lambda _job_id, **values: reported_progress.append(
+            values["progress"]
+        ),
     )
 
     assert result == {
