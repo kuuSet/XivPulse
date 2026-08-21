@@ -6,7 +6,7 @@ import re
 from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -188,7 +188,10 @@ async def test_provider(
 
 
 @router.post("/api/settings/email/test")
-async def test_email_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
+async def test_email_settings(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
     profile = active_profile(db)
     settings = load_runtime_settings(db)
     selected_date = current_date_in_timezone(settings.schedule_timezone)
@@ -204,5 +207,6 @@ async def test_email_settings(db: Session = Depends(get_db)) -> dict[str, Any]:
         snapshot.report_date,
         delivery_kind=f"test-{uuid4().hex[:12]}",
         require_enabled=False,
+        session_factory=request.app.state.session_factory,
     )
     return {"ok": result.get("email_failed", 0) == 0 and result.get("email_sent", 0) > 0, **result}

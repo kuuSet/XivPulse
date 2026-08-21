@@ -19,7 +19,7 @@ async def test_daily_finalize_returns_the_saved_report_without_a_legacy_digest(
     monkeypatch.setattr(
         reporting_service,
         "update_job_progress",
-        lambda job_id, *, progress, message: reported_progress.append(progress),
+        lambda job_id, **kwargs: reported_progress.append(kwargs["progress"]),
     )
     monkeypatch.setattr(
         reporting_service,

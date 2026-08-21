@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import desc, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from ..arxiv.affiliations import fetch_affiliations
 from ..arxiv.repository import PaperRepository
@@ -33,8 +33,9 @@ async def analyze_papers(
     *,
     job_id: str | None = None,
     report_date: date | None = None,
+    session_factory: sessionmaker[Session] = SessionLocal,
 ) -> dict[str, Any]:
-    with SessionLocal() as db:
+    with session_factory() as db:
         profile = active_profile(db)
         settings = load_runtime_settings(db)
         profile_id = profile.id
@@ -54,7 +55,7 @@ async def analyze_papers(
     )
     date_condition = _date_condition(report_date)
 
-    with SessionLocal() as db:
+    with session_factory() as db:
         pending_prefilter = (
             db.scalars(
                 select(PaperMatch)
@@ -83,7 +84,7 @@ async def analyze_papers(
         )
         decisions = {item.paper_id: item.decision for item in generated.data.items}
         timestamp = utcnow()
-        with session_scope() as db:
+        with session_scope(session_factory) as db:
             for match in batch:
                 stored = db.get(PaperMatch, match.id)
                 stored.prefilter_decision = decisions[match.paper_id]
@@ -103,11 +104,12 @@ async def analyze_papers(
                 "prefilter_kept": prefilter_kept,
                 "prefilter_rejected": prefilter_rejected,
             },
+            session_factory=session_factory,
         )
 
     affiliations_enriched = 0
     if settings.watched_organizations:
-        with SessionLocal() as db:
+        with session_factory() as db:
             arxiv_ids = list(
                 db.scalars(
                     select(Paper.arxiv_id)
@@ -120,11 +122,11 @@ async def analyze_papers(
                 ).all()
             )
         affiliations = await fetch_affiliations(arxiv_ids)
-        with session_scope() as db:
+        with session_scope(session_factory) as db:
             PaperRepository(db).update_affiliations(affiliations)
         affiliations_enriched = len(affiliations)
 
-    with SessionLocal() as db:
+    with session_factory() as db:
         pending_screening = (
             db.scalars(
                 select(PaperMatch)
@@ -147,7 +149,7 @@ async def analyze_papers(
         generated = await analyzer.screen_with_metadata(match.paper, topics)
         result = generated.data
         timestamp = utcnow()
-        with session_scope() as db:
+        with session_scope(session_factory) as db:
             stored = db.get(PaperMatch, match.id)
             stored.matched_topics_json = []
             stored.screening_relevance_score = result.score
@@ -178,9 +180,10 @@ async def analyze_papers(
             progress=70,
             message=f"摘要粗排 {screened}/{len(pending_screening)}",
             details={"screened": screened, "screening_total": len(pending_screening)},
+            session_factory=session_factory,
         )
 
-    with SessionLocal() as db:
+    with session_factory() as db:
         deep_matches = (
             db.scalars(
                 select(PaperMatch)
@@ -214,7 +217,7 @@ async def analyze_papers(
             **result.model_dump(),
             "_analysis_prompt": generated.prompt_metadata,
         }
-        with session_scope() as db:
+        with session_scope(session_factory) as db:
             db.add(
                 Analysis(
                     paper_id=match.paper_id,

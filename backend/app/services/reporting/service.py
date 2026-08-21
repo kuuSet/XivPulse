@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from ...database import SessionLocal, session_scope
 from ...jobs.service import update_job_progress
@@ -106,10 +106,11 @@ def create_daily_report(
     *,
     report_date: date | None = None,
     pipeline_status: dict[str, Any] | None = None,
+    session_factory: sessionmaker[Session] = SessionLocal,
 ) -> dict[str, Any]:
     """Refresh one deterministic report after the daily analysis pipeline."""
 
-    with session_scope() as db:
+    with session_scope(session_factory) as db:
         profile = active_profile(db)
         timezone_name = load_runtime_settings(db).schedule_timezone
         selected_date = report_date or current_date_in_timezone(timezone_name)
@@ -164,10 +165,11 @@ async def synthesize_daily_report(
     *,
     force: bool = False,
     respect_enabled: bool = True,
+    session_factory: sessionmaker[Session] = SessionLocal,
 ) -> dict[str, Any]:
     """Generate at most one saved synthesis for the current deterministic inputs."""
 
-    with session_scope() as db:
+    with session_scope(session_factory) as db:
         profile = active_profile(db)
         settings = load_runtime_settings(db)
         snapshot = db.scalar(
@@ -247,7 +249,7 @@ async def synthesize_daily_report(
             "total_tokens": usage.total_tokens,
         },
     }
-    with session_scope() as db:
+    with session_scope(session_factory) as db:
         snapshot = db.execute(
             select(DailyResearchReport).where(DailyResearchReport.id == report_id)
         ).scalar_one()
@@ -276,8 +278,9 @@ async def send_daily_report_email(
     *,
     delivery_kind: str = "automatic",
     require_enabled: bool = True,
+    session_factory: sessionmaker[Session] = SessionLocal,
 ) -> dict[str, Any]:
-    with SessionLocal() as db:
+    with session_factory() as db:
         profile = active_profile(db)
         settings = load_runtime_settings(db)
         if require_enabled and not email_enabled(settings):
@@ -305,7 +308,7 @@ async def send_daily_report_email(
     failed = 0
     errors: list[str] = []
     for recipient in recipients:
-        with session_scope() as db:
+        with session_scope(session_factory) as db:
             delivery = db.scalar(
                 select(EmailDelivery).where(
                     EmailDelivery.profile_id == profile_id,
@@ -331,7 +334,7 @@ async def send_daily_report_email(
         try:
             message = build_daily_message(mail_settings, report, recipient)
             await asyncio.to_thread(deliver_message, mail_settings, message)
-            with session_scope() as db:
+            with session_scope(session_factory) as db:
                 delivery = db.get(EmailDelivery, delivery_id)
                 if delivery is not None:
                     delivery.status = "sent"
@@ -341,7 +344,7 @@ async def send_daily_report_email(
             sent += 1
         except Exception as exc:
             LOG.exception("Daily report email failed for %s", recipient)
-            with session_scope() as db:
+            with session_scope(session_factory) as db:
                 delivery = db.get(EmailDelivery, delivery_id)
                 if delivery is not None:
                     delivery.status = "failed"
@@ -361,22 +364,42 @@ async def finalize_daily_stage(
     pipeline_date: date,
     result: dict[str, Any],
     job_id: str | None,
+    *,
+    session_factory: sessionmaker[Session] = SessionLocal,
 ) -> dict[str, Any]:
-    update_job_progress(job_id, progress=88, message="正在生成并保存当日研究日报")
-    result.update(create_daily_report(report_date=pipeline_date, pipeline_status=result))
+    update_job_progress(
+        job_id,
+        progress=88,
+        message="正在生成并保存当日研究日报",
+        session_factory=session_factory,
+    )
+    result.update(
+        create_daily_report(
+            report_date=pipeline_date,
+            pipeline_status=result,
+            session_factory=session_factory,
+        )
+    )
     current_report_date = date.fromisoformat(str(result["report_date"]))
-    update_job_progress(job_id, progress=94, message="正在生成并保存 AI 综合研判")
+    update_job_progress(
+        job_id,
+        progress=94,
+        message="正在生成并保存 AI 综合研判",
+        session_factory=session_factory,
+    )
     result.update(
         await synthesize_daily_report(
             current_report_date,
             force=False,
             respect_enabled=True,
+            session_factory=session_factory,
         )
     )
     result.update(
         await send_daily_report_email(
             current_report_date,
             delivery_kind="automatic",
+            session_factory=session_factory,
         )
     )
     return result

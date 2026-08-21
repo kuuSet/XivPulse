@@ -4,7 +4,6 @@ from datetime import date
 from typing import Any
 
 import pytest
-from app import database
 from app.database import Base, make_session_factory
 from app.database_defaults import seed_defaults
 from app.domain.paper import Paper as PaperDocument
@@ -179,11 +178,9 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
                 model="test",
             )
 
-    monkeypatch.setattr(database, "SessionLocal", factory)
-    monkeypatch.setattr(paper_analysis, "SessionLocal", factory)
     monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakeAnalyzer)
 
-    result = await paper_analysis.analyze_papers(limit=0)
+    result = await paper_analysis.analyze_papers(limit=0, session_factory=factory)
 
     assert result["prefiltered"] == 3
     assert result["prefilter_kept"] == 2
@@ -258,7 +255,5 @@ async def test_provider_failure_stops_the_pipeline(
             },
         )(),
     )
-    monkeypatch.setattr(paper_analysis, "SessionLocal", factory)
-
     with pytest.raises(ProviderError, match="provider unavailable"):
-        await paper_analysis.analyze_papers(limit=0)
+        await paper_analysis.analyze_papers(limit=0, session_factory=factory)

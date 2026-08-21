@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
+import app.api.reports as reports_api
+import pytest
 from app.models import DailyResearchReport, Profile
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
@@ -45,3 +48,29 @@ def test_latest_saved_report_drives_dashboard_and_default_report(
 
 def test_legacy_digest_preview_is_not_routed(client: TestClient) -> None:
     assert client.get("/api/digest/preview").status_code == 404
+
+
+def test_synthesis_route_uses_the_application_database(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report_date = date(2026, 8, 14)
+    _insert_report(session_factory, report_date, "Application report")
+    captured: dict[str, Any] = {}
+
+    async def synthesize(
+        selected_date: date,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        captured.update(kwargs)
+        assert selected_date == report_date
+        return {"report_synthesis_status": "ready"}
+
+    monkeypatch.setattr(reports_api, "synthesize_daily_report", synthesize)
+
+    response = client.post(f"/api/reports/daily/synthesize?date={report_date.isoformat()}")
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Application report"
+    assert captured["session_factory"] is session_factory

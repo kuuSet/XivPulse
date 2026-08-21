@@ -12,7 +12,7 @@ from .api import router as api_router
 from .api.auth import require_server_auth
 from .database import SessionLocal
 from .jobs.service import PipelineCoordinator
-from .jobs.workflow import daily_pipeline
+from .jobs.workflow import build_pipeline
 from .runtime import initialize_application
 from .settings import get_process_settings
 from .web import register_frontend
@@ -24,7 +24,7 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 def create_app(
     *,
     session_factory: sessionmaker[Session] = SessionLocal,
-    pipeline: PipelineCoordinator = daily_pipeline,
+    pipeline: PipelineCoordinator | None = None,
     startup: Callable[[], None] = initialize_application,
     frontend_dist: Path | None = FRONTEND_DIST,
 ) -> FastAPI:
@@ -40,7 +40,9 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.session_factory = session_factory
-    app.state.pipeline = pipeline
+    app.state.pipeline = (
+        pipeline if pipeline is not None else build_pipeline(session_factory, initialize=startup)
+    )
 
     allowed_hosts = list(get_process_settings().server_allowed_hosts)
     if allowed_hosts:

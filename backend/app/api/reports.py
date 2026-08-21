@@ -6,11 +6,11 @@ from datetime import date
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from ..database import SessionLocal, get_db
+from ..database import get_db
 from ..models import DailyResearchReport
 from ..services.reporting.roadmap import build_research_roadmap
 from ..services.reporting.service import (
@@ -150,34 +150,38 @@ def regenerate_daily_research_report(
 
 @router.post("/api/reports/daily/synthesize")
 async def synthesize_daily_research_report(
+    request: Request,
     report_date: date = Query(alias="date"),
     force: bool = Query(default=True),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     await synthesize_daily_report(
         report_date,
         force=force,
         respect_enabled=False,
+        session_factory=request.app.state.session_factory,
     )
-    with SessionLocal() as db:
-        profile = active_profile(db)
-        snapshot = db.scalar(
-            select(DailyResearchReport).where(
-                DailyResearchReport.profile_id == profile.id,
-                DailyResearchReport.report_date == report_date,
-            )
+    profile = active_profile(db)
+    snapshot = db.scalar(
+        select(DailyResearchReport).where(
+            DailyResearchReport.profile_id == profile.id,
+            DailyResearchReport.report_date == report_date,
         )
-        if snapshot is None:
-            raise HTTPException(status_code=404, detail="研究日报不存在")
-        return report_snapshot(snapshot)
+    )
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="研究日报不存在")
+    return report_snapshot(snapshot)
 
 
 @router.post("/api/reports/daily/send")
 async def send_daily_research_report(
+    request: Request,
     report_date: date = Query(alias="date"),
 ) -> dict[str, Any]:
     result = await send_daily_report_email(
         report_date,
         delivery_kind=f"manual-{uuid4().hex[:10]}",
         require_enabled=False,
+        session_factory=request.app.state.session_factory,
     )
     return {"ok": result.get("email_failed", 0) == 0 and result.get("email_sent", 0) > 0, **result}
