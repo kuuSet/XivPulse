@@ -100,6 +100,19 @@ def test_settings_expose_only_llm_pipeline_controls(client: TestClient) -> None:
         == 422
     )
     assert client.get("/api/prompts/catalog").json()["fixed_prompts"]["prefilter"]
+    invalid_timezone = client.put(
+        "/api/settings", json={"schedule_timezone": "Mars/Olympus"}
+    )
+    assert invalid_timezone.status_code == 422
+
+
+def test_provider_url_is_validated_before_it_is_saved(client: TestClient) -> None:
+    response = client.put(
+        "/api/settings",
+        json={"providers": {"screening": {"api_base_url": "not-a-url"}}},
+    )
+    assert response.status_code == 422
+    assert "absolute HTTP(S) URL" in response.text
 
 
 def test_stage_api_keys_survive_auto_save_without_leaking(client: TestClient) -> None:

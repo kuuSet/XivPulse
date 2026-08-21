@@ -23,13 +23,10 @@ def make_engine(database_url: str | None = None) -> Engine:
     options: dict[str, object] = {"future": True}
     if url.startswith("sqlite"):
         options["connect_args"] = {"check_same_thread": False}
-        try:
-            parsed = make_url(url)
-            if parsed.database and parsed.database != ":memory:":
-                database_parent = Path(parsed.database).expanduser().resolve().parent
-                database_parent.mkdir(parents=True, exist_ok=True)
-        except (AttributeError, OSError, ValueError):
-            pass
+        parsed = make_url(url)
+        if parsed.database and parsed.database != ":memory:":
+            database_parent = Path(parsed.database).expanduser().resolve().parent
+            database_parent.mkdir(parents=True, exist_ok=True)
     created = create_engine(url, **options)
     if created.dialect.name == "sqlite":
 

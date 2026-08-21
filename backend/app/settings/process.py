@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import (
@@ -19,6 +20,16 @@ from ..integrations.codex.catalog import (
     CodexModel,
     CodexReasoningEffort,
 )
+
+
+def normalize_api_base_url(value: str) -> str:
+    normalized = value.strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Provider base URL must be an absolute HTTP(S) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("Provider base URL must not contain credentials")
+    return normalized
 
 
 class ProviderSettings(BaseSettings):
@@ -68,7 +79,7 @@ class ProviderSettings(BaseSettings):
     @field_validator("api_base_url")
     @classmethod
     def normalise_api_base_url(cls, value: str) -> str:
-        return value.rstrip("/")
+        return normalize_api_base_url(value)
 
     @property
     def configured(self) -> bool:
@@ -143,4 +154,5 @@ __all__ = [
     "ProcessSettings",
     "ProviderSettings",
     "get_process_settings",
+    "normalize_api_base_url",
 ]

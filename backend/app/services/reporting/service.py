@@ -7,7 +7,6 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi.encoders import jsonable_encoder
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -119,9 +118,7 @@ def persist_daily_report(
         reading_queue_limit=max_papers,
         custom_method_terms=clean_custom_methods(list(load_runtime_settings(db).custom_methods)),
     )
-    encoded = jsonable_encoder(report)
-    if not isinstance(encoded, dict):
-        raise TypeError("Daily research report must serialize to a JSON object")
+    encoded = report
     previous_synthesis = snapshot.payload.get("ai_synthesis") if snapshot is not None else None
     if isinstance(previous_synthesis, dict):
         preserved_synthesis = dict(previous_synthesis)

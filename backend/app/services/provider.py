@@ -7,7 +7,6 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, TypeVar
-from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -97,15 +96,6 @@ class StructuredModelAdapter(Protocol):
     ) -> GenerationResult[TModel]: ...
 
     async def test_connection(self) -> ProviderTestResult: ...
-
-
-def _safe_base_url(value: str) -> str:
-    parsed = urlparse(value.strip())
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("Provider base URL must be an absolute HTTP(S) URL")
-    if parsed.username or parsed.password:
-        raise ValueError("Provider base URL must not contain credentials")
-    return value.strip().rstrip("/")
 
 
 def _strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
@@ -246,7 +236,7 @@ class OpenAICompatibleAdapter:
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.settings = settings or get_process_settings().provider
-        self.base_url = _safe_base_url(self.settings.api_base_url)
+        self.base_url = self.settings.api_base_url
         self._client = http_client
         self.last_transport: Literal["responses", "chat"] = self.settings.api_protocol
 

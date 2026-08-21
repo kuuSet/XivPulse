@@ -14,9 +14,9 @@ import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any, Literal
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -73,17 +73,7 @@ class _PaperSignal:
 
 
 def _as_timezone(timezone_name: str) -> tzinfo:
-    if timezone_name.casefold() in {"utc", "etc/utc", "z"}:
-        return UTC
-    try:
-        return ZoneInfo(timezone_name)
-    except ZoneInfoNotFoundError as exc:
-        # Windows does not ship an IANA timezone database.  Shanghai has had no
-        # daylight-saving changes since 1991, so UTC+8 is correct for this app's
-        # contemporary arXiv dates even when the optional ``tzdata`` wheel is absent.
-        if timezone_name.casefold() in {"asia/shanghai", "prc"}:
-            return timezone(timedelta(hours=8), name="Asia/Shanghai")
-        raise ValueError(f"Unknown timezone: {timezone_name}") from exc
+    return ZoneInfo(timezone_name)
 
 
 def _target_day(value: date | datetime | None, timezone: tzinfo) -> date:

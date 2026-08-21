@@ -21,12 +21,9 @@ def _settings_wire(db: Session) -> dict[str, Any]:
     database_path: str | None = None
     database_size_bytes: int | None = None
     if bind.dialect.name == "sqlite" and bind.url.database not in (None, ":memory:"):
-        try:
-            path = Path(str(bind.url.database)).resolve()
-            database_path = str(path)
-            database_size_bytes = path.stat().st_size if path.exists() else 0
-        except (OSError, ValueError):
-            pass
+        path = Path(str(bind.url.database)).resolve()
+        database_path = str(path)
+        database_size_bytes = path.stat().st_size if path.exists() else 0
     prompt_settings = resolve_prompt_settings(settings.prompt_values())
     return {
         "providers": {

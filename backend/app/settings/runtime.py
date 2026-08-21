@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import (
@@ -19,6 +20,14 @@ if TYPE_CHECKING:
 
 
 ModelStage = Literal["prefilter", "screening", "deep", "synthesis"]
+
+
+def validate_timezone_name(value: str) -> str:
+    try:
+        ZoneInfo(value)
+    except (ValueError, ZoneInfoNotFoundError) as exc:
+        raise ValueError(f"未知的 IANA 时区：{value}") from exc
+    return value
 
 
 class StageProviders(BaseModel):
@@ -109,6 +118,11 @@ class RuntimeSettings(BaseSettings):
     def normalise_public_url(cls, value: str) -> str:
         return value.rstrip("/")
 
+    @field_validator("schedule_timezone")
+    @classmethod
+    def validate_schedule_timezone(cls, value: str) -> str:
+        return validate_timezone_name(value)
+
     def prompt_values(self) -> dict[str, Any]:
         return {
             "prompt_template_id": self.prompt_template_id,
@@ -164,4 +178,5 @@ __all__ = [
     "ModelStage",
     "StageProviders",
     "load_runtime_settings",
+    "validate_timezone_name",
 ]

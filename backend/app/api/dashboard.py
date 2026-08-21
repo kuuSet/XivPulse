@@ -35,7 +35,6 @@ router = APIRouter()
 
 
 @router.get("/api/health")
-@router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict[str, Any]:
     db.scalar(select(func.count()).select_from(Profile))
     return {

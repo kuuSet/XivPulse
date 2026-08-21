@@ -17,10 +17,18 @@ from ..services.prompt_catalog import (
     PROMPT_TEMPLATE_IDS,
     prompt_catalog_payload,
 )
+from ..services.provider import create_model_adapter
 from ..services.reporting.records import current_date_in_timezone
 from ..services.reporting.service import persist_daily_report, send_daily_report_email
 from ..services.state import active_profile
-from ..settings import ModelStage, delete_setting, load_runtime_settings, set_setting
+from ..settings import (
+    ModelStage,
+    delete_setting,
+    load_runtime_settings,
+    normalize_api_base_url,
+    set_setting,
+    validate_timezone_name,
+)
 from ..settings.store import load_setting_values
 from .system_views import _settings_wire
 
@@ -39,6 +47,11 @@ class StageProviderPayload(BaseModel):
     api_key: str | None = Field(default=None, max_length=10000)
     codex_model: CodexModel | None = None
     codex_reasoning_effort: CodexReasoningEffort | None = None
+
+    @field_validator("api_base_url")
+    @classmethod
+    def validate_api_base_url(cls, value: str | None) -> str | None:
+        return normalize_api_base_url(value) if value is not None else None
 
 
 class SettingsPayload(BaseModel):
@@ -95,6 +108,11 @@ class SettingsPayload(BaseModel):
         if value is not None and value not in PROMPT_TEMPLATE_IDS:
             raise ValueError("未知的论文分析提示词模板")
         return value
+
+    @field_validator("schedule_timezone")
+    @classmethod
+    def validate_schedule_timezone(cls, value: str | None) -> str | None:
+        return validate_timezone_name(value) if value is not None else None
 
     @field_validator("deep_analysis_prompt")
     @classmethod
@@ -166,31 +184,7 @@ async def test_provider(
 ) -> dict[str, Any]:
     settings = load_runtime_settings(db)
     provider_settings = settings.providers.for_stage(payload.stage)
-    try:
-        from ..services.provider import create_model_adapter
-
-        result = await create_model_adapter(provider_settings).test_connection()
-        return result.model_dump()
-    except Exception as exc:
-        return {
-            "ok": False,
-            "message": f"连接失败：{exc}",
-            "provider_name": (
-                "codex"
-                if provider_settings.model_source == "codex"
-                else provider_settings.provider_name
-            ),
-            "model": (
-                provider_settings.codex_model
-                if provider_settings.model_source == "codex"
-                else provider_settings.model_name
-            ),
-            "transport": (
-                "codex"
-                if provider_settings.model_source == "codex"
-                else provider_settings.api_protocol
-            ),
-        }
+    return (await create_model_adapter(provider_settings).test_connection()).model_dump()
 
 
 @router.post("/api/settings/email/test")
