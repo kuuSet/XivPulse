@@ -1,7 +1,8 @@
-"""Shared system, settings, and provider response views."""
+"""Shared system and settings response views."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,12 @@ from ..integrations.codex.options import CODEX_MODEL_OPTIONS, CODEX_REASONING_OP
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
 from ..modules.analysis.prompts import resolve_prompt_settings
 from ..settings import load_runtime_settings
-from .presenters.common import _as_utc
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
 def _settings_wire(db: Session) -> dict[str, Any]:

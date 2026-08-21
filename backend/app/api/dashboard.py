@@ -25,8 +25,7 @@ from ..modules.jobs.views import _job_wire, _provider_public_status
 from ..modules.papers.views import _paper_wire, _query_papers
 from ..profile import active_profile
 from ..settings import load_runtime_settings
-from .presenters.common import _as_utc
-from .system_views import _settings_wire
+from .system_views import _as_utc, _settings_wire
 
 router = APIRouter()
 
