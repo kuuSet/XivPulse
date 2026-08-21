@@ -103,5 +103,5 @@ test('abstract-scored papers show the LLM relevance score', async ({ page }) => 
 
   await expect(page.locator('.paper-list h2')).toHaveText(['Abstract-scored paper'])
   await expect(page.locator('.score-pill')).toContainText('75')
-  await expect(page.locator('.score-pill')).toContainText('摘要评分')
+  await expect(page.locator('.score-pill')).toContainText('粗排分')
 })

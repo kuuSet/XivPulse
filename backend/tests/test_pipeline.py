@@ -120,8 +120,7 @@ async def test_windows_runner_uses_shared_daily_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app import workflow
-
-    from scripts import run_daily
+    from app.jobs import command
 
     async def run_daily_once(*, trigger: str) -> dict[str, Any]:
         assert trigger == "scheduled-task"
@@ -129,4 +128,4 @@ async def test_windows_runner_uses_shared_daily_pipeline(
 
     monkeypatch.setattr(workflow.daily_pipeline, "run_daily", run_daily_once)
 
-    assert await run_daily.main() == 0
+    assert await command.main() == 0
