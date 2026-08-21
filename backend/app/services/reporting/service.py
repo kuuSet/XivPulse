@@ -77,7 +77,6 @@ def persist_daily_report(
         timezone_name=timezone_name,
         highlight_limit=min(max_papers, 10),
         reading_queue_limit=max_papers,
-        custom_method_terms=load_runtime_settings(db).custom_methods,
     )
     encoded = report
     previous_synthesis = snapshot.payload.get("ai_synthesis") if snapshot is not None else None

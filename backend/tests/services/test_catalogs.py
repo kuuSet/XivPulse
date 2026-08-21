@@ -1,4 +1,4 @@
-"""Direction, method, organization, and prompt catalog tests."""
+"""Direction, organization, analysis, and prompt catalog tests."""
 
 from __future__ import annotations
 
@@ -17,12 +17,6 @@ from app.services.directions.catalog import (
     direction_catalog_payload,
 )
 from app.services.directions.matching import canonical_requested_direction_names
-from app.services.methods.catalog import (
-    METHOD_CATALOG,
-    discover_method_candidates,
-    match_method_labels,
-    method_catalog_payload,
-)
 from app.services.organizations import watched_organizations
 
 
@@ -94,50 +88,9 @@ def test_prompt_catalog_is_versioned_and_cross_domain() -> None:
     assert "screening_prompt" not in catalog["templates"][0]
 
 
-def test_analysis_budget_modes_and_method_candidate_discovery() -> None:
+def test_analysis_budget_modes() -> None:
     assert ANALYSIS_BUDGETS["economy"].max_fulltext_chars == 16_000
     assert ANALYSIS_BUDGETS["balanced"].max_pdf_pages == 25
     assert ANALYSIS_BUDGETS["deep"].deep_output_tokens == 5_000
     with pytest.raises(KeyError):
         analysis_budget("unknown")  # type: ignore[arg-type]
-    assert len(METHOD_CATALOG) >= 90
-    assert method_catalog_payload()["count"] == len(METHOD_CATALOG)
-
-    labels = match_method_labels(
-        "We use behavior cloning, a world model, and LoRA fine-tuning for robot control."
-    )
-    assert "模仿学习" in labels
-    assert "世界模型" in labels
-    assert "参数高效微调" in labels
-    assert "行为克隆" not in labels
-    assert "视觉-语言-动作模型" not in match_method_labels(
-        "VLA measured in an electrical load test"
-    )
-    assert "视觉-语言-动作模型" in match_method_labels(
-        "A VLA policy maps vision and language to robot actions."
-    )
-
-    records = [
-        {
-            "paper_id": 1,
-            "arxiv_id": "2608.1",
-            "title": "One",
-            "methods": ["Counterfactual Policy Repair", "world model"],
-        },
-        {
-            "paper_id": 2,
-            "arxiv_id": "2608.2",
-            "title": "Two",
-            "methods": ["counterfactual-policy repair", "A full sentence. It is too long."],
-        },
-        {
-            "paper_id": 2,
-            "arxiv_id": "2608.2",
-            "title": "Two duplicate analysis",
-            "methods": ["Counterfactual Policy Repair"],
-        },
-    ]
-    candidates = discover_method_candidates(records)
-    assert [item["name"] for item in candidates] == ["Counterfactual Policy Repair"]
-    assert candidates[0]["paper_count"] == 2
-    assert discover_method_candidates(records, dismissed=[candidates[0]["key"]]) == []

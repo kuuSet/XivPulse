@@ -14,7 +14,6 @@ from pydantic_settings import (
 
 from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
 from ..services.analysis.prompts import DEFAULT_PROMPT_TEMPLATE_ID, PROMPT_TEMPLATE_IDS
-from ..services.methods.types import CustomMethod
 from .process import (
     ProcessSettings,
     ProviderSettings,
@@ -107,10 +106,6 @@ class RuntimeSettings(BaseSettings):
     # Analysis prompt selection and overrides.
     prompt_template_id: str = DEFAULT_PROMPT_TEMPLATE_ID
     deep_analysis_prompt: str | None = None
-
-    # Method catalog customization.
-    custom_methods: tuple[CustomMethod, ...] = Field(default=(), max_length=100)
-    dismissed_method_candidates: tuple[str, ...] = ()
 
     # Watched authors and organizations.
     watched_authors: tuple[str, ...] = ()

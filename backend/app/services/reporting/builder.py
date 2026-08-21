@@ -10,7 +10,6 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
-from ..methods.types import CustomMethod
 from ..organizations import paper_organizations
 from .records import (
     ARXIV_BATCH_DATE_BASIS,
@@ -36,7 +35,6 @@ from .signals import (
     _evidence_items,
     _evidence_labels,
     _method_items,
-    _method_labels,
     _unique_phrases,
 )
 
@@ -310,11 +308,8 @@ def _paper_overview_item(record: _PaperSignal) -> dict[str, Any]:
     contributions = _payload_list(payload, "key_contributions")
     contribution = _first_sentence(contributions[0]) if contributions else ""
     contribution = contribution or _first_sentence(_summary(record))
-    controlled_methods = _method_labels(record)
-    detailed_methods = _method_items(record)
-    method = "、".join(controlled_methods[:3])
-    if not method and detailed_methods:
-        method = _first_sentence(detailed_methods[0], max_length=140)
+    methods = _method_items(record)
+    method = "、".join(_first_sentence(value, max_length=140) for value in methods[:3])
     controlled_evidence = _evidence_labels(record)
     evidence = "、".join(controlled_evidence[:3])
     if not evidence:
@@ -376,7 +371,7 @@ def _quality_overview(
     scores = [_score(record.match) for record in selected]
     shared_methods = [
         str(item["name"])
-        for item in _aggregate_items(selected, _method_labels)
+        for item in _aggregate_items(selected, _method_items)
         if bool(item["shared"])
     ][:4]
     shared_evidence = [
@@ -440,7 +435,6 @@ def build_daily_research_report(
     timezone_name: str = DEFAULT_TIMEZONE,
     highlight_limit: int = 6,
     reading_queue_limit: int = 10,
-    custom_method_terms: Sequence[CustomMethod] | None = None,
 ) -> dict[str, Any]:
     """Generate a deterministic daily report from screening scores and saved analyses."""
 
@@ -455,10 +449,7 @@ def build_daily_research_report(
     recent_baseline = _within(all_records, baseline_start, day_start)
     ordered = _sort_records(records)
 
-    def method_extractor(record: _PaperSignal) -> list[str]:
-        return _method_labels(record, custom_method_terms)
-
-    methods = [item for item in _aggregate_items(records, method_extractor) if item["shared"]][:12]
+    methods = [item for item in _aggregate_items(records, _method_items) if item["shared"]][:12]
     evidence = _aggregate_items(records, _evidence_labels)[:12]
     analyzed_count = sum(record.analysis is not None for record in records)
     deep_count = sum(
@@ -495,7 +486,7 @@ def build_daily_research_report(
         "methodology_note": (
             "论文按 arXiv submittedDate 获取，并按设置时区归入报告日期。"
             "报告纳入当日已完成摘要粗排的论文，推荐顺序只使用粗排分数；"
-            "方法、证据与论文摘要优先使用已保存的深度分析，缺失时仅从题目和摘要提取"
-            "可核查线索，不根据关键词或 arXiv 分类伪造关注标签归因。"
+            "方法只使用已保存的深度分析结果；证据优先使用深度分析，缺失时仅从题目"
+            "和摘要提取可核查线索，不根据关键词或 arXiv 分类伪造方法或关注标签归因。"
         ),
     }

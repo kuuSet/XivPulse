@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 
-from ..methods.catalog import match_method_labels
-from ..methods.types import CustomMethod
 from .records import (
     _EVIDENCE_TERMS,
     _clean_phrase,
@@ -27,26 +25,6 @@ def _controlled_terms(text: str, vocabulary: Sequence[tuple[str, Sequence[str]]]
     return [label for label, terms in vocabulary if any(_has_term(text, term) for term in terms)]
 
 
-def _method_labels(
-    record: _PaperSignal,
-    custom_terms: Sequence[CustomMethod] | None = None,
-) -> list[str]:
-    """Return stable, controlled labels for cross-paper aggregation."""
-
-    payload = _payload(record.analysis)
-    explicit = _payload_list(payload, "methods")
-    text = "\n".join(
-        (
-            record.paper.title,
-            record.paper.abstract,
-            " ".join(record.paper.categories),
-            record.analysis.summary if record.analysis is not None else "",
-            " ".join(explicit),
-        )
-    )
-    return match_method_labels(text, custom_terms)
-
-
 def _evidence_labels(record: _PaperSignal) -> list[str]:
     """Return evidence types, never paper-specific evidence statements."""
 
@@ -64,11 +42,9 @@ def _evidence_labels(record: _PaperSignal) -> list[str]:
 
 
 def _method_items(record: _PaperSignal) -> list[str]:
-    """Return paper-level method details for the paper highlight."""
+    """Return only methods explicitly saved by the analysis model."""
 
-    payload = _payload(record.analysis)
-    explicit = _payload_list(payload, "methods")
-    return _unique_phrases([*explicit, *_method_labels(record)])
+    return _payload_list(_payload(record.analysis), "methods")
 
 
 def _evidence_items(record: _PaperSignal) -> list[str]:

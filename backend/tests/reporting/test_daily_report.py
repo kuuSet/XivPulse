@@ -90,8 +90,8 @@ def test_daily_report_uses_scores_and_saved_analysis(analytics_session: Session)
     assert "daily_trend" not in report
 
     methods = {item["name"]: item for item in report["common_methods"]}
-    assert methods["模仿学习"]["count"] == 2
-    assert methods["模仿学习"]["shared"] is True
+    assert methods["Behavior cloning"]["count"] == 2
+    assert methods["Behavior cloning"]["shared"] is True
     situation = report["research_situation"]
     assert situation["volume"]["today"] == 2
     assert situation["volume"]["previous_day"] == 1
@@ -104,7 +104,7 @@ def test_daily_report_uses_scores_and_saved_analysis(analytics_session: Session)
         "high_score_threshold": 80.0,
     }
     assert "direction_dynamics" not in situation
-    assert "模仿学习" in situation["method_signals"]
+    assert "Behavior cloning" in situation["method_signals"]
     assert situation["evidence_maturity"]["status"] in {"mixed", "strong"}
     assert situation["evidence_maturity"]["shared_strong_signals"] == ["真实机器人实验"]
 
@@ -116,7 +116,7 @@ def test_daily_report_uses_scores_and_saved_analysis(analytics_session: Session)
     assert "topics" not in overview["paper_findings"][0]
     assert "Action-conditioned latent dynamics" in overview["paper_findings"][0]["contribution"]
     assert "submittedDate" in report["date_basis"]
-    assert "关键词或 arXiv 分类伪造关注标签归因" in report["methodology_note"]
+    assert "关键词或 arXiv 分类伪造方法或关注标签归因" in report["methodology_note"]
 
 
 def test_daily_report_persists_the_score_only_contract(analytics_session: Session) -> None:
@@ -139,7 +139,7 @@ def test_daily_report_persists_the_score_only_contract(analytics_session: Sessio
     assert "updated_at" in payload
 
 
-def test_report_keeps_controlled_aggregates_and_paper_details(
+def test_report_keeps_shared_analysis_methods_and_paper_details(
     analytics_session: Session,
 ) -> None:
     paper = analytics_session.scalar(select(Paper).where(Paper.arxiv_id == "2608.00001"))
@@ -207,7 +207,7 @@ def test_report_falls_back_to_abstract_without_analysis(analytics_session: Sessi
     assert report["highlight_papers"][0]["analysis_available"] is False
     assert report["highlight_papers"][0]["summary"] == "A simulation benchmark."
     assert report["common_methods"] == []
-    assert "视觉-语言-动作模型" in report["highlight_papers"][0]["methods"]
+    assert report["highlight_papers"][0]["methods"] == []
     assert any(item["name"] == "基准评测" for item in report["common_evidence"])
     assert report["suggested_reading_queue"][0]["priority"] == "skim"
 
