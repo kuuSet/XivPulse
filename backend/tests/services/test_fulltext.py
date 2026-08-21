@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 from app.arxiv.download import limited_bytes
+from app.models import Paper
 
 
 @pytest.mark.asyncio
@@ -20,7 +21,7 @@ async def test_fulltext_prefers_html_and_skips_pdf() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         fetcher = FullTextFetcher(http_client=client, rate_limit_seconds=0)
-        result = await fetcher.fetch("2608.01234v2")
+        result = await fetcher.fetch(Paper(arxiv_id="2608.01234", latest_version=2, title="Paper"))
     assert result.source == "html"
     assert paths == ["/html/2608.01234v2"]
     assert "evidence" in result.content
@@ -71,7 +72,7 @@ async def test_fulltext_streams_larger_pdfs_to_a_temporary_file(
             return "evidence " * 100
 
         monkeypatch.setattr(fetcher, "_extract_pdf", extract_pdf)
-        result = await fetcher.fetch("2608.01234v2")
+        result = await fetcher.fetch(Paper(arxiv_id="2608.01234", latest_version=2, title="Paper"))
 
     assert fetcher.max_html_bytes == 64 * 1024 * 1024
     assert fetcher.max_pdf_bytes == 100 * 1024 * 1024

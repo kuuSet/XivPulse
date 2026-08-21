@@ -18,7 +18,6 @@ from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 from ..arxiv.download import DEFAULT_USER_AGENT, limited_bytes
-from ..arxiv.results import parse_arxiv_id
 from ..models import Paper
 
 
@@ -47,9 +46,7 @@ class FullTextFetcher:
     ) -> None:
         self._client = http_client
         self.timeout = timeout
-        self._limiter = (
-            AsyncLimiter(1, rate_limit_seconds) if rate_limit_seconds > 0 else None
-        )
+        self._limiter = AsyncLimiter(1, rate_limit_seconds) if rate_limit_seconds > 0 else None
         self.max_chars = max(5_000, max_chars)
         self.max_html_bytes = max(1024 * 1024, max_html_bytes)
         self.max_pdf_bytes = max(1024 * 1024, max_pdf_bytes)
@@ -68,29 +65,19 @@ class FullTextFetcher:
                 yield response
             return
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            async with client.stream(
-                "GET", url, headers=headers, timeout=self.timeout
-            ) as response:
+            async with client.stream("GET", url, headers=headers, timeout=self.timeout) as response:
                 response.raise_for_status()
                 yield response
 
-    async def fetch(self, paper: Paper | str) -> FullTextDocument:
-        raw_id = paper.arxiv_id if isinstance(paper, Paper) else paper
-        arxiv_id, parsed_version = parse_arxiv_id(raw_id)
-        if isinstance(paper, Paper):
-            version = max(1, int(paper.latest_version or parsed_version))
-        else:
-            version = parsed_version
-        versioned = f"{arxiv_id}v{version}"
+    async def fetch(self, paper: Paper) -> FullTextDocument:
+        versioned = f"{paper.arxiv_id}v{paper.latest_version}"
         encoded = quote(versioned, safe="/.")
         html_url = f"https://arxiv.org/html/{encoded}"
         pdf_url = f"https://arxiv.org/pdf/{encoded}"
         errors: list[str] = []
 
         try:
-            async with self._stream(
-                html_url, "text/html,application/xhtml+xml"
-            ) as response:
+            async with self._stream(html_url, "text/html,application/xhtml+xml") as response:
                 encoding = response.encoding or "utf-8"
                 payload = bytearray()
                 async for chunk in limited_bytes(response, self.max_html_bytes):
