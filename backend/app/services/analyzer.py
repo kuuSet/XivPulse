@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from html import escape
 from typing import Any, Literal
 
 from ..models import Paper, Topic
 from ..schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
-from .directions.matching import terms
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompt_catalog import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,
@@ -43,29 +42,15 @@ def analysis_budget(mode: str | None) -> AnalysisBudget:
     return ANALYSIS_BUDGETS.get(str(mode or "balanced"), ANALYSIS_BUDGETS["balanced"])
 
 
-def _topic_context(topics: Sequence[Topic | Mapping[str, Any]]) -> str:
+def _topic_context(topics: Sequence[Topic]) -> str:
     lines: list[str] = []
     for topic in topics:
-        enabled = topic.get("enabled", True) if isinstance(topic, Mapping) else topic.enabled
-        if not enabled:
+        if not topic.enabled:
             continue
-        name = str(topic.get("name", "") if isinstance(topic, Mapping) else topic.name)
-        raw_description = (
-            topic.get("description", "") if isinstance(topic, Mapping) else topic.description
-        )
-        description = str(raw_description or "").strip()
-        aliases = terms(topic, "aliases")
-        alias_text = ", ".join(aliases[:12]) or "无"
-        lines.append(f"- {name}；范围：{description or '未补充'}；可接受别名：{alias_text}")
+        description = (topic.description or "").strip()
+        alias_text = ", ".join(topic.aliases[:12]) or "无"
+        lines.append(f"- {topic.name}；范围：{description or '未补充'}；可接受别名：{alias_text}")
     return "\n".join(lines) or "- 未配置关注标签"
-
-
-def _paper_value(paper: Paper | Mapping[str, Any], name: str, default: Any = "") -> Any:
-    if isinstance(paper, Mapping):
-        if name in paper:
-            return paper[name]
-        return paper.get(f"{name}_json", default)
-    return getattr(paper, name, getattr(paper, f"{name}_json", default))
 
 
 def _xml_text(value: object) -> str:
@@ -100,15 +85,15 @@ class PaperAnalyzer:
 
     async def prefilter_with_metadata(
         self,
-        papers: Sequence[Paper | Mapping[str, Any]],
-        topics: Sequence[Topic | Mapping[str, Any]],
+        papers: Sequence[Paper],
+        topics: Sequence[Topic],
     ) -> GenerationResult[PrefilterResult]:
         paper_blocks = []
         for paper in papers:
             paper_blocks.append(
-                f'<paper id="{_paper_value(paper, "id")}">\n'
-                f"标题：{_xml_text(_paper_value(paper, 'title'))}\n"
-                f"分类：{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
+                f'<paper id="{paper.id}">\n'
+                f"标题：{_xml_text(paper.title)}\n"
+                f"分类：{_xml_text(', '.join(paper.categories))}\n"
                 "</paper>"
             )
         prompt = (
@@ -127,16 +112,16 @@ class PaperAnalyzer:
 
     async def screen_with_metadata(
         self,
-        paper: Paper | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]],
+        paper: Paper,
+        topics: Sequence[Topic],
     ) -> GenerationResult[ScreeningResult]:
         topics = list(topics)
         prompt = (
             f"<followed_topics>\n关注标签：\n{_xml_text(_topic_context(topics))}\n"
             f"</followed_topics>\n\n"
-            f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
-            f"分类：{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
-            f"摘要：{_xml_text(_paper_value(paper, 'abstract'))}\n</paper_data>"
+            f"<paper_data>\n论文题目：{_xml_text(paper.title)}\n"
+            f"分类：{_xml_text(', '.join(paper.categories))}\n"
+            f"摘要：{_xml_text(paper.abstract)}\n</paper_data>"
         )
         generated = await self.screening_adapter.generate_json_with_metadata(
             system_prompt=SCREENING_SYSTEM_PROMPT,
@@ -150,32 +135,26 @@ class PaperAnalyzer:
 
     async def deep_analyze_with_metadata(
         self,
-        paper: Paper | Mapping[str, Any],
-        topics: Sequence[Topic | Mapping[str, Any]],
+        paper: Paper,
+        topics: Sequence[Topic],
         *,
         include_fulltext: bool = True,
     ) -> tuple[GenerationResult[DeepAnalysisResult], FullTextDocument]:
         topics = list(topics)
         fulltext = FullTextDocument("", "unavailable", None)
         if include_fulltext:
-            if isinstance(paper, Paper):
-                fulltext_target: Paper | str | None = paper
-            else:
-                raw_id = _paper_value(paper, "arxiv_id", None)
-                fulltext_target = str(raw_id) if raw_id else None
-            if fulltext_target is not None:
-                fulltext = await self.fulltext_fetcher.fetch(fulltext_target)
+            fulltext = await self.fulltext_fetcher.fetch(paper)
         source_label = fulltext.source if fulltext.content else "abstract"
-        source_text = fulltext.content or str(_paper_value(paper, "abstract"))
+        source_text = fulltext.content or paper.abstract
         prompt = (
             f"<analysis_preferences>\n{_xml_text(self.deep_analysis_prompt)}\n"
             f"</analysis_preferences>\n\n"
             f"<followed_topics>\n关注标签：\n{_xml_text(_topic_context(topics))}\n"
             f"</followed_topics>\n\n"
-            f"<paper_data>\n论文题目：{_xml_text(_paper_value(paper, 'title'))}\n"
-            f"作者：{_xml_text(', '.join(_paper_value(paper, 'authors', []) or []))}\n"
+            f"<paper_data>\n论文题目：{_xml_text(paper.title)}\n"
+            f"作者：{_xml_text(', '.join(paper.authors))}\n"
             f"arXiv 分类："
-            f"{_xml_text(', '.join(_paper_value(paper, 'categories', []) or []))}\n"
+            f"{_xml_text(', '.join(paper.categories))}\n"
             f"分析文本来源：{source_label}{'（已截断）' if fulltext.truncated else ''}\n\n"
             f"论文文本：\n{_xml_text(source_text)}\n</paper_data>"
         )

@@ -8,7 +8,7 @@ from app import database
 from app.database import Base, make_session_factory
 from app.database_defaults import seed_defaults
 from app.domain.paper import Paper as PaperDocument
-from app.models import Analysis, Paper, PaperMatch, Profile
+from app.models import Analysis, Paper, PaperMatch, Profile, Topic
 from app.schemas import PrefilterDecision, PrefilterResult
 from app.services.analyzer import PaperAnalyzer
 from app.services.paper_sync import sync_papers
@@ -76,31 +76,34 @@ async def test_title_prefilter_batches_papers_without_sending_abstracts() -> Non
     analyzer = PaperAnalyzer(adapter, adapter, adapter)  # type: ignore[arg-type]
     result = await analyzer.prefilter_with_metadata(
         [
-            {
-                "id": 1,
-                "title": "Distributed scheduling for language-model serving",
-                "abstract": "SECRET_ABSTRACT_ONE",
-                "categories": ["cs.DC", "cs.LG"],
-            },
-            {
-                "id": 2,
-                "title": "An ambiguous systems paper",
-                "abstract": "SECRET_ABSTRACT_TWO",
-                "categories": ["cs.AI"],
-            },
-            {
-                "id": 3,
-                "title": "Algebraic topology of compact manifolds",
-                "abstract": "SECRET_ABSTRACT_THREE",
-                "categories": ["math.AT"],
-            },
+            Paper(
+                id=1,
+                arxiv_id="2608.10001",
+                title="Distributed scheduling for language-model serving",
+                abstract="SECRET_ABSTRACT_ONE",
+                categories_json=["cs.DC", "cs.LG"],
+            ),
+            Paper(
+                id=2,
+                arxiv_id="2608.10002",
+                title="An ambiguous systems paper",
+                abstract="SECRET_ABSTRACT_TWO",
+                categories_json=["cs.AI"],
+            ),
+            Paper(
+                id=3,
+                arxiv_id="2608.10003",
+                title="Algebraic topology of compact manifolds",
+                abstract="SECRET_ABSTRACT_THREE",
+                categories_json=["math.AT"],
+            ),
         ],
         [
-            {
-                "name": "LLM Systems",
-                "description": "Efficient inference, serving, scheduling, and memory management.",
-                "enabled": True,
-            }
+            Topic(
+                name="LLM Systems",
+                description="Efficient inference, serving, scheduling, and memory management.",
+                enabled=True,
+            )
         ],
     )
 

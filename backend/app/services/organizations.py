@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
+
+from ..models import Paper
 
 _WATCHED_ORGANIZATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("OpenAI", ("openai",)),
@@ -49,15 +51,15 @@ _WATCHED_ORGANIZATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _normalized(value: object) -> str:
-    text = unicodedata.normalize("NFKC", str(value)).casefold()
+def _normalized(value: str) -> str:
+    text = unicodedata.normalize("NFKC", value).casefold()
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", text).strip()
 
 
-def watched_organizations(affiliations: Iterable[object]) -> list[str]:
+def watched_organizations(affiliations: Iterable[str]) -> list[str]:
     """Map explicit affiliation strings to a small, auditable watchlist."""
 
-    text = " | ".join(_normalized(value) for value in affiliations if str(value).strip())
+    text = " | ".join(_normalized(value) for value in affiliations if value.strip())
     if not text:
         return []
     return [
@@ -73,12 +75,8 @@ def watched_organizations(affiliations: Iterable[object]) -> list[str]:
     ]
 
 
-def paper_organizations(paper: object | Mapping[str, object]) -> list[str]:
-    if isinstance(paper, Mapping):
-        values = paper.get("affiliations", paper.get("affiliations_json", []))
-    else:
-        values = getattr(paper, "affiliations", getattr(paper, "affiliations_json", []))
-    return watched_organizations(values if isinstance(values, list | tuple | set) else [])
+def paper_organizations(paper: Paper) -> list[str]:
+    return watched_organizations(paper.affiliations)
 
 
 __all__ = ["paper_organizations", "watched_organizations"]
