@@ -3,52 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 
-import pytest
-from app import database
-from app.database import Base
-from app.database_defaults import seed_defaults
-from app.main import app
 from app.models import Job, Paper, PaperMatch, Profile
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-
-
-@pytest.fixture()
-def client(monkeypatch: pytest.MonkeyPatch):
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    database.SessionLocal.configure(bind=engine)
-    Base.metadata.create_all(engine)
-    with database.SessionLocal() as session:
-        seed_defaults(session)
-
-    import app.pipeline as pipeline_module
-    import app.runtime as runtime
-    from app.workflow import daily_pipeline
-
-    monkeypatch.setattr(runtime, "_initialized", True)
-    monkeypatch.setattr(daily_pipeline, "_active_job_id", None)
-    monkeypatch.setattr(
-        pipeline_module,
-        "PIPELINE_LOCK_PATH",
-        Path.cwd() / ".pytest_pipeline.lock",
-    )
-    pipeline_module.PIPELINE_LOCK_PATH.unlink(missing_ok=True)
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        pipeline_module.PIPELINE_LOCK_PATH.unlink(missing_ok=True)
-        engine.dispose()
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def _insert_paper(
+    session_factory: sessionmaker[Session],
     *,
     arxiv_id: str,
     title: str,
@@ -56,7 +18,7 @@ def _insert_paper(
     prefilter_decision: str | None = None,
     score: float | None = None,
 ) -> int:
-    with database.SessionLocal() as session:
+    with session_factory() as session:
         profile = session.query(Profile).one()
         paper = Paper(
             arxiv_id=arxiv_id,
@@ -165,9 +127,13 @@ def test_stage_api_keys_survive_auto_save_without_leaking(client: TestClient) ->
     assert autosaved.json()["providers"]["deep"]["api_key_configured"] is True
 
 
-def test_dashboard_reports_each_llm_stage_for_requested_date(client: TestClient) -> None:
+def test_dashboard_reports_each_llm_stage_for_requested_date(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
     selected = datetime(2026, 8, 18, 8, tzinfo=UTC)
     _insert_paper(
+        session_factory,
         arxiv_id="2608.10001",
         title="Scored paper",
         published_at=selected,
@@ -175,17 +141,20 @@ def test_dashboard_reports_each_llm_stage_for_requested_date(client: TestClient)
         score=88,
     )
     _insert_paper(
+        session_factory,
         arxiv_id="2608.10002",
         title="Rejected by title",
         published_at=selected,
         prefilter_decision="irrelevant",
     )
     _insert_paper(
+        session_factory,
         arxiv_id="2608.10003",
         title="Waiting for title filter",
         published_at=selected,
     )
     _insert_paper(
+        session_factory,
         arxiv_id="2608.10004",
         title="Other day",
         published_at=datetime(2026, 8, 17, 8, tzinfo=UTC),
@@ -205,9 +174,13 @@ def test_dashboard_reports_each_llm_stage_for_requested_date(client: TestClient)
     assert payload["processing_summary"]["pending_screening_count"] == 0
 
 
-def test_paper_library_uses_only_abstract_llm_scores(client: TestClient) -> None:
+def test_paper_library_uses_only_abstract_llm_scores(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
     selected = datetime(2026, 8, 18, 8, tzinfo=UTC)
     paper_id = _insert_paper(
+        session_factory,
         arxiv_id="2608.20001",
         title="High score",
         published_at=selected,
@@ -215,6 +188,7 @@ def test_paper_library_uses_only_abstract_llm_scores(client: TestClient) -> None
         score=82,
     )
     _insert_paper(
+        session_factory,
         arxiv_id="2608.20002",
         title="Only prefiltered",
         published_at=selected,
@@ -234,9 +208,13 @@ def test_paper_library_uses_only_abstract_llm_scores(client: TestClient) -> None
     assert detail.status_code == 200
 
 
-def test_job_calendar_reports_title_and_abstract_progress(client: TestClient) -> None:
+def test_job_calendar_reports_title_and_abstract_progress(
+    client: TestClient,
+    session_factory: sessionmaker[Session],
+) -> None:
     selected = datetime(2026, 8, 18, 8, tzinfo=UTC)
     _insert_paper(
+        session_factory,
         arxiv_id="2608.30001",
         title="Scored",
         published_at=selected,
@@ -244,12 +222,13 @@ def test_job_calendar_reports_title_and_abstract_progress(client: TestClient) ->
         score=91,
     )
     _insert_paper(
+        session_factory,
         arxiv_id="2608.30002",
         title="Waiting for abstract",
         published_at=selected,
         prefilter_decision="uncertain",
     )
-    with database.SessionLocal() as session:
+    with session_factory() as session:
         session.add(
             Job(
                 kind="daily",

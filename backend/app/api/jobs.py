@@ -3,17 +3,17 @@
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import case, desc, func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Analysis, Job, Paper, PaperMatch
+from ..pipeline import PipelineCoordinator
 from ..services.jobs import RUNNING_STATUSES
 from ..services.paper_sync import latest_complete_submission_date
 from ..services.state import active_profile
-from ..workflow import daily_pipeline
 from .presenters.jobs import _job_wire
 from .system_views import _provider_public_status
 
@@ -26,26 +26,33 @@ class DailyJobPayload(BaseModel):
     date: date
 
 
+def get_pipeline(request: Request) -> PipelineCoordinator:
+    return request.app.state.pipeline
+
+
 @router.post("/api/refresh", status_code=status.HTTP_202_ACCEPTED)
-async def refresh() -> dict[str, Any]:
-    return daily_pipeline.start_job("daily", target_date=latest_complete_submission_date())
+async def refresh(pipeline: PipelineCoordinator = Depends(get_pipeline)) -> dict[str, Any]:
+    return pipeline.start_job("daily", target_date=latest_complete_submission_date())
 
 
 @router.post("/api/run-daily", status_code=status.HTTP_202_ACCEPTED)
-async def start_daily(payload: DailyJobPayload) -> dict[str, Any]:
+async def start_daily(
+    payload: DailyJobPayload,
+    pipeline: PipelineCoordinator = Depends(get_pipeline),
+) -> dict[str, Any]:
     if payload.date > latest_complete_submission_date():
         raise HTTPException(status_code=422, detail="只能补跑已经完整结束的论文日期")
-    return daily_pipeline.start_job("daily", target_date=payload.date)
+    return pipeline.start_job("daily", target_date=payload.date)
 
 
 @router.post("/api/sync", status_code=status.HTTP_202_ACCEPTED)
-async def sync() -> dict[str, Any]:
-    return daily_pipeline.start_job("sync", target_date=latest_complete_submission_date())
+async def sync(pipeline: PipelineCoordinator = Depends(get_pipeline)) -> dict[str, Any]:
+    return pipeline.start_job("sync", target_date=latest_complete_submission_date())
 
 
 @router.post("/api/analyze", status_code=status.HTTP_202_ACCEPTED)
-async def analyze() -> dict[str, Any]:
-    return daily_pipeline.start_job("analyze")
+async def analyze(pipeline: PipelineCoordinator = Depends(get_pipeline)) -> dict[str, Any]:
+    return pipeline.start_job("analyze")
 
 
 @router.get("/api/jobs/{job_id}")

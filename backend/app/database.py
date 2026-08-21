@@ -6,6 +6,7 @@ from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from fastapi import Request
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -62,8 +63,8 @@ def init_db(bind: Engine | None = None, *, seed: bool = True) -> Engine:
     return target
 
 
-def get_db() -> Generator[Session, None, None]:
-    with SessionLocal() as session:
+def get_db(request: Request) -> Generator[Session, None, None]:
+    with request.app.state.session_factory() as session:
         yield session
 
 
