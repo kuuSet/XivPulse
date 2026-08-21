@@ -1,7 +1,6 @@
-import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, RotateCcw, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi, X } from 'lucide-react'
+import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, RotateCcw, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
-import type { MethodCandidate, MethodCatalog } from '../../types/methods'
 import type { AnalysisPromptCatalog, ModelStage, Settings, StageProviderSettings } from '../../types/settings'
 import type { LoadState, Toast } from '../../app/types'
 import { FormSection, WorkspaceSkeleton, PageError } from '../../shared/ui'
@@ -83,11 +82,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const [saveState, setSaveState] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved')
   const [testingStage, setTestingStage] = useState<ModelStage | null>(null)
   const [testResults, setTestResults] = useState<Partial<Record<ModelStage, { ok: boolean; message: string }>>>({})
-  const [methodCatalog, setMethodCatalog] = useState<MethodCatalog | null>(null)
   const [promptCatalog, setPromptCatalog] = useState<AnalysisPromptCatalog | null>(null)
-  const [methodCandidates, setMethodCandidates] = useState<MethodCandidate[]>([])
-  const [candidateNames, setCandidateNames] = useState<Record<string, string>>({})
-  const [methodBusy, setMethodBusy] = useState(false)
   const [emailTesting, setEmailTesting] = useState(false)
   const savedSettings = useRef('')
   const autoSaveTimer = useRef<number>()
@@ -95,16 +90,13 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const load = useCallback(async () => {
     setState('loading')
     try {
-      const [loadedSettings, catalog, candidates, prompts] = await Promise.all([
-        api.settings(), api.methodCatalog(), api.methodCandidates(), api.promptCatalog(),
+      const [loadedSettings, prompts] = await Promise.all([
+        api.settings(), api.promptCatalog(),
       ])
       savedSettings.current = JSON.stringify(loadedSettings)
       setSettings(loadedSettings)
       onFontSizeChange(loadedSettings.ui_font_size_pt)
-      setMethodCatalog(catalog)
       setPromptCatalog(prompts)
-      setMethodCandidates(candidates.items)
-      setCandidateNames(Object.fromEntries(candidates.items.map((item) => [item.key, item.name])))
       setState('ready')
       setError('')
     } catch (loadError) {
@@ -217,37 +209,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
       prompt_customized: false,
     })
   }
-  const acceptCandidate = async (candidate: MethodCandidate) => {
-    setMethodBusy(true)
-    try {
-      const catalog = await api.acceptMethodCandidate(candidate.key, candidateNames[candidate.key]?.trim() || candidate.name)
-      setMethodCatalog(catalog)
-      setMethodCandidates((items) => items.filter((item) => item.key !== candidate.key))
-      onToast('success', `已接受方法：${candidate.name}`)
-    } catch (acceptError) {
-      onToast('error', acceptError instanceof Error ? acceptError.message : '接受候选失败')
-    } finally { setMethodBusy(false) }
-  }
-  const dismissCandidate = async (candidate: MethodCandidate) => {
-    setMethodBusy(true)
-    try {
-      await api.dismissMethodCandidate(candidate.key)
-      setMethodCandidates((items) => items.filter((item) => item.key !== candidate.key))
-    } catch (dismissError) {
-      onToast('error', dismissError instanceof Error ? dismissError.message : '忽略候选失败')
-    } finally { setMethodBusy(false) }
-  }
-  const removeCustomMethod = async (name: string) => {
-    if (!methodCatalog) return
-    setMethodBusy(true)
-    try {
-      const retained = methodCatalog.items.filter((item) => item.source === 'custom' && item.name !== name).map((item) => ({ name: item.name, aliases: item.aliases.filter((alias) => alias !== item.name) }))
-      setMethodCatalog(await api.saveCustomMethods(retained))
-    } catch (removeError) {
-      onToast('error', removeError instanceof Error ? removeError.message : '删除自定义方法失败')
-    } finally { setMethodBusy(false) }
-  }
-
   return (
     <div className="standard-page settings-page">
       <section className="page-heading">
@@ -353,13 +314,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
             </div>
             {settings.token_usage.latest ? <div className="latest-token-row"><span>最近一次：{settings.token_usage.latest.kind === 'deep' ? '全文深读' : settings.token_usage.latest.kind === 'report_synthesis' ? '日报综合研判' : '摘要粗排'} · {settings.token_usage.latest.budget_mode}</span><strong>{formatInteger(settings.token_usage.latest.total_tokens ?? 0)} Token</strong><small>{formatDateTime(settings.token_usage.latest.created_at)}</small></div> : <div className="retention-note"><CircleAlert size={16} /><div><strong>还没有可计量的 AI 调用</strong><p>下一次真实分析且 Provider 返回 usage 后，这里会开始累计。</p></div></div>}
             {settings.token_usage.usage_missing_count > 0 && <small className="usage-missing">另有 {settings.token_usage.usage_missing_count} 份分析未提供 usage，不计为 0。</small>}
-          </FormSection>
-
-          <FormSection title="共同方法词表" description="内置词表覆盖主要 AI 方法族；候选从最近 30 天已保存的分析中本地发现，至少跨 2 篇论文重复，接受前不会出现在日报。">
-            {methodCatalog && <div className="method-catalog-summary"><div><strong>{methodCatalog.built_in_count}</strong><span>内置方法</span></div><div><strong>{methodCatalog.groups.length}</strong><span>稳定方法族</span></div><div><strong>{methodCatalog.custom_count}</strong><span>已接受候选</span></div><small>词表版本 {methodCatalog.version}</small></div>}
-            {methodCatalog && methodCatalog.items.some((item) => item.source === 'custom') && <div className="custom-methods"><span>自定义方法</span><div>{methodCatalog.items.filter((item) => item.source === 'custom').map((item) => <span key={item.slug}>{item.name}<button type="button" disabled={methodBusy} onClick={() => void removeCustomMethod(item.name)} aria-label={`删除 ${item.name}`} title="删除自定义方法"><X size={12} /></button></span>)}</div></div>}
-            <div className="method-candidates-head"><div><strong>待审核候选</strong><small>候选发现不调用模型，Token 成本为 0</small></div><span>{methodCandidates.length}</span></div>
-            {methodCandidates.length ? <div className="method-candidate-list">{methodCandidates.map((candidate) => <article key={candidate.key}><div><input className="candidate-name-input" value={candidateNames[candidate.key] ?? candidate.name} onChange={(event) => setCandidateNames((values) => ({ ...values, [candidate.key]: event.target.value }))} aria-label={`${candidate.name} 的规范名称`} /><small>{candidate.paper_count} 篇论文重复出现 · 原始短语：{candidate.name}</small><p>{candidate.representative_papers.map((paper) => paper.title).join('；')}</p></div><div><button type="button" className="icon-button" disabled={methodBusy} onClick={() => void dismissCandidate(candidate)} title="忽略候选" aria-label={`忽略 ${candidate.name}`}><X size={15} /></button><button type="button" className="button secondary" disabled={methodBusy || !(candidateNames[candidate.key] ?? candidate.name).trim()} onClick={() => void acceptCandidate(candidate)}><Check size={15} /> 接受</button></div></article>)}</div> : <div className="method-empty"><CheckCircle2 size={18} /><span>当前没有达到重复门槛的新候选</span></div>}
           </FormSection>
 
           <FormSection title="本地数据" description="论文、分析、反馈与每日日报都保存在这台电脑上。">

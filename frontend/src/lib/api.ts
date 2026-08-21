@@ -3,7 +3,6 @@ import type {
   Interests,
 } from '../types/interests'
 import type { DashboardData } from '../types/dashboard'
-import type { MethodCandidates, MethodCatalog } from '../types/methods'
 import type { FeedbackReason, FeedbackWriteAction, Paper, PaperPage, ReadingData } from '../types/papers'
 import type {
   ProjectDraft,
@@ -104,17 +103,6 @@ export const api = {
     }),
   settings: () => request<Settings>('/settings'),
   promptCatalog: () => request<AnalysisPromptCatalog>('/prompts/catalog'),
-  methodCatalog: () => request<MethodCatalog>('/methods/catalog'),
-  methodCandidates: () => request<MethodCandidates>('/methods/candidates'),
-  acceptMethodCandidate: (key: string, name?: string) => request<MethodCatalog>('/methods/candidates/accept', {
-    method: 'POST', body: JSON.stringify({ key, ...(name ? { name } : {}) }),
-  }),
-  dismissMethodCandidate: (key: string) => request<{ ok: boolean }>('/methods/candidates/dismiss', {
-    method: 'POST', body: JSON.stringify({ key }),
-  }),
-  saveCustomMethods: (items: Array<{ name: string; aliases: string[] }>) => request<MethodCatalog>('/methods/custom', {
-    method: 'PUT', body: JSON.stringify({ items }),
-  }),
   saveSettings: (settings: Settings & { api_keys?: Partial<Record<ModelStage, string>>; smtp_password?: string }) =>
     request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(settingsUpdatePayload(settings)) }),
   testConnection: (stage: ModelStage) =>

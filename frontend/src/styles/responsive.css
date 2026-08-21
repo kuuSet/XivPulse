@@ -136,9 +136,6 @@
   .prompt-editor textarea { min-height: 160px; }
   .token-usage-grid > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .token-usage-grid > div:last-child { border-bottom: 0; }
-  .method-catalog-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .method-catalog-summary > small { grid-column: 1 / -1; border-top: 1px solid var(--line); }
-  .method-candidate-list article { align-items: flex-start; flex-direction: column; }
   .workspace-page, .standard-page { padding: 17px 12px 24px; }
   .page-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px; }
   .page-heading > div { min-width: 0; }
