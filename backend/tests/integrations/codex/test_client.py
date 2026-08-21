@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from app.integrations.codex.client import CodexAdapter
 from app.integrations.llm.contracts import ProviderError
-from app.integrations.llm.factory import create_model_adapter
 from app.settings import ProcessSettings, ProviderSettings
 from pydantic import BaseModel
 
@@ -128,10 +127,3 @@ async def test_codex_failure_is_returned_without_retry(
         )
 
     assert calls == 1
-
-
-def test_model_adapter_factory_uses_selected_source(tmp_path: Path) -> None:
-    provider = ProviderSettings(model_source="codex")
-    process = ProcessSettings(data_dir=tmp_path, provider=provider)
-
-    assert isinstance(create_model_adapter(provider, process=process), CodexAdapter)

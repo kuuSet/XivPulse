@@ -8,7 +8,7 @@ import httpx
 import pytest
 from app.integrations.llm.openai import OpenAICompatibleAdapter
 from app.models import Paper, Topic
-from app.modules.analysis.analyzer import PaperAnalyzer
+from app.modules.analysis.analyzer import ANALYSIS_BUDGETS, PaperAnalyzer, analysis_budget
 from app.modules.analysis.prompts import SCREENING_SYSTEM_PROMPT
 from app.settings import ProviderSettings
 
@@ -94,3 +94,11 @@ async def test_coarse_ranking_uses_fixed_rubric_and_one_field_schema() -> None:
     assert result.prompt_metadata["stage"] == "screening"
     assert result.prompt_metadata["customized"] is False
     assert len(result.prompt_metadata["fingerprint"]) == 64
+
+
+def test_analysis_budget_modes() -> None:
+    assert ANALYSIS_BUDGETS["economy"].max_fulltext_chars == 16_000
+    assert ANALYSIS_BUDGETS["balanced"].max_pdf_pages == 25
+    assert ANALYSIS_BUDGETS["deep"].deep_output_tokens == 5_000
+    with pytest.raises(KeyError):
+        analysis_budget("unknown")  # type: ignore[arg-type]
