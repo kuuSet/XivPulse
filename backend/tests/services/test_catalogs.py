@@ -16,7 +16,7 @@ from app.modules.interests.presets import (
     initial_topic_values,
     interest_presets_payload,
 )
-from app.services.organizations import watched_organizations
+from app.modules.papers.organizations import watched_organizations
 
 
 def test_interest_presets_are_versioned_searchable_and_collision_free() -> None:

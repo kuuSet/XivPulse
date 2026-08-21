@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ...models import Feedback, Paper, ProjectPaper
-from ...services.organizations import paper_organizations
+from ...modules.papers.organizations import paper_organizations
 from .analyses import _analysis_wire
 from .common import _latest_analysis
 from .projects import _project_membership_wire, _reading_wire

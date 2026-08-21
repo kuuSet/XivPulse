@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
-from ..organizations import paper_organizations
+from ...modules.papers.organizations import paper_organizations
 from .records import (
     ARXIV_BATCH_DATE_BASIS,
     DAILY_QUALITY_OVERVIEW_LIMIT,

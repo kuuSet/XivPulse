@@ -6,7 +6,7 @@ import re
 import unicodedata
 from collections.abc import Iterable
 
-from ..models import Paper
+from ...models import Paper
 
 _WATCHED_ORGANIZATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("OpenAI", ("openai",)),
