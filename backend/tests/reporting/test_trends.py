@@ -15,7 +15,6 @@ def test_daily_and_weekly_trends_are_deterministic(analytics_session: Session) -
     assert first["daily"]["paper_count"] == 2
     assert first["daily"]["candidate_paper_count"] == 2
     assert first["daily"]["direction_attributed_paper_count"] == 2
-    assert first["daily"]["relevant_paper_count"] == 2
     assert first["weekly"]["paper_count"] == 3
 
     daily = {item["name"]: item for item in first["daily"]["topics"]}

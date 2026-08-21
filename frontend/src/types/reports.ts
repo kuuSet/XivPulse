@@ -32,14 +32,6 @@ export interface DailyAggregateItem {
   papers?: RepresentativePaper[]
 }
 
-export interface DailyResearchGap {
-  text: string
-  count?: number
-  basis?: string
-  paper_ids?: Array<Paper['id']>
-  papers?: RepresentativePaper[]
-}
-
 interface DailyReadingQueueItem {
   rank: number
   paper_id: Paper['id']
@@ -103,7 +95,6 @@ export interface DailyReport {
     candidate_paper_count?: number
     unattributed_candidate_count?: number
     direction_attributed_paper_count?: number
-    relevant_paper_count?: number
     direction_attribution_coverage_percent?: number
     analyzed_paper_count?: number
     deep_analysis_count?: number
@@ -171,7 +162,6 @@ export interface DailyReport {
   highlight_papers: DailyNotablePaper[]
   common_methods: DailyAggregateItem[]
   common_evidence: DailyAggregateItem[]
-  limitations_and_research_gaps: Array<string | DailyResearchGap>
   suggested_reading_queue: DailyReadingQueueItem[]
   methodology_note?: string
 }

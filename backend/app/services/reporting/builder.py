@@ -144,6 +144,7 @@ def _highlight(record: _PaperSignal) -> dict[str, Any]:
         "analysis_available": record.analysis is not None,
     }
 
+
 def _reading_queue(records: Sequence[_PaperSignal], limit: int) -> list[dict[str, Any]]:
     priority = {"must_read": 0, "read": 1, "skim": 2, "skip": 3}
     ordered = sorted(
@@ -151,7 +152,6 @@ def _reading_queue(records: Sequence[_PaperSignal], limit: int) -> list[dict[str
         key=lambda record: (
             priority[_recommendation(record)],
             -_score(record.match),
-
             record.paper.arxiv_id,
         ),
     )[: max(0, limit)]
@@ -372,7 +372,6 @@ def _research_situation(
         "evidence_maturity": {
             "status": evidence_status,
             "assessment": evidence_text,
-
             "strong_signal_count": strong_evidence_count,
             "shared_strong_signals": shared_strong_evidence,
             "deep_analysis_coverage_percent": round(deep_coverage * 100.0, 1),
@@ -600,7 +599,6 @@ def build_daily_research_report(
             "paper_count": len(records),
             "candidate_paper_count": len(candidate_records),
             "direction_attributed_paper_count": len(records),
-            "relevant_paper_count": len(records),
             "direction_attribution_coverage_percent": (
                 round(len(records) / len(candidate_records) * 100.0, 1)
                 if candidate_records
@@ -627,9 +625,6 @@ def build_daily_research_report(
         "highlight_papers": [_highlight(record) for record in ordered[: max(0, highlight_limit)]],
         "common_methods": methods,
         "common_evidence": evidence,
-        # Paper-specific weaknesses lose meaning when detached from their paper.
-        # Keep them in the quality overview and paper detail instead.
-        "limitations_and_research_gaps": [],
         "suggested_reading_queue": _reading_queue(ordered, reading_queue_limit),
         "daily_trend": daily_trend,
         "methodology_note": (

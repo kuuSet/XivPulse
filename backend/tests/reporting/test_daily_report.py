@@ -65,7 +65,6 @@ def test_daily_report_contains_all_research_sections(analytics_session: Session)
         "paper_count": 2,
         "candidate_paper_count": 2,
         "direction_attributed_paper_count": 2,
-        "relevant_paper_count": 2,
         "direction_attribution_coverage_percent": 100.0,
         "analyzed_paper_count": 2,
         "deep_analysis_count": 2,
@@ -81,7 +80,6 @@ def test_daily_report_contains_all_research_sections(analytics_session: Session)
     methods = {item["name"]: item for item in report["common_methods"]}
     assert methods["模仿学习"]["count"] == 2
     assert methods["模仿学习"]["shared"] is True
-    assert report["limitations_and_research_gaps"] == []
     overview_limitations = {
         item["limitation"]
         for item in report["research_situation"]["quality_overview"]["paper_findings"]
@@ -167,7 +165,6 @@ def test_report_is_complete_when_no_paper_or_analysis_exists(
     assert report["highlight_papers"] == []
     assert report["common_methods"] == []
     assert report["common_evidence"] == []
-    assert report["limitations_and_research_gaps"] == []
     assert report["suggested_reading_queue"] == []
     assert report["research_situation"]["volume"]["today"] == 0
     assert report["research_situation"]["evidence_maturity"]["status"] == "no_signal"
@@ -190,7 +187,6 @@ def test_report_falls_back_to_abstract_without_any_analysis(
     assert report["common_methods"] == []
     assert "视觉-语言-动作模型" in report["highlight_papers"][0]["methods"]
     assert any(item["name"] == "基准评测" for item in report["common_evidence"])
-    assert report["limitations_and_research_gaps"] == []
     assert report["suggested_reading_queue"][0]["priority"] == "skim"
 
 

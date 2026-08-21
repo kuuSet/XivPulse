@@ -376,7 +376,5 @@ def _period_payload(
         "previous_candidate_paper_count": previous_candidate_count,
         "direction_attributed_paper_count": len(current),
         "previous_direction_attributed_paper_count": len(previous),
-        "relevant_paper_count": len(current),
-        "previous_relevant_paper_count": len(previous),
         "topics": topics,
     }

@@ -98,7 +98,6 @@ def build_research_roadmap(
                 "id": _topic_id(value),
                 "label": label_by_key[value].name,
                 "sources": sorted(source_by_key[value]),
-
                 "paper_count": len(topic_records),
                 "average_score": _mean(_score(item.match) for item in topic_records),
                 "average_quality": _mean(_quality(item.analysis) for item in topic_records),
@@ -170,7 +169,6 @@ def build_research_roadmap(
             "paper_count": len(records),
             "candidate_paper_count": len(candidate_records),
             "direction_attributed_paper_count": len(records),
-            "relevant_paper_count": len(records),
             "analyzed_paper_count": sum(record.analysis is not None for record in records),
             "node_count": len(nodes),
             "relation_count": len(relations),
