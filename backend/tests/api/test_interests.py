@@ -2,38 +2,34 @@
 
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
-
-REMOVED_TOPIC_FIELDS = {"query", "context_keywords", "negative_keywords", "weight"}
+INTEREST_FIELDS = {"topics", "watched_authors", "watched_organizations"}
+TOPIC_FIELDS = {
+    "aliases",
+    "arxiv_categories",
+    "description",
+    "enabled",
+    "id",
+    "keywords",
+    "name",
+}
 
 
 def test_interests_expose_only_active_topic_fields(client: TestClient) -> None:
     response = client.get("/api/interests")
 
     assert response.status_code == 200
-    topics = response.json()["topics"]
+    payload = response.json()
+    assert set(payload) == INTEREST_FIELDS
+    topics = payload["topics"]
     assert topics
-    assert all(REMOVED_TOPIC_FIELDS.isdisjoint(topic) for topic in topics)
+    assert all(set(topic) == TOPIC_FIELDS for topic in topics)
 
 
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("query", "cat:cs.AI"),
-        ("context_keywords", ["robot"]),
-        ("negative_keywords", ["vehicle-to-load"]),
-        ("weight", 2.0),
-    ],
-)
-def test_interests_reject_removed_topic_fields(
-    client: TestClient,
-    field: str,
-    value: object,
-) -> None:
+def test_interests_reject_unknown_topic_fields(client: TestClient) -> None:
     interests = client.get("/api/interests").json()
-    interests["topics"][0][field] = value
+    interests["topics"][0]["unknown_field"] = True
 
     response = client.put("/api/interests", json=interests)
 

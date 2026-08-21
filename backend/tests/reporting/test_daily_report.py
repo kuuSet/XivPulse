@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 
 @pytest.mark.asyncio
-async def test_daily_finalize_returns_the_saved_report_without_a_legacy_digest(
+async def test_daily_finalize_merges_report_synthesis_and_delivery_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reported_progress: list[int] = []

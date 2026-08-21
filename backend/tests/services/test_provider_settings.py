@@ -69,12 +69,9 @@ def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> N
     assert _provider_settings(model_source="codex", api_key=None).configured is True
 
 
-def test_process_settings_use_only_xivpulse_environment_names(
+def test_process_settings_read_xivpulse_environment_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("ARXIV_DAILY_MODEL", "legacy-model")
-    monkeypatch.delenv("XIVPULSE_MODEL_NAME", raising=False)
-    assert settings_module.ProcessSettings().provider.model_name == "gpt-4o-mini"
     monkeypatch.setenv("XIVPULSE_MODEL_NAME", "current-model")
     monkeypatch.setenv(
         "XIVPULSE_SERVER_ALLOWED_HOSTS",

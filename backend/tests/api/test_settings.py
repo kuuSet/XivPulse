@@ -2,15 +2,47 @@
 
 from fastapi.testclient import TestClient
 
+SETTINGS_FIELDS = {
+    "analysis_budget",
+    "arxiv_fetch_limit",
+    "codex_model_options",
+    "codex_reasoning_options",
+    "daily_synthesis_enabled",
+    "database_path",
+    "database_size_bytes",
+    "deep_analysis_limit",
+    "deep_analysis_prompt",
+    "deep_analysis_threshold",
+    "email_enabled",
+    "email_recipients",
+    "prefilter_batch_size",
+    "prompt_customized",
+    "prompt_template_id",
+    "prompt_version",
+    "providers",
+    "public_url",
+    "schedule_time",
+    "schedule_timezone",
+    "smtp_host",
+    "smtp_password_configured",
+    "smtp_port",
+    "smtp_security",
+    "smtp_sender",
+    "smtp_username",
+    "stored_analysis_count",
+    "stored_paper_count",
+    "stored_report_count",
+    "token_usage",
+    "ui_font_size_pt",
+}
+
 
 def test_settings_expose_only_llm_pipeline_controls(client: TestClient) -> None:
     response = client.get("/api/settings")
     assert response.status_code == 200
     payload = response.json()
+    assert set(payload) == SETTINGS_FIELDS
     assert payload["prefilter_batch_size"] == 30
-    assert "embedding" not in payload
-    assert "semantic_recall_mode" not in payload
-    assert "semantic_recall_presets" not in payload
     assert set(payload["providers"]) == {"prefilter", "screening", "deep", "synthesis"}
     assert payload["providers"]["screening"]["model_source"] == "api"
     assert payload["providers"]["deep"]["codex_model"] == "gpt-5.6-sol"

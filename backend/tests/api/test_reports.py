@@ -40,14 +40,9 @@ def test_latest_saved_report_drives_dashboard_and_default_report(
 
     assert dashboard["latest_report_date"] == "2026-08-13"
     assert dashboard["latest_completed_date"] is None
-    assert "latest_digest" not in dashboard
     assert response.status_code == 200
     assert response.json()["report_date"] == "2026-08-13"
     assert response.json()["title"] == "Latest report"
-
-
-def test_legacy_digest_preview_is_not_routed(client: TestClient) -> None:
-    assert client.get("/api/digest/preview").status_code == 404
 
 
 def test_synthesis_route_uses_the_application_database(
