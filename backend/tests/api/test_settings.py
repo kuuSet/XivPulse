@@ -87,10 +87,17 @@ def test_settings_expose_only_llm_pipeline_controls(client: TestClient) -> None:
         == 422
     )
     assert client.get("/api/prompts/catalog").json()["fixed_prompts"]["prefilter"]
-    invalid_timezone = client.put(
-        "/api/settings", json={"schedule_timezone": "Mars/Olympus"}
-    )
+    invalid_timezone = client.put("/api/settings", json={"schedule_timezone": "Mars/Olympus"})
     assert invalid_timezone.status_code == 422
+
+
+def test_settings_reject_unknown_provider_fields(client: TestClient) -> None:
+    response = client.put(
+        "/api/settings",
+        json={"providers": {"screening": {"unknown": True}}},
+    )
+
+    assert response.status_code == 422
 
 
 def test_provider_url_is_validated_before_it_is_saved(client: TestClient) -> None:

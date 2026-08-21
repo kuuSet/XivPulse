@@ -5,15 +5,21 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
 
+from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
 from ..services.methods.types import CustomMethod
-from .process import ProcessSettings, ProviderSettings, get_process_settings
+from .process import (
+    ProcessSettings,
+    ProviderSettings,
+    get_process_settings,
+    normalize_api_base_url,
+)
 from .store import load_setting_values
 
 if TYPE_CHECKING:
@@ -43,11 +49,32 @@ class StageProviders(BaseModel):
         return getattr(self, stage)
 
 
+class ProviderOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_source: Literal["api", "codex"] | None = None
+    provider_name: str | None = None
+    model_name: str | None = Field(default=None, max_length=200)
+    api_base_url: str | None = Field(default=None, max_length=2000)
+    api_protocol: Literal["responses", "chat"] | None = None
+    api_key: str | None = Field(default=None, max_length=10000, repr=False)
+    codex_model: CodexModel | None = None
+    codex_reasoning_effort: CodexReasoningEffort | None = None
+
+    @field_validator("api_base_url")
+    @classmethod
+    def validate_api_base_url(cls, value: str | None) -> str | None:
+        return normalize_api_base_url(value) if value is not None else None
+
+
+_PROVIDER_OVERRIDES = TypeAdapter(dict[ModelStage, ProviderOverride])
+
+
 class RuntimeSettings(BaseSettings):
     # Defines how Pydantic merges environment, database, and default values.
     model_config = SettingsConfigDict(
         env_prefix="XIVPULSE_",
-        extra="ignore",
+        extra="forbid",
         frozen=True,
         str_strip_whitespace=True,
     )
@@ -132,29 +159,29 @@ class RuntimeSettings(BaseSettings):
 
 
 def _effective_provider(
-    values: dict[str, Any], process: ProcessSettings, stage: ModelStage
+    override: ProviderOverride | None,
+    process: ProcessSettings,
 ) -> ProviderSettings:
     configured = process.provider
-    stage_values = dict(values.get("providers", {}).get(stage, {}))
+    values = override or ProviderOverride()
     return ProviderSettings(
-        model_source=stage_values.get("model_source") or configured.model_source,
-        provider_name=stage_values.get("provider_name") or configured.provider_name,
-        model_name=stage_values.get("model_name") or configured.model_name,
-        api_base_url=stage_values.get("api_base_url") or configured.api_base_url,
-        api_protocol=stage_values.get("api_protocol") or configured.api_protocol,
-        api_key=stage_values.get("api_key") or configured.api_key,
+        model_source=values.model_source or configured.model_source,
+        provider_name=values.provider_name or configured.provider_name,
+        model_name=values.model_name or configured.model_name,
+        api_base_url=values.api_base_url or configured.api_base_url,
+        api_protocol=values.api_protocol or configured.api_protocol,
+        api_key=values.api_key or configured.api_key,
         api_timeout_seconds=configured.api_timeout_seconds,
-        codex_model=stage_values.get("codex_model") or configured.codex_model,
-        codex_reasoning_effort=(
-            stage_values.get("codex_reasoning_effort") or configured.codex_reasoning_effort
-        ),
+        codex_model=values.codex_model or configured.codex_model,
+        codex_reasoning_effort=values.codex_reasoning_effort or configured.codex_reasoning_effort,
     )
 
 
 def _effective_providers(values: dict[str, Any], process: ProcessSettings) -> StageProviders:
+    overrides = _PROVIDER_OVERRIDES.validate_python(values.get("providers", {}))
     return StageProviders(
         **{
-            stage: _effective_provider(values, process, stage)
+            stage: _effective_provider(overrides.get(stage), process)
             for stage in ("prefilter", "screening", "deep", "synthesis")
         }
     )
@@ -177,6 +204,7 @@ def load_runtime_settings(
 __all__ = [
     "RuntimeSettings",
     "ModelStage",
+    "ProviderOverride",
     "StageProviders",
     "load_runtime_settings",
     "validate_timezone_name",

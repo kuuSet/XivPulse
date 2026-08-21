@@ -72,6 +72,22 @@ def test_invalid_settings_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
             load_runtime_settings(session)
 
 
+def test_unknown_database_settings_are_rejected() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    init_db(engine)
+    with Session(engine) as session:
+        set_setting(session, "providers", {"screening": {"unknown": True}})
+        session.commit()
+        with pytest.raises(ValidationError, match="unknown"):
+            load_runtime_settings(session)
+
+        set_setting(session, "providers", {})
+        set_setting(session, "unknown", True)
+        session.commit()
+        with pytest.raises(ValidationError, match="unknown"):
+            load_runtime_settings(session)
+
+
 def test_runtime_secrets_are_hidden_from_repr_and_serialization() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)

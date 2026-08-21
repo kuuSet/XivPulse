@@ -11,7 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
 from ..services.prompt_catalog import (
     MAX_EDITABLE_PROMPT_CHARS,
     PROMPT_TEMPLATE_IDS,
@@ -23,9 +22,9 @@ from ..services.reporting.service import persist_daily_report, send_daily_report
 from ..services.state import active_profile
 from ..settings import (
     ModelStage,
+    ProviderOverride,
     delete_setting,
     load_runtime_settings,
-    normalize_api_base_url,
     set_setting,
     validate_timezone_name,
 )
@@ -35,30 +34,11 @@ from .system_views import _settings_wire
 router = APIRouter()
 
 
-class StageProviderPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    # Model source and API connection for one pipeline stage.
-    model_source: Literal["api", "codex"] | None = None
-    provider_name: str | None = None
-    model_name: str | None = Field(default=None, max_length=200)
-    api_base_url: str | None = Field(default=None, max_length=2000)
-    api_protocol: Literal["responses", "chat"] | None = None
-    api_key: str | None = Field(default=None, max_length=10000)
-    codex_model: CodexModel | None = None
-    codex_reasoning_effort: CodexReasoningEffort | None = None
-
-    @field_validator("api_base_url")
-    @classmethod
-    def validate_api_base_url(cls, value: str | None) -> str | None:
-        return normalize_api_base_url(value) if value is not None else None
-
-
 class SettingsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Independent model connection for each pipeline stage.
-    providers: dict[ModelStage, StageProviderPayload] | None = None
+    providers: dict[ModelStage, ProviderOverride] | None = None
 
     # Interface display preferences.
     ui_font_size_pt: float | None = Field(default=None, ge=10.0, le=16.0, multiple_of=0.5)

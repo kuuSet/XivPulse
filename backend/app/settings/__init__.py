@@ -8,6 +8,7 @@ from .process import (
 )
 from .runtime import (
     ModelStage,
+    ProviderOverride,
     RuntimeSettings,
     StageProviders,
     load_runtime_settings,
@@ -19,6 +20,7 @@ __all__ = [
     "ProcessSettings",
     "ProviderSettings",
     "ModelStage",
+    "ProviderOverride",
     "RuntimeSettings",
     "StageProviders",
     "delete_setting",
