@@ -10,7 +10,6 @@ export interface JobInfo {
   kind: string
   status: JobState
   progress: number
-  total: number
   message: string
   error?: string | null
   result?: Record<string, unknown>

@@ -173,10 +173,6 @@ class Paper(TimestampMixin, Base):
     def categories(self, value: list[str]) -> None:
         self.categories_json = list(value)
 
-    @property
-    def version(self) -> int:
-        return self.latest_version
-
 
 class PaperVersion(Base):
     __tablename__ = "paper_versions"
@@ -201,7 +197,6 @@ class PaperVersion(Base):
     arxiv_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    raw_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     paper: Mapped[Paper] = relationship(back_populates="versions")
@@ -514,7 +509,6 @@ class Job(Base):
     kind: Mapped[str] = mapped_column(String(40), index=True)
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
-    total: Mapped[int] = mapped_column(Integer, default=0)
     message: Mapped[str] = mapped_column(Text, default="")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

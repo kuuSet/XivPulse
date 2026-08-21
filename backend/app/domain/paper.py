@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 from urllib.parse import quote
 
 
@@ -40,13 +39,6 @@ class Paper:
             self.html_url = f"https://arxiv.org/html/{versioned}"
         if not self.pdf_url:
             self.pdf_url = f"https://arxiv.org/pdf/{versioned}"
-
-    def as_dict(self) -> dict[str, Any]:
-        value = asdict(self)
-        for key in ("published_at", "updated_at"):
-            if value[key] is not None:
-                value[key] = value[key].isoformat()
-        return value
 
 
 def as_utc(value: datetime | None) -> datetime | None:

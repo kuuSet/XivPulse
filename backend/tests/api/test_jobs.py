@@ -24,7 +24,6 @@ def test_job_status_uses_one_current_response_shape(
         "kind",
         "status",
         "progress",
-        "total",
         "message",
         "error",
         "result",

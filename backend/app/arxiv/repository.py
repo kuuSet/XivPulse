@@ -106,14 +106,12 @@ class PaperRepository:
                     pdf_url=paper_data.pdf_url,
                     published_at=paper_data.published_at,
                     arxiv_updated_at=paper_data.updated_at,
-                    raw_json=paper_data.as_dict(),
                     discovered_at=timestamp,
                 )
                 self.session.add(existing_version)
                 result.versions_added += 1
             elif (
-                paper_data.affiliations
-                and existing_version.affiliations != paper_data.affiliations
+                paper_data.affiliations and existing_version.affiliations != paper_data.affiliations
             ):
                 existing_version.affiliations = paper_data.affiliations
 

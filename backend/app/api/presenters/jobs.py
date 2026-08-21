@@ -15,7 +15,6 @@ def _job_wire(job: Job | None) -> dict[str, Any] | None:
         "kind": job.kind,
         "status": job.status,
         "progress": job.progress,
-        "total": job.total,
         "message": job.message,
         "error": job.error,
         "result": job.result,
