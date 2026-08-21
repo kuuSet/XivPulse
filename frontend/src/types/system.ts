@@ -1,8 +1,3 @@
-export interface TopicStat {
-  topic: string
-  count: number
-}
-
 type JobState = 'queued' | 'running' | 'completed' | 'failed' | string
 
 export interface JobInfo {

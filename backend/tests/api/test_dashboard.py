@@ -57,6 +57,21 @@ def test_dashboard_reports_each_llm_stage_for_requested_date(
     response = client.get("/api/dashboard?date=2026-08-18")
     assert response.status_code == 200
     payload = response.json()
+    assert set(payload) == {
+        "active_job",
+        "date",
+        "high_priority_papers",
+        "interests",
+        "items",
+        "latest_completed_date",
+        "latest_report_date",
+        "prefilter_kept_papers",
+        "prefiltered_papers",
+        "processing_summary",
+        "screened_papers",
+        "settings",
+        "total_papers",
+    }
     assert payload["total_papers"] == 3
     assert payload["prefiltered_papers"] == 2
     assert payload["prefilter_kept_papers"] == 1

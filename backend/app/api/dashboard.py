@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -15,7 +14,6 @@ from ..jobs.service import RUNNING_STATUSES
 from ..models import (
     Analysis,
     DailyResearchReport,
-    Feedback,
     Job,
     Paper,
     PaperMatch,
@@ -139,7 +137,6 @@ def dashboard(
         .all()
     )
     items = [_paper_wire(paper, profile.id) for paper in papers]
-    topics = Counter(direction for item in items for direction in item["matched_topics"])
     daily_jobs = db.scalars(
         select(Job)
         .where(Job.kind == "daily", Job.status == "completed")
@@ -208,7 +205,7 @@ def dashboard(
     )
     return {
         "date": day,
-        "total_papers": fetched_today or len(papers),
+        "total_papers": fetched_today,
         "prefiltered_papers": prefiltered_today,
         "prefilter_kept_papers": prefilter_kept_today,
         "screened_papers": screened_today,
@@ -232,32 +229,9 @@ def dashboard(
             "deep_analysis_threshold": deep_threshold,
         },
         "items": items,
-        "topic_stats": [{"topic": name, "count": count} for name, count in topics.most_common()],
         "interests": _interests_wire(profile, current_settings),
         "settings": _settings_wire(db),
-        "stats": {
-            "fetched_today": fetched_today,
-            "relevant_today": high_priority_today,
-            "analyzed_today": deep_analyzed_today,
-            "saved_total": db.scalar(
-                select(func.count()).select_from(Feedback).where(Feedback.action == "save")
-            )
-            or 0,
-        },
-        "recommendations": [
-            {
-                "paper": item,
-                "recommendation": {
-                    "paper_id": item["id"],
-                    "score": item["effective_score"],
-                    "explanation": item["why_recommended"] or "符合关注标签",
-                    "matched_topics": item["matched_topics"],
-                },
-            }
-            for item in items
-        ],
         "latest_report_date": latest_report_date,
         "latest_completed_date": latest_completed_date,
         "active_job": _job_wire(active_job),
-        "provider": _provider_public_status(db),
     }

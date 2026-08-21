@@ -1,7 +1,7 @@
 import type { Paper } from './papers'
 import type { Interests } from './interests'
 import type { Settings } from './settings'
-import type { JobInfo, TopicStat } from './system'
+import type { JobInfo } from './system'
 
 export interface DashboardData {
   date: string
@@ -28,7 +28,6 @@ export interface DashboardData {
   }
   items: Paper[]
   interests?: Interests
-  topic_stats: TopicStat[]
   settings?: Settings
   active_job?: JobInfo | null
   latest_report_date?: string | null
