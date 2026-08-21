@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Feedback, FeedbackReason, Paper, PaperMatch, PaperReadingState
 from ..modules.projects.library import sync_favorites_membership
+from ..modules.projects.tags import _clean_tags
+from ..modules.projects.views import _reading_wire
 from ..profile import active_profile
-from .presenters.common import _clean_tags
 from .presenters.papers import _paper_wire, _query_papers
-from .presenters.projects import _reading_wire
 
 router = APIRouter()
 

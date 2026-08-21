@@ -10,12 +10,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from ..database import get_db
-from ..models import Paper, ProjectPaper, ResearchProject
-from ..modules.projects.library import FAVORITES_LIBRARY_KIND, set_saved_feedback
-from ..profile import active_profile
-from .presenters.common import _clean_tags
-from .presenters.projects import _project_membership_wire, _project_wire
+from ...database import get_db
+from ...models import Paper, ProjectPaper, ResearchProject
+from ...profile import active_profile
+from .library import FAVORITES_LIBRARY_KIND, set_saved_feedback
+from .tags import _clean_tags
+from .views import _project_membership_wire, _project_wire
 
 router = APIRouter()
 

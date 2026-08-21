@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from ...models import Feedback, Paper, ProjectPaper
 from ...modules.papers.organizations import paper_organizations
+from ...modules.projects.views import _project_membership_wire, _reading_wire
 from .analyses import _analysis_wire
 from .common import _latest_analysis
-from .projects import _project_membership_wire, _reading_wire
 
 
 def _paper_wire(
