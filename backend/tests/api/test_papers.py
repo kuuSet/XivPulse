@@ -6,6 +6,35 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 
 
+PAPER_FIELDS = {
+    "abstract",
+    "abs_url",
+    "affiliations",
+    "analysis",
+    "arxiv_id",
+    "authors",
+    "categories",
+    "effective_score",
+    "feedback",
+    "html_url",
+    "id",
+    "matched_topics",
+    "notable_organizations",
+    "pdf_url",
+    "prefilter_decision",
+    "primary_category",
+    "project_memberships",
+    "reading",
+    "submitted_at",
+    "summary",
+    "title",
+    "updated_at",
+    "version",
+    "why_recommended",
+}
+DETAIL_FIELDS = {"analyses", "comment", "doi", "journal_ref", "versions"}
+
+
 def test_paper_library_uses_only_abstract_llm_scores(
     client: TestClient,
     insert_paper: Callable[..., int],
@@ -26,13 +55,15 @@ def test_paper_library_uses_only_abstract_llm_scores(
     )
 
     payload = client.get("/api/papers").json()
+    paper = payload["items"][0]
     assert payload["total"] == 1
     assert payload["scope"] == "screened"
-    assert payload["items"][0]["id"] == paper_id
-    assert payload["items"][0]["effective_score"] == 82
-    assert payload["items"][0]["matched_topics"] == ["Embodied AI"]
-    assert payload["items"][0]["feedback"] is None
-    assert payload["items"][0]["reading"] == {
+    assert set(paper) == PAPER_FIELDS
+    assert paper["id"] == paper_id
+    assert paper["effective_score"] == 82
+    assert paper["matched_topics"] == ["Embodied AI"]
+    assert paper["feedback"] is None
+    assert paper["reading"] == {
         "state": "unread",
         "priority": 3,
         "notes": "",
@@ -40,30 +71,14 @@ def test_paper_library_uses_only_abstract_llm_scores(
         "created_at": None,
         "updated_at": None,
     }
-    assert payload["items"][0]["project_memberships"] == []
-    assert "semantic_score" not in payload["items"][0]
-    assert "matched_keywords" not in payload["items"][0]
-    assert {
-        "match_reasons",
-        "feedback_reasons",
-        "reading_state",
-        "reading_priority",
-        "notes",
-        "tags",
-        "projects",
-        "screening_relevance_score",
-        "analysis_tags",
-        "quality_score",
-        "novelty_score",
-        "latest_version",
-        "published_at",
-        "priority",
-    }.isdisjoint(payload["items"][0])
+    assert paper["project_memberships"] == []
 
     detail = client.get(f"/api/papers/{paper_id}")
     assert detail.status_code == 200
-    assert detail.json()["matched_topics"] == ["Embodied AI"]
-    assert detail.json()["reading"]["state"] == "unread"
+    detail_payload = detail.json()
+    assert set(detail_payload) == PAPER_FIELDS | DETAIL_FIELDS
+    assert detail_payload["matched_topics"] == ["Embodied AI"]
+    assert detail_payload["reading"]["state"] == "unread"
 
 
 def test_feedback_uses_dismiss_and_nested_reasons(
@@ -97,11 +112,11 @@ def test_feedback_uses_dismiss_and_nested_reasons(
         "rating": 2,
         "reasons": ["not_relevant", "weak_evidence"],
     }
-    assert "feedback_reasons" not in detail
-    invalid_skip = client.post(f"/api/papers/{paper_id}/feedback", json={"action": "skip"})
-    invalid_read = client.post(f"/api/papers/{paper_id}/feedback", json={"action": "read"})
-    assert invalid_skip.status_code == 422
-    assert invalid_read.status_code == 422
+    invalid = client.post(
+        f"/api/papers/{paper_id}/feedback",
+        json={"action": "unsupported"},
+    )
+    assert invalid.status_code == 422
 
 
 def test_reading_uses_one_nested_contract(
@@ -128,9 +143,8 @@ def test_reading_uses_one_nested_contract(
     assert detail["reading"]["priority"] == 5
     assert detail["reading"]["notes"] == "Check experiments"
     assert detail["reading"]["tags"] == ["review"]
-    assert {"reading_state", "reading_priority", "notes", "tags"}.isdisjoint(detail)
     invalid = client.patch(
         f"/api/papers/{paper_id}/reading",
-        json={"reading_state": "read"},
+        json={"unknown": "read"},
     )
     assert invalid.status_code == 422
