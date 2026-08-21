@@ -5,7 +5,7 @@ from app.bootstrap import bootstrap_application
 from app.database import make_session_factory
 from app.integrations.llm.contracts import GenerationResult, ProviderError
 from app.models import Analysis, Paper, PaperMatch, Profile
-from app.schemas import PrefilterDecision, PrefilterResult
+from app.modules.analysis.schemas import PrefilterDecision, PrefilterResult
 from app.settings import ProviderSettings, StageProviders
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
@@ -16,7 +16,7 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.modules.analysis import pipeline as paper_analysis
-    from app.schemas import ScreeningResult
+    from app.modules.analysis.schemas import ScreeningResult
 
     engine = create_engine(
         "sqlite://",

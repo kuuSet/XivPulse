@@ -9,7 +9,6 @@ from typing import Any, Literal
 
 from ...integrations.llm.contracts import GenerationResult, StructuredModelAdapter
 from ...models import Paper, Topic
-from ...schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompts import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,
@@ -19,6 +18,7 @@ from .prompts import (
     analysis_prompt_metadata,
     prompt_template,
 )
+from .schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
 
 AnalysisBudgetMode = Literal["economy", "balanced", "deep"]
 

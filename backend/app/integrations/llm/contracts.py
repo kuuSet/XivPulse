@@ -7,7 +7,13 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel
 
-from ...schemas import ProviderTestResult
+
+class ProviderTestResult(BaseModel):
+    ok: bool
+    provider_name: str
+    model: str
+    transport: str
+    message: str
 
 
 @dataclass(frozen=True, slots=True)

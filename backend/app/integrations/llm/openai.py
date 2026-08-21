@@ -10,12 +10,12 @@ from typing import Any, Literal, TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from ...schemas import ProviderTestResult
 from ...settings import ProviderSettings, get_process_settings
 from .contracts import (
     GenerationResult,
     ProviderError,
     ProviderProtocolError,
+    ProviderTestResult,
     TokenUsage,
     strict_json_schema,
 )

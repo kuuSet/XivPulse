@@ -8,7 +8,7 @@ import httpx
 import pytest
 from app.integrations.llm.contracts import ProviderError, ProviderProtocolError
 from app.integrations.llm.openai import OpenAICompatibleAdapter
-from app.schemas import ScreeningResult
+from app.modules.analysis.schemas import ScreeningResult
 from app.settings import ProviderSettings
 
 

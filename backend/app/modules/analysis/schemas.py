@@ -1,4 +1,4 @@
-"""Validated request, response, and model-output contracts."""
+"""Validated outputs for paper analysis stages."""
 
 from __future__ import annotations
 
@@ -39,18 +39,9 @@ class DeepAnalysisResult(BaseModel):
     tags: list[str]
 
 
-class ProviderTestResult(BaseModel):
-    ok: bool
-    provider_name: str
-    model: str
-    transport: str
-    message: str
-
-
 __all__ = [
     "DeepAnalysisResult",
     "PrefilterDecision",
     "PrefilterResult",
-    "ProviderTestResult",
     "ScreeningResult",
 ]

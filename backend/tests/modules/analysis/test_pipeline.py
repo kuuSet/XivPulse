@@ -6,7 +6,7 @@ import pytest
 from app.integrations.llm.contracts import GenerationResult
 from app.models import Paper, Topic
 from app.modules.analysis.analyzer import PaperAnalyzer
-from app.schemas import PrefilterDecision, PrefilterResult
+from app.modules.analysis.schemas import PrefilterDecision, PrefilterResult
 
 
 @pytest.mark.asyncio
