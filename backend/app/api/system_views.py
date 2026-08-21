@@ -164,8 +164,6 @@ def _token_usage_summary(db: Session) -> dict[str, Any]:
         "by_kind": by_kind,
         "latest": (
             {
-                "analysis_id": latest.id,
-                "record_id": latest.id,
                 "kind": latest_kind,
                 "budget_mode": latest.budget_mode,
                 "input_tokens": latest.input_tokens,

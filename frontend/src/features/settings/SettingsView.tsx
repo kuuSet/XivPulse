@@ -339,7 +339,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
             </>}
           </FormSection>
 
-          <FormSection title="Token 用量" description="只统计模型服务商在响应中返回的真实 usage；没有 usage 的旧记录或兼容服务不会被估算成 Token。">
+          <FormSection title="Token 用量" description="只统计模型服务商在响应中返回的真实 usage；没有 usage 的调用不会被估算成 Token。">
             <div className="token-usage-grid">
               <div><span>累计总 Token</span><strong>{formatInteger(settings.token_usage.total_tokens)}</strong></div>
               <div><span>输入</span><strong>{formatInteger(settings.token_usage.input_tokens)}</strong></div>
@@ -352,7 +352,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
               <span>日报综合研判 <strong>{formatInteger(settings.token_usage.by_kind.report_synthesis?.total_tokens ?? 0)}</strong></span>
             </div>
             {settings.token_usage.latest ? <div className="latest-token-row"><span>最近一次：{settings.token_usage.latest.kind === 'deep' ? '全文深读' : settings.token_usage.latest.kind === 'report_synthesis' ? '日报综合研判' : '摘要粗排'} · {settings.token_usage.latest.budget_mode}</span><strong>{formatInteger(settings.token_usage.latest.total_tokens ?? 0)} Token</strong><small>{formatDateTime(settings.token_usage.latest.created_at)}</small></div> : <div className="retention-note"><CircleAlert size={16} /><div><strong>还没有可计量的 AI 调用</strong><p>下一次真实分析且 Provider 返回 usage 后，这里会开始累计。</p></div></div>}
-            {settings.token_usage.usage_missing_count > 0 && <small className="usage-missing">另有 {settings.token_usage.usage_missing_count} 份历史分析未提供 usage，不计为 0。</small>}
+            {settings.token_usage.usage_missing_count > 0 && <small className="usage-missing">另有 {settings.token_usage.usage_missing_count} 份分析未提供 usage，不计为 0。</small>}
           </FormSection>
 
           <FormSection title="共同方法词表" description="内置词表覆盖主要 AI 方法族；候选从最近 30 天已保存的分析中本地发现，至少跨 2 篇论文重复，接受前不会出现在日报。">

@@ -85,7 +85,6 @@ interface TokenUsageTotals {
 interface TokenUsageSummary extends TokenUsageTotals {
   by_kind: Record<string, TokenUsageTotals>
   latest: null | {
-    analysis_id: number
     kind: string
     budget_mode: string
     input_tokens: number | null
