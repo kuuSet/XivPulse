@@ -129,7 +129,7 @@ export const api = {
       `/papers/${encodeURIComponent(String(paperId))}/feedback`,
       {
         method: 'POST',
-        body: JSON.stringify({ ...payload, action: payload.action === 'dismiss' ? 'skip' : payload.action }),
+        body: JSON.stringify(payload),
       },
     )
   },

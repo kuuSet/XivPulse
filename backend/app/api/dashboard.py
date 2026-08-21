@@ -253,7 +253,7 @@ def dashboard(
                     "paper_id": item["id"],
                     "score": item["effective_score"],
                     "explanation": item["why_recommended"] or "符合关注标签",
-                    "matched_topics": item["match_reasons"],
+                    "matched_topics": item["matched_topics"],
                 },
             }
             for item in items

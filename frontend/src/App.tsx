@@ -193,15 +193,15 @@ function App() {
 
   const handleDetailedFeedback = useCallback(async (paper: Paper, feedback: Feedback) => {
     const previous = paper.feedback ?? null
-    updatePaper(paper.id, (item) => ({ ...item, feedback, feedback_reasons: feedback.reasons ?? [] }))
+    updatePaper(paper.id, (item) => ({ ...item, feedback }))
     try {
-      const action = feedback.action === 'skip' || feedback.action === 'dismiss' ? 'dismiss' : feedback.action ?? 'neutral'
+      const action = feedback.action ?? 'neutral'
       await api.feedback(paper.id, { action, rating: feedback.rating, note: feedback.note ?? '', reasons: feedback.reasons ?? [] })
       if (action === 'save' || previous?.action === 'save') await loadProjects()
       pushToast('success', '推荐反馈已保存')
       return true
     } catch (error) {
-      updatePaper(paper.id, (item) => ({ ...item, feedback: previous, feedback_reasons: previous?.reasons ?? [] }))
+      updatePaper(paper.id, (item) => ({ ...item, feedback: previous }))
       pushToast('error', error instanceof Error ? error.message : '推荐反馈保存失败')
       return false
     }
@@ -209,7 +209,7 @@ function App() {
 
   const handleFeedback = useCallback(
     async (paper: Paper, action: FeedbackAction) => {
-      const previous = paper.feedback?.action === 'skip' ? 'dismiss' : (paper.feedback?.action ?? null)
+      const previous = paper.feedback?.action ?? null
       const next = previous === action ? null : action
       updatePaper(paper.id, (item) => ({ ...item, feedback: { ...item.feedback, action: next } }))
       try {

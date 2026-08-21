@@ -51,15 +51,11 @@ def _paper_wire(
         paper, profile_id=profile_id
     )
     score = match.effective_score if match else 0
-    novelty = analysis.novelty_score if analysis else None
-    rigor = analysis.rigor_score if analysis else None
-    priority = "high" if score >= 80 else "medium" if score >= 60 else "low"
     matched_topics = _clean_string_list(match.matched_topics if match else [], limit=20)
     data: dict[str, Any] = {
         "id": paper.id,
         "arxiv_id": paper.arxiv_id,
         "version": f"v{paper.latest_version}",
-        "latest_version": paper.latest_version,
         "title": paper.title,
         "authors": paper.authors,
         "affiliations": paper.affiliations,
@@ -68,24 +64,13 @@ def _paper_wire(
         "primary_category": paper.primary_category,
         "abstract": paper.abstract,
         "submitted_at": paper.published_at or paper.first_seen_at,
-        "published_at": paper.published_at,
         "updated_at": paper.arxiv_updated_at,
         "abs_url": paper.abs_url,
         "pdf_url": paper.pdf_url,
         "html_url": paper.html_url,
-        "screening_relevance_score": (
-            round(float(match.screening_relevance_score), 1)
-            if match is not None and match.screening_relevance_score is not None
-            else None
-        ),
         "prefilter_decision": match.prefilter_decision if match is not None else None,
         "effective_score": round(float(score), 1),
-        "quality_score": rigor,
-        "novelty_score": novelty,
-        "priority": priority,
-        "match_reasons": matched_topics,
         "matched_topics": matched_topics,
-        "analysis_tags": _clean_string_list(analysis.tags if analysis else [], limit=20),
         "summary": analysis.summary if analysis else None,
         "why_recommended": match.reason if match else None,
         "feedback": {
@@ -96,14 +81,8 @@ def _paper_wire(
         }
         if feedback
         else None,
-        "feedback_reasons": [reason.code for reason in feedback.reasons] if feedback else [],
         "reading": reading_data,
-        "reading_state": reading_data["state"],
-        "reading_priority": reading_data["priority"],
-        "notes": reading_data["notes"],
-        "tags": reading_data["tags"],
         "project_memberships": [_project_membership_wire(item) for item in project_links],
-        "projects": [_project_membership_wire(item) for item in project_links],
         "analysis": _analysis_wire(analysis),
     }
     if detail:

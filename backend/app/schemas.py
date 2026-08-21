@@ -76,26 +76,6 @@ class InterestsUpdate(BaseModel):
         return self
 
 
-FeedbackAction = Literal["neutral", "save", "like", "dislike", "skip", "read"]
-FeedbackReasonCode = Literal[
-    "not_relevant",
-    "incremental",
-    "weak_evidence",
-    "no_real_robot",
-    "no_code",
-    "duplicate",
-    "poor_writing",
-    "topic_pause",
-]
-
-
-class FeedbackWrite(BaseModel):
-    action: FeedbackAction = "neutral"
-    rating: int | None = Field(default=None, ge=1, le=5)
-    note: str = Field(default="", max_length=5000)
-    reasons: list[FeedbackReasonCode] = Field(default_factory=list)
-
-
 class PrefilterDecision(BaseModel):
     paper_id: int
     decision: Literal["relevant", "uncertain", "irrelevant"]
@@ -138,9 +118,6 @@ class ProviderTestResult(BaseModel):
 
 __all__ = [
     "DeepAnalysisResult",
-    "FeedbackAction",
-    "FeedbackReasonCode",
-    "FeedbackWrite",
     "PrefilterDecision",
     "PrefilterResult",
     "InterestsUpdate",

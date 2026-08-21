@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,9 @@ router = APIRouter()
 
 
 class FeedbackPayload(BaseModel):
-    action: Literal["neutral", "save", "like", "dislike", "skip", "dismiss", "read"] = "neutral"
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["neutral", "save", "like", "dislike", "dismiss"] = "neutral"
     rating: int | None = Field(default=None, ge=1, le=5)
     note: str = Field(default="", max_length=5000)
     reasons: list[
@@ -42,8 +44,9 @@ ReadingStateValue = Literal["unread", "queued", "reading", "read", "reproduce", 
 
 
 class ReadingPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     state: ReadingStateValue | None = None
-    reading_state: ReadingStateValue | None = None
     priority: int | None = Field(default=None, ge=1, le=5)
     notes: str | None = Field(default=None, max_length=20000)
     tags: list[str] | None = Field(default=None, max_length=50)
@@ -173,14 +176,13 @@ def save_feedback(
     profile = active_profile(db)
     if db.get(Paper, paper_id) is None:
         raise HTTPException(status_code=404, detail="论文不存在")
-    action = "skip" if payload.action in ("skip", "dismiss") else payload.action
     item = db.scalar(
         select(Feedback).where(Feedback.paper_id == paper_id, Feedback.profile_id == profile.id)
     )
     if item is None:
         item = Feedback(paper_id=paper_id, profile_id=profile.id)
         db.add(item)
-    item.action = action
+    item.action = payload.action
     item.rating = payload.rating
     item.note = payload.note
     requested_reasons = list(dict.fromkeys(payload.reasons))
@@ -191,7 +193,7 @@ def save_feedback(
     for code in requested_reasons:
         if code not in current_reasons:
             item.reasons.append(FeedbackReason(code=code))
-    sync_favorites_membership(db, profile.id, paper_id, saved=action == "save")
+    sync_favorites_membership(db, profile.id, paper_id, saved=payload.action == "save")
     db.commit()
     return {
         "ok": True,
@@ -222,8 +224,6 @@ def update_paper_reading(
         db.add(item)
     if payload.state is not None:
         item.state = payload.state
-    elif payload.reading_state is not None:
-        item.state = payload.reading_state
     if payload.priority is not None:
         item.priority = payload.priority
     if payload.notes is not None:

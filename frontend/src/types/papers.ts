@@ -24,7 +24,7 @@ export interface ReadingData {
 }
 
 export interface Feedback {
-  action?: FeedbackWriteAction | 'skip' | null
+  action?: FeedbackWriteAction | null
   note?: string | null
   rating?: number | null
   reasons?: FeedbackReason[]
@@ -72,26 +72,14 @@ export interface Paper {
   abs_url: string
   pdf_url: string
   html_url?: string | null
-  screening_relevance_score?: number | null
   prefilter_decision?: 'relevant' | 'uncertain' | 'irrelevant' | null
   effective_score: number
-  quality_score?: number | null
-  novelty_score?: number | null
-  priority?: string
-  match_reasons: string[]
-  matched_topics?: string[]
-  analysis_tags?: string[]
+  matched_topics: string[]
   summary?: string | null
   why_recommended?: string | null
   feedback?: Feedback | null
-  feedback_reasons?: FeedbackReason[]
-  reading?: ReadingData | null
-  reading_state?: ReadingState
-  reading_priority?: number
-  notes?: string
-  tags?: string[]
-  project_memberships?: ProjectMembership[]
-  projects?: ProjectMembership[]
+  reading: ReadingData
+  project_memberships: ProjectMembership[]
   analysis?: PaperAnalysis | null
 }
 
@@ -105,6 +93,6 @@ export interface PaperPage {
   pages: number
   has_previous: boolean
   has_next: boolean
-  scope: 'candidates'
+  scope: 'screened'
   categories: string[]
 }

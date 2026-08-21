@@ -13,7 +13,10 @@ test('today papers can prioritize watched authors or organizations', async ({ pa
     abs_url: `https://arxiv.org/abs/2608.5000${id}`,
     pdf_url: `https://arxiv.org/pdf/2608.5000${id}`,
     effective_score: score,
-    match_reasons: ['Test topic'],
+    matched_topics: ['Test topic'],
+    feedback: null,
+    reading: { state: 'unread', priority: 3, notes: '', tags: [] },
+    project_memberships: [],
   })
   await page.route('**/api/dashboard*', async (route) => {
     await route.fulfill({
@@ -88,9 +91,11 @@ test('abstract-scored papers show the LLM relevance score', async ({ page }) => 
           submitted_at: '2026-08-16T12:00:00Z',
           abs_url: 'https://arxiv.org/abs/2608.60001',
           pdf_url: 'https://arxiv.org/pdf/2608.60001',
-          screening_relevance_score: 75,
           effective_score: 75,
-          match_reasons: ['Test topic'],
+          matched_topics: ['Test topic'],
+          feedback: null,
+          reading: { state: 'unread', priority: 3, notes: '', tags: [] },
+          project_memberships: [],
         }],
         topic_stats: [],
         interests: { watched_authors: [], watched_organizations: [] },

@@ -3,24 +3,13 @@ import type { DailyReport } from '../types/reports'
 import { READING_QUEUE_LABELS } from './options'
 
 export function getReading(paper: Paper): ReadingData {
-  return {
-    state: paper.reading?.state ?? paper.reading_state ?? 'unread',
-    priority: paper.reading?.priority ?? paper.reading_priority ?? 3,
-    notes: paper.reading?.notes ?? paper.notes ?? '',
-    tags: paper.reading?.tags ?? paper.tags ?? [],
-    created_at: paper.reading?.created_at,
-    updated_at: paper.reading?.updated_at,
-  }
+  return paper.reading
 }
 
 export function applyReading(paper: Paper, reading: ReadingData): Paper {
   return {
     ...paper,
     reading,
-    reading_state: reading.state,
-    reading_priority: reading.priority,
-    notes: reading.notes,
-    tags: reading.tags,
   }
 }
 

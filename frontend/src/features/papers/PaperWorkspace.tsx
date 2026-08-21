@@ -106,7 +106,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
         if (priority === 'saved' && paper.feedback?.action !== 'save') return false
         if (priority === 'unread' && getReading(paper).state !== 'unread') return false
         if (!normalized) return true
-        return [paper.title, paper.abstract, paper.authors.join(' '), paper.categories.join(' '), paper.match_reasons.join(' ')]
+        return [paper.title, paper.abstract, paper.authors.join(' '), paper.categories.join(' '), paper.matched_topics.join(' ')]
           .join(' ')
           .toLowerCase()
           .includes(normalized)
@@ -136,7 +136,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
     })))
     return papers.map((paper) => {
       const paperMemberships = memberships.filter((item) => String(item.paper_id) === String(paper.id))
-      return { ...paper, project_memberships: paperMemberships, projects: paperMemberships }
+      return { ...paper, project_memberships: paperMemberships }
     })
   }, [papers, projects])
 
@@ -174,7 +174,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   }, [])
 
   const savePaperFeedback = async (paper: Paper, action: FeedbackAction) => {
-    const previous = paper.feedback?.action === 'skip' ? 'dismiss' : (paper.feedback?.action ?? null)
+    const previous = paper.feedback?.action ?? null
     const next = previous === action ? null : action
     if (mode === 'library') updateLibraryPaper(paper.id, (item) => ({ ...item, feedback: { ...item.feedback, action: next } }))
     const saved = await onFeedback(paper, action)
@@ -189,7 +189,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
 
   const savePaperDetailedFeedback = async (paper: Paper, feedback: Feedback) => {
     const saved = await onSaveDetailedFeedback(paper, feedback)
-    if (saved && mode === 'library') updateLibraryPaper(paper.id, (item) => ({ ...item, feedback, feedback_reasons: feedback.reasons ?? [] }))
+    if (saved && mode === 'library') updateLibraryPaper(paper.id, (item) => ({ ...item, feedback }))
     return saved
   }
 
@@ -421,7 +421,7 @@ function SelectControl({ value, onChange, options, label, icon }: { value: strin
 function PaperListItem({ paper, active, onSelect, onFeedback }: { paper: Paper; active: boolean; onSelect: () => void; onFeedback: (action: FeedbackAction) => void }) {
   const score = Math.round(paper.effective_score)
   const saved = paper.feedback?.action === 'save'
-  const dismissed = paper.feedback?.action === 'dismiss' || paper.feedback?.action === 'skip'
+  const dismissed = paper.feedback?.action === 'dismiss'
   const matchSignals = paperMatchSignals(paper, 2)
   return (
     <article className={`paper-row ${active ? 'active' : ''} ${dismissed ? 'dismissed' : ''}`} onClick={onSelect} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') onSelect() }}>
@@ -469,14 +469,11 @@ function compactSignals(values: Array<string | null | undefined>, limit = 4) {
 }
 
 function paperMatchSignals(paper: Paper, limit = 4) {
-  return compactSignals([
-    ...(paper.matched_topics ?? []),
-    ...paper.match_reasons,
-  ], limit)
+  return compactSignals(paper.matched_topics, limit)
 }
 
 function paperAnalysisSignals(paper: Paper, analysis: PaperAnalysis, limit = 4) {
-  return compactSignals([...(paper.analysis_tags ?? []), ...(analysis.tags ?? [])], limit)
+  return compactSignals(analysis.tags ?? [], limit)
 }
 
 function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFeedback, onSaveReading, onSaveDetailedFeedback }: {
@@ -491,9 +488,9 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
 }) {
   const analysis = normalizeAnalysis(paper)
   const saved = paper.feedback?.action === 'save'
-  const dismissed = paper.feedback?.action === 'dismiss' || paper.feedback?.action === 'skip'
+  const dismissed = paper.feedback?.action === 'dismiss'
   const [reading, setReading] = useState<ReadingData>(() => getReading(paper))
-  const [feedback, setFeedback] = useState<Feedback>(() => ({ ...paper.feedback, reasons: paper.feedback?.reasons ?? paper.feedback_reasons ?? [] }))
+  const [feedback, setFeedback] = useState<Feedback>(() => ({ ...paper.feedback, reasons: paper.feedback?.reasons ?? [] }))
   const [savingWorkflow, setSavingWorkflow] = useState(false)
   const [savingFeedback, setSavingFeedback] = useState(false)
   const [classificationBusy, setClassificationBusy] = useState('')
@@ -501,11 +498,11 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
 
   useEffect(() => {
     setReading(getReading(paper))
-    setFeedback({ ...paper.feedback, reasons: paper.feedback?.reasons ?? paper.feedback_reasons ?? [] })
+    setFeedback({ ...paper.feedback, reasons: paper.feedback?.reasons ?? [] })
     setDetailTab('overview')
-  }, [paper.id, paper.reading, paper.reading_state, paper.reading_priority, paper.notes, paper.tags, paper.feedback, paper.feedback_reasons])
+  }, [paper.id, paper.reading, paper.feedback])
 
-  const projectMemberships = paper.project_memberships ?? paper.projects ?? []
+  const projectMemberships = paper.project_memberships
   const customLibraries = projects.filter((project) => project.kind !== 'favorites')
 
   const saveWorkflow = async () => {
@@ -516,7 +513,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
 
   const saveFeedback = async () => {
     setSavingFeedback(true)
-    await onSaveDetailedFeedback({ ...feedback, action: feedback.action === 'dismiss' ? 'skip' : feedback.action })
+    await onSaveDetailedFeedback(feedback)
     setSavingFeedback(false)
   }
 
@@ -549,9 +546,9 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
   }
   const scores = [
     ['相关', analysis.relevance_score ?? paper.effective_score, '#2d6a4f'],
-    ['新颖', analysis.novelty_score ?? paper.novelty_score, '#9a6700'],
-    ['方法', analysis.method_score ?? paper.quality_score, '#325ea8'],
-    ['证据', analysis.evidence_score ?? paper.quality_score, '#7c4d9e'],
+    ['新颖', analysis.novelty_score, '#9a6700'],
+    ['方法', analysis.method_score, '#325ea8'],
+    ['证据', analysis.evidence_score, '#7c4d9e'],
     ['潜力', analysis.potential_score ?? paper.effective_score, '#b54747'],
   ] as Array<[string, number | null | undefined, string]>
   const analysisSignals = paperAnalysisSignals(paper, analysis)
@@ -613,7 +610,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
           <section className="decision-summary">
             <div className="decision-copy"><span>一句话结论</span><p>{paper.summary || analysis.overview || '尚未生成中文总结。刷新或等待深度分析任务完成后可在这里查看。'}</p></div>
             <div className="decision-signals">
-              <SignalGroup label="AI 确认方向" values={paper.matched_topics ?? []} empty="初筛尚未确认正式方向" />
+              <SignalGroup label="AI 确认方向" values={paper.matched_topics} empty="初筛尚未确认正式方向" />
               <SignalGroup label="分析标签" values={analysisSignals} empty="待深度分析后提取" tone="analysis" />
             </div>
           </section>

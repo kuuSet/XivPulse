@@ -15,7 +15,10 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
     abs_url: `https://arxiv.org/abs/2608.100${day}`,
     pdf_url: `https://arxiv.org/pdf/2608.100${day}`,
     effective_score: 90,
-    match_reasons: ['Test topic'],
+    matched_topics: ['Test topic'],
+    feedback: null,
+    reading: { state: 'unread', priority: 3, notes: '', tags: [] },
+    project_memberships: [],
   })
   await page.route('**/api/dashboard*', async (route) => {
     const date = new URL(route.request().url()).searchParams.get('date')
@@ -106,7 +109,10 @@ test('opening a paper preserves the workspace position and resets only the reade
     abs_url: `https://arxiv.org/abs/2608.2000${id}`,
     pdf_url: `https://arxiv.org/pdf/2608.2000${id}`,
     effective_score: 90 - id,
-    match_reasons: ['Test topic'],
+    matched_topics: ['Test topic'],
+    feedback: null,
+    reading: { state: 'unread', priority: 3, notes: '', tags: [] },
+    project_memberships: [],
   })
   await page.route('**/api/dashboard*', async (route) => {
     await route.fulfill({
