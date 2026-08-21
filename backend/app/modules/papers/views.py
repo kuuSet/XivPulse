@@ -2,16 +2,42 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ...models import Feedback, Paper, ProjectPaper
-from ...modules.papers.organizations import paper_organizations
-from ...modules.projects.views import _project_membership_wire, _reading_wire
-from .analyses import _analysis_wire
-from .common import _latest_analysis
+from ...models import Analysis, Feedback, Paper, ProjectPaper
+from ..projects.views import _project_membership_wire, _reading_wire
+from .analysis_views import _analysis_wire
+from .organizations import paper_organizations
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _latest_analysis(
+    paper: Paper,
+    kind: str | None = None,
+    *,
+    profile_id: int | None = None,
+) -> Analysis | None:
+    analyses = [
+        item
+        for item in paper.analyses
+        if item.status == "completed"
+        and (kind is None or item.kind == kind)
+        and (profile_id is None or item.profile_id == profile_id)
+    ]
+    return max(
+        analyses,
+        key=lambda item: _as_utc(item.created_at) or datetime.min.replace(tzinfo=UTC),
+        default=None,
+    )
 
 
 def _paper_wire(

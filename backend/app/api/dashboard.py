@@ -21,11 +21,11 @@ from ..models import (
     utcnow,
 )
 from ..modules.interests.views import interests_view
+from ..modules.papers.views import _paper_wire, _query_papers
 from ..profile import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.jobs import _job_wire
-from .presenters.papers import _paper_wire, _query_papers
 from .system_views import _provider_public_status, _settings_wire
 
 router = APIRouter()
