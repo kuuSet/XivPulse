@@ -140,6 +140,13 @@ class PipelineCoordinator:
             "date": target_date.isoformat() if target_date else None,
         }
 
+    async def shutdown(self) -> None:
+        tasks = tuple(self._tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def run_daily(
         self, trigger: str = "manual", *, target_date: date | None = None
     ) -> PipelineResult:
@@ -214,21 +221,31 @@ class PipelineCoordinator:
                 job.message = "计划任务已完成" if scheduled else "任务已完成"
                 job.completed_at = utcnow()
             return {"success": True, **result}
+        except asyncio.CancelledError:
+            self._record_failure(job_id, "应用关闭，任务已中断", "任务已中断")
+            raise
         except Exception as exc:
             LOG.exception("Pipeline job %s failed", job_id)
-            with session_scope(self._session_factory) as db:
-                job = db.get(Job, job_id)
-                if job is not None:
-                    job.status = "failed"
-                    job.error = str(exc)
-                    job.message = "计划任务失败" if scheduled else "任务失败"
-                    job.completed_at = utcnow()
+            self._record_failure(
+                job_id,
+                str(exc),
+                "计划任务失败" if scheduled else "任务失败",
+            )
             return {"success": False, "error": str(exc)}
         finally:
             with self._job_lock:
                 if self._active_job_id == job_id:
                     self._active_job_id = None
             self._release_file_lock(job_id)
+
+    def _record_failure(self, job_id: str, error: str, message: str) -> None:
+        with session_scope(self._session_factory) as db:
+            job = db.get(Job, job_id)
+            if job is not None:
+                job.status = "failed"
+                job.error = error
+                job.message = message
+                job.completed_at = utcnow()
 
     def _acquire_file_lock(self, token: str) -> bool:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)

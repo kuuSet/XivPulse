@@ -32,11 +32,15 @@ def create_app(
     initialize = (
         startup if startup is not None else partial(initialize_application, session_factory)
     )
+    coordinator = pipeline if pipeline is not None else build_pipeline(session_factory)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         initialize()
-        yield
+        try:
+            yield
+        finally:
+            await coordinator.shutdown()
 
     app = FastAPI(
         title="XivPulse",
@@ -45,7 +49,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.session_factory = session_factory
-    app.state.pipeline = pipeline if pipeline is not None else build_pipeline(session_factory)
+    app.state.pipeline = coordinator
 
     allowed_hosts = list(get_process_settings().server_allowed_hosts)
     if allowed_hosts:

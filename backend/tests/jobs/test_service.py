@@ -214,6 +214,48 @@ async def test_background_job_uses_the_same_persisted_lifecycle(
 
 
 @pytest.mark.asyncio
+async def test_shutdown_interrupts_background_jobs_and_releases_lock(
+    job_session_factory: sessionmaker[Session],
+    tmp_path: Path,
+) -> None:
+    lock_path = tmp_path / "pipeline.lock"
+    entered = asyncio.Event()
+
+    async def sync_stage(*, target_date: date | None) -> dict[str, Any]:
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("cancelled stage resumed")
+
+    async def unused_analyze(*, job_id: str | None, report_date: date | None) -> dict[str, Any]:
+        raise AssertionError("sync job should not analyze papers")
+
+    async def unused_finalize(
+        report_date: date, result: dict[str, Any], job_id: str | None
+    ) -> dict[str, Any]:
+        raise AssertionError("sync job should not finalize a report")
+
+    coordinator = PipelineCoordinator(
+        sync_stage=sync_stage,
+        analyze_stage=unused_analyze,
+        finalize_daily_stage=unused_finalize,
+        session_factory=job_session_factory,
+        lock_path=lock_path,
+    )
+
+    started = coordinator.start_job("sync", target_date=date(2026, 8, 18))
+    await entered.wait()
+    await coordinator.shutdown()
+
+    assert not lock_path.exists()
+    with job_session_factory() as db:
+        job = db.get(Job, started["id"])
+        assert job is not None
+        assert job.status == "failed"
+        assert job.message == "任务已中断"
+        assert job.error == "应用关闭，任务已中断"
+
+
+@pytest.mark.asyncio
 async def test_failed_job_preserves_error_releases_lock_and_can_run_again(
     job_session_factory: sessionmaker[Session],
     tmp_path: Path,

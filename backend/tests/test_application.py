@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import app.jobs.workflow as workflow
 import app.runtime as runtime_module
@@ -10,6 +11,7 @@ import pytest
 from app import create_app
 from app.database import Base, make_engine, make_session_factory
 from app.database_defaults import seed_defaults
+from app.jobs.service import PipelineCoordinator
 from app.models import Job, Profile
 from app.runtime import initialize_application
 from fastapi import FastAPI
@@ -40,6 +42,26 @@ def test_application_lifespan_initializes_its_database(tmp_path: Path) -> None:
 
     with factory() as session:
         assert len(session.scalars(select(Profile)).all()) == 1
+    engine.dispose()
+
+
+def test_application_lifespan_closes_its_pipeline(
+    tmp_path: Path,
+) -> None:
+    engine = make_engine(f"sqlite:///{(tmp_path / 'shutdown.db').as_posix()}")
+    pipeline = Mock(spec=PipelineCoordinator)
+    pipeline.shutdown = AsyncMock()
+    app = create_app(
+        session_factory=make_session_factory(engine),
+        pipeline=pipeline,
+        startup=lambda: None,
+        frontend_dist=None,
+    )
+
+    with TestClient(app):
+        pass
+
+    pipeline.shutdown.assert_awaited_once_with()
     engine.dispose()
 
 
