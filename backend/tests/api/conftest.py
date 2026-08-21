@@ -39,8 +39,6 @@ def insert_paper(session_factory: sessionmaker[Session]) -> Callable[..., int]:
                     prefilter_decision=prefilter_decision,
                     prefiltered_at=timestamp if prefilter_decision else None,
                     screening_relevance_score=score,
-                    matched_topics_json=["Embodied AI"] if score is not None else [],
-                    reason="Relevant after abstract scoring" if score is not None else "",
                     screened_at=timestamp if score is not None else None,
                 )
             )

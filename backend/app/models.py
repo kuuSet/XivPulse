@@ -227,19 +227,13 @@ class PaperMatch(Base):
     profile_id: Mapped[int] = mapped_column(
         ForeignKey("profiles.id", ondelete="CASCADE"), index=True
     )
-    matched_topics_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     prefilter_decision: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     prefiltered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     screening_relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    reason: Mapped[str] = mapped_column(Text, default="")
     screened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     paper: Mapped[Paper] = relationship(back_populates="matches")
     profile: Mapped[Profile] = relationship(back_populates="matches")
-
-    @property
-    def matched_topics(self) -> list[str]:
-        return list(self.matched_topics_json or [])
 
     @property
     def effective_score(self) -> float:

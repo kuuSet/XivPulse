@@ -19,7 +19,6 @@ PAPER_FIELDS = {
     "feedback",
     "html_url",
     "id",
-    "matched_topics",
     "notable_organizations",
     "pdf_url",
     "prefilter_decision",
@@ -31,7 +30,6 @@ PAPER_FIELDS = {
     "title",
     "updated_at",
     "version",
-    "why_recommended",
 }
 DETAIL_FIELDS = {"analyses", "comment", "doi", "journal_ref", "versions"}
 ANALYSIS_FIELDS = {
@@ -101,7 +99,6 @@ def test_paper_library_uses_only_abstract_llm_scores(
     assert set(paper) == PAPER_FIELDS
     assert paper["id"] == paper_id
     assert paper["effective_score"] == 82
-    assert paper["matched_topics"] == ["Embodied AI"]
     assert paper["feedback"] is None
     assert paper["reading"] == {
         "state": "unread",
@@ -118,7 +115,6 @@ def test_paper_library_uses_only_abstract_llm_scores(
     assert detail.status_code == 200
     detail_payload = detail.json()
     assert set(detail_payload) == PAPER_FIELDS | DETAIL_FIELDS
-    assert detail_payload["matched_topics"] == ["Embodied AI"]
     assert detail_payload["reading"]["state"] == "unread"
     assert all(set(analysis) == ANALYSIS_FIELDS for analysis in detail_payload["analyses"])
 

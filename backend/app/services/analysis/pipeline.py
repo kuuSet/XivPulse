@@ -150,9 +150,7 @@ async def analyze_papers(
         timestamp = utcnow()
         with session_scope(session_factory) as db:
             stored = db.get(PaperMatch, match.id)
-            stored.matched_topics_json = []
             stored.screening_relevance_score = result.score
-            stored.reason = ""
             stored.screened_at = timestamp
             db.add(
                 Analysis(

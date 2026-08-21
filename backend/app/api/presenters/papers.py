@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from ...models import Feedback, Paper, ProjectPaper
 from ...services.organizations import paper_organizations
-from ...services.state import clean_string_list as _clean_string_list
 from .analyses import _analysis_wire
 from .common import _latest_analysis
 from .projects import _project_membership_wire, _reading_wire
@@ -51,7 +50,6 @@ def _paper_wire(
         paper, profile_id=profile_id
     )
     score = match.effective_score if match else 0
-    matched_topics = _clean_string_list(match.matched_topics if match else [], limit=20)
     data: dict[str, Any] = {
         "id": paper.id,
         "arxiv_id": paper.arxiv_id,
@@ -70,9 +68,7 @@ def _paper_wire(
         "html_url": paper.html_url,
         "prefilter_decision": match.prefilter_decision if match is not None else None,
         "effective_score": round(float(score), 1),
-        "matched_topics": matched_topics,
         "summary": analysis.summary if analysis else None,
-        "why_recommended": match.reason if match else None,
         "feedback": {
             "action": feedback.action,
             "note": feedback.note,
