@@ -16,7 +16,7 @@ from ..runtime import initialize_application
 from ..services.paper_sync import latest_complete_submission_date
 from ..settings import load_runtime_settings
 from .service import PipelineCoordinator
-from .workflow import daily_pipeline
+from .workflow import build_pipeline
 
 LOG = logging.getLogger("xivpulse.scheduler")
 
@@ -56,14 +56,15 @@ def should_run_now(
 
 async def main(
     *,
-    pipeline: PipelineCoordinator = daily_pipeline,
+    pipeline: PipelineCoordinator | None = None,
     session_factory: sessionmaker[Session] = SessionLocal,
 ) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    initialize_application()
+    initialize_application(session_factory)
+    pipeline = pipeline or build_pipeline(session_factory)
     LOG.info("Docker daily scheduler started")
     while True:
         try:

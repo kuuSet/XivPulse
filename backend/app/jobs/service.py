@@ -81,14 +81,12 @@ class PipelineCoordinator:
     def __init__(
         self,
         *,
-        initialize: Callable[[], None],
         sync_stage: SyncStage,
         analyze_stage: AnalyzeStage,
         finalize_daily_stage: FinalizeDailyStage,
         session_factory: sessionmaker[Session] = SessionLocal,
         lock_path: Path = DEFAULT_LOCK_PATH,
     ) -> None:
-        self._initialize = initialize
         self._sync_stage = sync_stage
         self._analyze_stage = analyze_stage
         self._finalize_daily_stage = finalize_daily_stage
@@ -153,7 +151,6 @@ class PipelineCoordinator:
         return {"accepted": True, **result}
 
     def _create_job(self, kind: PipelineKind, target_date: date | None) -> str:
-        self._initialize()
         with self._job_lock:
             if self._active_job_id is not None:
                 raise JobConflict("已有抓取或分析任务正在运行")

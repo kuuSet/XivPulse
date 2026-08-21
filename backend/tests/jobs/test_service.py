@@ -47,7 +47,6 @@ async def test_daily_pipeline_runs_stages_in_order_and_merges_results(
         return {**result, "report_date": report_date.isoformat()}
 
     coordinator = PipelineCoordinator(
-        initialize=lambda: None,
         sync_stage=sync_stage,
         analyze_stage=analyze_stage,
         finalize_daily_stage=finalize_daily_stage,
@@ -104,7 +103,6 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
         raise AssertionError("daily finalization should not run")
 
     coordinator = PipelineCoordinator(
-        initialize=lambda: None,
         sync_stage=unexpected_sync,
         analyze_stage=analyze_stage,
         finalize_daily_stage=unexpected_finalize,
@@ -116,7 +114,7 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
 
 
 @pytest.mark.asyncio
-async def test_command_uses_shared_daily_pipeline() -> None:
+async def test_command_runs_the_injected_pipeline() -> None:
     from app.jobs import command
 
     class FakePipeline:
@@ -151,7 +149,6 @@ async def test_successful_job_is_completed_and_releases_lock(
         return {**result, "report_date": report_date.isoformat()}
 
     coordinator = PipelineCoordinator(
-        initialize=lambda: None,
         sync_stage=sync_stage,
         analyze_stage=analyze_stage,
         finalize_daily_stage=finalize_stage,
@@ -197,7 +194,6 @@ async def test_background_job_uses_the_same_persisted_lifecycle(
         raise AssertionError("sync job should not finalize a report")
 
     coordinator = PipelineCoordinator(
-        initialize=lambda: None,
         sync_stage=sync_stage,
         analyze_stage=unused_analyze,
         finalize_daily_stage=unused_finalize,
@@ -241,7 +237,6 @@ async def test_failed_job_preserves_error_releases_lock_and_can_run_again(
         return result
 
     coordinator = PipelineCoordinator(
-        initialize=lambda: None,
         sync_stage=sync_stage,
         analyze_stage=analyze_stage,
         finalize_daily_stage=finalize_stage,
@@ -291,7 +286,6 @@ async def test_concurrent_or_locked_job_raises_conflict(
         return result
 
     coordinator = PipelineCoordinator(
-        initialize=lambda: None,
         sync_stage=sync_stage,
         analyze_stage=analyze_stage,
         finalize_daily_stage=finalize_stage,

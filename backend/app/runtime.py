@@ -1,26 +1,20 @@
-"""Process initialization shared by web and scheduler entrypoints."""
+"""Application initialization shared by web and scheduler entrypoints."""
 
 from __future__ import annotations
 
-import threading
+from sqlalchemy.orm import Session, sessionmaker
 
-from .database import init_db, session_scope
+from .database import SessionLocal, init_db, session_scope
+from .database_defaults import seed_defaults
 from .jobs.service import recover_stale_jobs
 from .services.auth import auth_settings
 
-_initialization_lock = threading.Lock()
-_initialized = False
 
-
-def initialize_application() -> None:
-    global _initialized
-    if _initialized:
-        return
-    with _initialization_lock:
-        if _initialized:
-            return
-        auth_settings()
-        init_db()
-        with session_scope() as db:
-            recover_stale_jobs(db)
-        _initialized = True
+def initialize_application(
+    session_factory: sessionmaker[Session] = SessionLocal,
+) -> None:
+    auth_settings()
+    init_db(session_factory.kw["bind"], seed=False)
+    with session_scope(session_factory) as db:
+        seed_defaults(db)
+        recover_stale_jobs(db)

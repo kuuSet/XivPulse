@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -25,12 +26,16 @@ def create_app(
     *,
     session_factory: sessionmaker[Session] = SessionLocal,
     pipeline: PipelineCoordinator | None = None,
-    startup: Callable[[], None] = initialize_application,
+    startup: Callable[[], None] | None = None,
     frontend_dist: Path | None = FRONTEND_DIST,
 ) -> FastAPI:
+    initialize = (
+        startup if startup is not None else partial(initialize_application, session_factory)
+    )
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        startup()
+        initialize()
         yield
 
     app = FastAPI(
@@ -40,9 +45,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.session_factory = session_factory
-    app.state.pipeline = (
-        pipeline if pipeline is not None else build_pipeline(session_factory, initialize=startup)
-    )
+    app.state.pipeline = pipeline if pipeline is not None else build_pipeline(session_factory)
 
     allowed_hosts = list(get_process_settings().server_allowed_hosts)
     if allowed_hosts:

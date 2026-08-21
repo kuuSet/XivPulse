@@ -9,9 +9,10 @@ import pytest
 from app import create_app
 from app.database import Base, make_engine, make_session_factory
 from app.database_defaults import seed_defaults
-from app.models import Job
+from app.models import Job, Profile
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -25,6 +26,19 @@ def test_apps_use_independent_databases(app_factory: Callable[[], FastAPI]) -> N
         assert response.status_code == 200
         assert first.get("/api/settings").json()["prefilter_batch_size"] == 47
         assert second.get("/api/settings").json()["prefilter_batch_size"] == 30
+
+
+def test_application_lifespan_initializes_its_database(tmp_path: Path) -> None:
+    engine = make_engine(f"sqlite:///{(tmp_path / 'application.db').as_posix()}")
+    factory = make_session_factory(engine)
+    app = create_app(session_factory=factory, frontend_dist=None)
+
+    with TestClient(app) as client:
+        assert client.get("/api/health").status_code == 200
+
+    with factory() as session:
+        assert len(session.scalars(select(Profile)).all()) == 1
+    engine.dispose()
 
 
 @pytest.mark.asyncio
