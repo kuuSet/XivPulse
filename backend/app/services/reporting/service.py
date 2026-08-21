@@ -7,17 +7,14 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...database import SessionLocal, session_scope
 from ...jobs.service import update_job_progress
 from ...models import (
     DailyResearchReport,
-    Digest,
     EmailDelivery,
-    Paper,
-    PaperMatch,
     ReportSynthesisRun,
     utcnow,
 )
@@ -41,41 +38,6 @@ def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     return value if value.tzinfo else value.replace(tzinfo=UTC)
-
-
-def create_digest(digest_date: date | None = None) -> dict[str, Any]:
-    with session_scope() as db:
-        profile = active_profile(db)
-        settings = load_runtime_settings(db)
-        today = digest_date or current_date_in_timezone(settings.schedule_timezone)
-        start = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
-        end = datetime.combine(today, datetime.max.time(), tzinfo=UTC)
-        matches = db.scalars(
-            select(PaperMatch)
-            .where(
-                PaperMatch.profile_id == profile.id,
-                PaperMatch.screened_at.is_not(None),
-                PaperMatch.paper.has((Paper.published_at >= start) & (Paper.published_at <= end)),
-            )
-            .order_by(desc(PaperMatch.effective_score_expression()))
-            .limit(20)
-        ).all()
-        digest = db.scalar(
-            select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == today)
-        )
-        if digest is None:
-            digest = Digest(
-                profile_id=profile.id,
-                digest_date=today,
-                title=f"{today.isoformat()} arXiv 每日精选",
-            )
-            db.add(digest)
-        digest.paper_ids_json = [item.paper_id for item in matches]
-        digest.summary = f"今日筛选出 {len(matches)} 篇符合关注标签的论文。"
-        digest.stats_json = {"recommended": len(matches)}
-        digest.status = "ready"
-        db.flush()
-        return {"digest_id": digest.id, "recommended": len(matches)}
 
 
 def report_snapshot(snapshot: DailyResearchReport) -> dict[str, Any]:
@@ -400,8 +362,7 @@ async def finalize_daily_stage(
     result: dict[str, Any],
     job_id: str | None,
 ) -> dict[str, Any]:
-    update_job_progress(job_id, progress=88, message="正在重排推荐并保存当日研究日报")
-    result.update(create_digest(pipeline_date))
+    update_job_progress(job_id, progress=88, message="正在生成并保存当日研究日报")
     result.update(create_daily_report(report_date=pipeline_date, pipeline_status=result))
     current_report_date = date.fromisoformat(str(result["report_date"]))
     update_job_progress(job_id, progress=94, message="正在生成并保存 AI 综合研判")

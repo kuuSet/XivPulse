@@ -1,4 +1,4 @@
-"""Digest, trend, and daily-report HTTP routes."""
+"""Trend and daily-report HTTP routes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
-from ..models import DailyResearchReport, Digest, Paper, PaperMatch
+from ..models import DailyResearchReport
 from ..services.reporting.roadmap import build_research_roadmap
 from ..services.reporting.service import (
     persist_daily_report,
@@ -23,55 +23,8 @@ from ..services.reporting.trends import build_topic_trends
 from ..services.state import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
-from .presenters.papers import _paper_wire, _query_papers
-from .presenters.reports import _digest_wire
 
 router = APIRouter()
-
-
-@router.get("/api/digest/preview")
-def digest_preview(
-    target_date: date | None = Query(default=None, alias="date"), db: Session = Depends(get_db)
-) -> dict[str, Any]:
-    profile = active_profile(db)
-    day = target_date or date.today()
-    digest = db.scalar(
-        select(Digest).where(Digest.profile_id == profile.id, Digest.digest_date == day)
-    )
-    if digest is None:
-        papers = (
-            db.scalars(
-                _query_papers(db)
-                .join(PaperMatch, PaperMatch.paper_id == Paper.id)
-                .where(
-                    PaperMatch.profile_id == profile.id,
-                    PaperMatch.screened_at.is_not(None),
-                )
-                .order_by(desc(PaperMatch.effective_score_expression()))
-                .limit(10)
-            )
-            .unique()
-            .all()
-        )
-        return {
-            "digest_date": day,
-            "title": f"{day.isoformat()} arXiv 每日精选（预览）",
-            "summary": f"当前有 {len(papers)} 篇候选论文。",
-            "items": [_paper_wire(paper, profile.id) for paper in papers],
-            "persisted": False,
-        }
-    paper_ids = digest.paper_ids
-    papers = (
-        db.scalars(_query_papers(db).where(Paper.id.in_(paper_ids))).unique().all()
-        if paper_ids
-        else []
-    )
-    by_id = {paper.id: paper for paper in papers}
-    return {
-        **(_digest_wire(digest) or {}),
-        "items": [_paper_wire(by_id[item], profile.id) for item in paper_ids if item in by_id],
-        "persisted": True,
-    }
 
 
 @router.get("/api/trends/topics")
@@ -148,9 +101,9 @@ def _get_or_refresh_daily_research_report(
     selected_date = report_date
     if selected_date is None:
         selected_date = db.scalar(
-            select(Digest.digest_date)
-            .where(Digest.profile_id == profile.id)
-            .order_by(desc(Digest.digest_date))
+            select(DailyResearchReport.report_date)
+            .where(DailyResearchReport.profile_id == profile.id)
+            .order_by(desc(DailyResearchReport.report_date))
             .limit(1)
         )
     snapshot = persist_daily_report(

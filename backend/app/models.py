@@ -45,7 +45,6 @@ class Profile(TimestampMixin, Base):
     matches: Mapped[list[PaperMatch]] = relationship(back_populates="profile")
     analyses: Mapped[list[Analysis]] = relationship(back_populates="profile")
     feedback_items: Mapped[list[Feedback]] = relationship(back_populates="profile")
-    digests: Mapped[list[Digest]] = relationship(back_populates="profile")
     daily_research_reports: Mapped[list[DailyResearchReport]] = relationship(
         back_populates="profile", cascade="all, delete-orphan"
     )
@@ -445,33 +444,6 @@ class ProjectPaper(TimestampMixin, Base):
         self.tags_json = list(value)
 
 
-class Digest(Base):
-    __tablename__ = "digests"
-    __table_args__ = (UniqueConstraint("profile_id", "digest_date", name="uq_profile_digest_date"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    profile_id: Mapped[int] = mapped_column(
-        ForeignKey("profiles.id", ondelete="CASCADE"), index=True
-    )
-    digest_date: Mapped[date] = mapped_column(Date, index=True)
-    title: Mapped[str] = mapped_column(String(255))
-    summary: Mapped[str] = mapped_column(Text, default="")
-    paper_ids_json: Mapped[list[int]] = mapped_column(JSON, default=list)
-    stats_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    status: Mapped[str] = mapped_column(String(20), default="ready")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-    profile: Mapped[Profile] = relationship(back_populates="digests")
-
-    @property
-    def paper_ids(self) -> list[int]:
-        return list(self.paper_ids_json or [])
-
-    @property
-    def stats(self) -> dict[str, Any]:
-        return dict(self.stats_json or {})
-
-
 class DailyResearchReport(TimestampMixin, Base):
     """Immutable-by-default JSON snapshot of one daily research report."""
 
@@ -592,7 +564,6 @@ __all__ = [
     "Analysis",
     "AppSetting",
     "DailyResearchReport",
-    "Digest",
     "EmailDelivery",
     "Feedback",
     "FeedbackReason",

@@ -15,7 +15,7 @@ from ..jobs.presenter import _job_wire
 from ..jobs.service import RUNNING_STATUSES
 from ..models import (
     Analysis,
-    Digest,
+    DailyResearchReport,
     Feedback,
     Job,
     Paper,
@@ -28,7 +28,6 @@ from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.interests import _interests_wire
 from .presenters.papers import _paper_wire, _query_papers
-from .presenters.reports import _digest_wire
 from .system_views import _provider_public_status, _settings_wire
 
 router = APIRouter()
@@ -146,6 +145,8 @@ def dashboard(
         .where(Job.kind == "daily", Job.status == "completed")
         .order_by(desc(Job.completed_at), desc(Job.created_at))
     ).all()
+    completed_dates = [date.fromisoformat(job.result["fetch_date"]) for job in daily_jobs]
+    latest_completed_date = max(completed_dates, default=None)
     latest_daily_job = daily_jobs[0] if daily_jobs and target_date is None else None
     if target_date is not None:
         for job in daily_jobs:
@@ -201,8 +202,11 @@ def dashboard(
     active_job = db.scalar(
         select(Job).where(Job.status.in_(RUNNING_STATUSES)).order_by(desc(Job.created_at))
     )
-    latest_digest = db.scalar(
-        select(Digest).where(Digest.profile_id == profile.id).order_by(desc(Digest.digest_date))
+    latest_report_date = db.scalar(
+        select(DailyResearchReport.report_date)
+        .where(DailyResearchReport.profile_id == profile.id)
+        .order_by(desc(DailyResearchReport.report_date))
+        .limit(1)
     )
     return {
         "date": day,
@@ -254,7 +258,8 @@ def dashboard(
             }
             for item in items
         ],
-        "latest_digest": _digest_wire(latest_digest),
+        "latest_report_date": latest_report_date,
+        "latest_completed_date": latest_completed_date,
         "active_job": _job_wire(active_job),
         "provider": _provider_public_status(db),
     }

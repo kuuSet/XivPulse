@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import Digest
+from ...models import Job
 from .records import (
     ARXIV_BATCH_DATE_BASIS,
     DEFAULT_TIMEZONE,
@@ -42,11 +42,14 @@ def build_topic_trends(
     day = requested_day
     awaiting_daily_update = False
     if as_of is None:
-        latest_complete_day = session.scalar(
-            select(Digest.digest_date)
-            .where(Digest.profile_id == profile_id, Digest.digest_date <= requested_day)
-            .order_by(Digest.digest_date.desc())
-            .limit(1)
+        completed_dates = [
+            date.fromisoformat(result["fetch_date"])
+            for result in session.scalars(
+                select(Job.result_json).where(Job.kind == "daily", Job.status == "completed")
+            ).all()
+        ]
+        latest_complete_day = max(
+            (value for value in completed_dates if value <= requested_day), default=None
         )
         if latest_complete_day is not None and latest_complete_day < requested_day:
             day = latest_complete_day

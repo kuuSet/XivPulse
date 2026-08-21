@@ -16,18 +16,19 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
   const [reportState, setReportState] = useState<LoadState>('loading')
   const [reportError, setReportError] = useState('')
   const [reportHistory, setReportHistory] = useState<DailyReportArchiveItem[]>([])
-  const [selectedReportDate, setSelectedReportDate] = useState(() => new URLSearchParams(window.location.search).get('date') ?? data?.latest_digest?.digest_date ?? '')
+  const [selectedReportDate, setSelectedReportDate] = useState(() => new URLSearchParams(window.location.search).get('date') ?? data?.latest_report_date ?? '')
   const [regenerating, setRegenerating] = useState(false)
   const [synthesizing, setSynthesizing] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
-  const latestCompleteDate = data?.latest_digest?.digest_date ?? data?.date ?? ''
-  const activeReportDate = selectedReportDate || latestCompleteDate
+  const latestReportDate = data?.latest_report_date ?? data?.date ?? ''
+  const latestCompleteDate = data?.latest_completed_date ?? ''
+  const activeReportDate = selectedReportDate || latestReportDate
   const activeReport = report?.report_date === activeReportDate ? report : null
   const digestText = activeReport ? buildReportText(activeReport, data?.items ?? []) : ''
   const activeDateMissingFromHistory = Boolean(activeReportDate && !reportHistory.some((item) => item.report_date === activeReportDate))
 
   const loadReport = useCallback(async () => {
-    const reportDate = selectedReportDate || latestCompleteDate
+    const reportDate = selectedReportDate || latestReportDate
     if (!reportDate) return
     setReportState('loading'); setReportError('')
     try {
@@ -37,19 +38,19 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
       setReport(null); setReportState('error')
       setReportError(loadError instanceof Error ? loadError.message : '结构化日报加载失败')
     }
-  }, [latestCompleteDate, selectedReportDate])
+  }, [latestReportDate, selectedReportDate])
 
   useEffect(() => { void loadReport() }, [loadReport])
   useEffect(() => {
-    if (!selectedReportDate && latestCompleteDate) setSelectedReportDate(latestCompleteDate)
+    if (!selectedReportDate && latestReportDate) setSelectedReportDate(latestReportDate)
 
-  }, [latestCompleteDate, selectedReportDate])
+  }, [latestReportDate, selectedReportDate])
   useEffect(() => {
     api.dailyReportHistory().then(setReportHistory).catch(() => setReportHistory([]))
   }, [report?.snapshot_id])
 
   const regenerateReport = async () => {
-    const reportDate = selectedReportDate || latestCompleteDate
+    const reportDate = selectedReportDate || latestReportDate
     if (!reportDate) return
     setRegenerating(true)
     try {

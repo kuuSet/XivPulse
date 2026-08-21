@@ -31,10 +31,6 @@ export interface DashboardData {
   topic_stats: TopicStat[]
   settings?: Settings
   active_job?: JobInfo | null
-  latest_digest?: {
-    id: number
-    digest_date: string
-    title: string
-    status: string
-  } | null
+  latest_report_date?: string | null
+  latest_completed_date?: string | null
 }

@@ -2,10 +2,56 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import app.services.reporting.service as reporting_service
+import pytest
 from app.models import Analysis, Paper, PaperMatch, Profile
 from app.services.reporting.builder import build_daily_research_report
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+
+@pytest.mark.asyncio
+async def test_daily_finalize_returns_the_saved_report_without_a_legacy_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reported_progress: list[int] = []
+
+    monkeypatch.setattr(
+        reporting_service,
+        "update_job_progress",
+        lambda job_id, *, progress, message: reported_progress.append(progress),
+    )
+    monkeypatch.setattr(
+        reporting_service,
+        "create_daily_report",
+        lambda **kwargs: {
+            "report_snapshot_id": 7,
+            "report_date": kwargs["report_date"].isoformat(),
+        },
+    )
+
+    async def synthesize(*args: object, **kwargs: object) -> dict[str, str]:
+        return {"report_synthesis_status": "ready"}
+
+    async def send(*args: object, **kwargs: object) -> dict[str, int]:
+        return {"email_sent": 1, "email_failed": 0}
+
+    monkeypatch.setattr(reporting_service, "synthesize_daily_report", synthesize)
+    monkeypatch.setattr(reporting_service, "send_daily_report_email", send)
+
+    result = await reporting_service.finalize_daily_stage(
+        date(2026, 8, 13), {"fetched": 12}, "job-1"
+    )
+
+    assert result == {
+        "fetched": 12,
+        "report_snapshot_id": 7,
+        "report_date": "2026-08-13",
+        "report_synthesis_status": "ready",
+        "email_sent": 1,
+        "email_failed": 0,
+    }
+    assert reported_progress == [88, 94]
 
 
 def test_daily_report_contains_all_research_sections(analytics_session: Session) -> None:
@@ -284,5 +330,3 @@ def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
     assert report["coverage"]["deep_analysis_coverage_percent"] == 0.0
     assert maturity["status"] == "insufficient_analysis"
     assert maturity["deep_analysis_coverage_percent"] == 0.0
-
-
