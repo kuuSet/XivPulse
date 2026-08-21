@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import sys
 
-from ..runtime import initialize_application
+from ..bootstrap import bootstrap_application
 from .service import PipelineCoordinator
 from .workflow import build_pipeline
 
 
 async def main(pipeline: PipelineCoordinator | None = None) -> int:
     if pipeline is None:
-        initialize_application()
+        bootstrap_application()
         pipeline = build_pipeline()
     result = await pipeline.run_daily(trigger="scheduled-task")
     if not result.get("accepted", False):

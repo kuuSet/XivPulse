@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from app.database import Base, make_session_factory
-from app.database_defaults import seed_defaults
+from app.bootstrap import bootstrap_application
+from app.database import make_session_factory
 from app.models import Analysis, Paper, PaperMatch, Profile
 from app.schemas import PrefilterDecision, PrefilterResult
 from app.services.provider import GenerationResult, ProviderError
@@ -24,9 +24,8 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
         poolclass=StaticPool,
     )
     factory = make_session_factory(engine)
-    Base.metadata.create_all(engine)
+    bootstrap_application(factory)
     with factory() as session:
-        seed_defaults(session)
         profile = session.query(Profile).one()
         for index in range(3):
             paper = Paper(
@@ -103,9 +102,8 @@ async def test_provider_failure_stops_the_pipeline(
         poolclass=StaticPool,
     )
     factory = make_session_factory(engine)
-    Base.metadata.create_all(engine)
+    bootstrap_application(factory)
     with factory() as session:
-        seed_defaults(session)
         profile = session.query(Profile).one()
         paper = Paper(
             arxiv_id="2608.29999",

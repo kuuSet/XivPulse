@@ -10,9 +10,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..bootstrap import bootstrap_application
 from ..database import SessionLocal
 from ..models import Job
-from ..runtime import initialize_application
 from ..services.paper_sync import latest_complete_submission_date
 from ..settings import load_runtime_settings
 from .service import PipelineCoordinator
@@ -62,7 +62,7 @@ async def main(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    initialize_application(session_factory)
+    bootstrap_application(session_factory)
     pipeline = pipeline or build_pipeline(session_factory)
     LOG.info("Docker daily scheduler started")
     while True:

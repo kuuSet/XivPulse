@@ -11,10 +11,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .api import router as api_router
 from .api.auth import require_server_auth
+from .bootstrap import bootstrap_application
 from .database import SessionLocal
 from .jobs.service import PipelineCoordinator
 from .jobs.workflow import build_pipeline
-from .runtime import initialize_application
 from .settings import get_process_settings
 from .web import register_frontend
 
@@ -30,7 +30,7 @@ def create_app(
     frontend_dist: Path | None = FRONTEND_DIST,
 ) -> FastAPI:
     initialize = (
-        startup if startup is not None else partial(initialize_application, session_factory)
+        startup if startup is not None else partial(bootstrap_application, session_factory)
     )
     coordinator = pipeline if pipeline is not None else build_pipeline(session_factory)
 

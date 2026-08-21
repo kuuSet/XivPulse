@@ -1,19 +1,18 @@
 import asyncio
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
+import app.bootstrap as bootstrap_module
 import app.jobs.workflow as workflow
-import app.runtime as runtime_module
 import pytest
 from app import create_app
-from app.database import Base, make_engine, make_session_factory
-from app.database_defaults import seed_defaults
+from app.bootstrap import bootstrap_application
+from app.database import make_engine, make_session_factory
 from app.jobs.service import PipelineCoordinator
-from app.models import Job, Profile
-from app.runtime import initialize_application
+from app.models import Job, Profile, utcnow
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -75,11 +74,8 @@ async def test_default_pipelines_use_their_application_database(
         for name in ("first.db", "second.db")
     ]
     factories = [make_session_factory(engine) for engine in engines]
-    for engine, factory in zip(engines, factories, strict=True):
-        Base.metadata.create_all(engine)
-        with factory() as session:
-            seed_defaults(session)
-            session.commit()
+    for factory in factories:
+        bootstrap_application(factory)
 
     used_factories: list[sessionmaker[Session]] = []
 
@@ -130,23 +126,57 @@ async def test_default_pipelines_use_their_application_database(
         engine.dispose()
 
 
-def test_application_initialization_rolls_back_failed_seed(
+def test_application_bootstrap_rolls_back_failed_recovery(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     engine = make_engine(f"sqlite:///{(tmp_path / 'rollback.db').as_posix()}")
     factory = make_session_factory(engine)
 
-    def fail_after_writing(session: Session) -> None:
-        session.add(Profile())
+    def fail_after_seed(session: Session) -> None:
         session.flush()
-        raise RuntimeError("seed failed")
+        assert session.scalar(select(Profile)) is not None
+        raise RuntimeError("recovery failed")
 
-    monkeypatch.setattr(runtime_module, "seed_defaults", fail_after_writing)
+    monkeypatch.setattr(bootstrap_module, "recover_stale_jobs", fail_after_seed)
 
-    with pytest.raises(RuntimeError, match="seed failed"):
-        initialize_application(factory)
+    with pytest.raises(RuntimeError, match="recovery failed"):
+        bootstrap_application(factory)
 
     with factory() as session:
         assert session.scalars(select(Profile)).all() == []
+    engine.dispose()
+
+
+def test_application_bootstrap_recovers_only_stale_jobs(tmp_path: Path) -> None:
+    engine = make_engine(f"sqlite:///{(tmp_path / 'recovery.db').as_posix()}")
+    factory = make_session_factory(engine)
+    bootstrap_application(factory)
+    with factory() as session:
+        session.add_all(
+            [
+                Job(
+                    id="stale-job",
+                    kind="daily",
+                    status="running",
+                    started_at=utcnow() - timedelta(hours=3),
+                ),
+                Job(
+                    id="current-job",
+                    kind="daily",
+                    status="running",
+                    started_at=utcnow(),
+                ),
+            ]
+        )
+        session.commit()
+
+    bootstrap_application(factory)
+
+    with factory() as session:
+        stale = session.get(Job, "stale-job")
+        current = session.get(Job, "current-job")
+        assert stale is not None and stale.status == "failed"
+        assert stale.message == "任务超时"
+        assert current is not None and current.status == "running"
     engine.dispose()

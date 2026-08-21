@@ -3,8 +3,8 @@ from unittest.mock import Mock
 
 import pytest
 from app import create_app
-from app.database import Base, make_session_factory
-from app.database_defaults import seed_defaults
+from app.bootstrap import bootstrap_application
+from app.database import make_session_factory
 from app.jobs.service import PipelineCoordinator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -26,10 +26,7 @@ def app_factory() -> Iterator[Callable[[], FastAPI]]:
         )
         engines.append(engine)
         session_factory = make_session_factory(engine)
-        Base.metadata.create_all(engine)
-        with session_factory() as session:
-            seed_defaults(session)
-            session.commit()
+        bootstrap_application(session_factory)
         return create_app(
             session_factory=session_factory,
             pipeline=Mock(spec=PipelineCoordinator),

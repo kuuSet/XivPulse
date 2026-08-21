@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from app.database import Base, make_session_factory
-from app.database_defaults import seed_defaults
+from app.bootstrap import bootstrap_application
+from app.database import make_session_factory
 from app.domain.paper import Paper as PaperDocument
 from app.models import PaperMatch, Profile
 from app.services.paper_sync import sync_papers
@@ -20,11 +20,9 @@ async def test_sync_creates_unfiltered_matches_for_every_fetched_paper() -> None
         poolclass=StaticPool,
     )
     factory = make_session_factory(engine)
-    Base.metadata.create_all(engine)
+    bootstrap_application(factory)
     with factory() as session:
-        seed_defaults(session)
         profile_id = session.query(Profile).one().id
-        session.commit()
 
     async def fetcher(*_args: object, **_kwargs: object) -> list[PaperDocument]:
         return [
