@@ -12,7 +12,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
+from ..integrations.codex.options import CodexModel, CodexReasoningEffort
 from ..modules.analysis.prompts import DEFAULT_PROMPT_TEMPLATE_ID, PROMPT_TEMPLATE_IDS
 from .process import (
     ProcessSettings,
