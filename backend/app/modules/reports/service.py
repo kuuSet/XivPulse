@@ -20,8 +20,8 @@ from ...models import (
     utcnow,
 )
 from ...profile import active_profile
+from ...services.provider_factory import create_model_adapter
 from ...settings import load_runtime_settings
-from ..provider_factory import create_model_adapter
 from .builder import build_daily_research_report
 from .records import current_date_in_timezone
 from .synthesis import (

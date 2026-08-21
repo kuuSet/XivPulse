@@ -16,10 +16,10 @@ from ..modules.analysis.prompts import (
     PROMPT_TEMPLATE_IDS,
     prompt_catalog_payload,
 )
+from ..modules.reports.records import current_date_in_timezone
+from ..modules.reports.service import persist_daily_report, send_daily_report_email
 from ..profile import active_profile
 from ..services.provider_factory import create_model_adapter
-from ..services.reporting.records import current_date_in_timezone
-from ..services.reporting.service import persist_daily_report, send_daily_report_email
 from ..settings import (
     ModelStage,
     ProviderOverride,

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-import app.services.reporting.service as reporting_service
+import app.modules.reports.service as reporting_service
 import pytest
 from app.api.reports import router as reports_router
 from app.models import Analysis, Paper, PaperMatch, Profile
-from app.services.reporting.builder import build_daily_research_report
-from app.services.reporting.service import persist_daily_report, report_snapshot
+from app.modules.reports.builder import build_daily_research_report
+from app.modules.reports.service import persist_daily_report, report_snapshot
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

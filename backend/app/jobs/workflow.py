@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..database import SessionLocal
 from ..modules.analysis.pipeline import analyze_papers
 from ..modules.papers.sync import sync_papers
-from ..services.reporting.service import finalize_daily_stage
+from ..modules.reports.service import finalize_daily_stage
 from .service import PipelineCoordinator, update_job_progress
 
 

@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ...modules.analysis.analyzer import AnalysisBudgetMode, analysis_budget
-from ..provider import (
+from ...services.provider import (
     GenerationResult,
     ProviderProtocolError,
     StructuredModelAdapter,
