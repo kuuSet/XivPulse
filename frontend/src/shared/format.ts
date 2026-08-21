@@ -17,10 +17,10 @@ export function projectPaperSummary(paper: Paper) {
   return { id: paper.id, arxiv_id: paper.arxiv_id, title: paper.title, authors: paper.authors, primary_category: paper.categories[0], published_at: paper.submitted_at }
 }
 
-export function buildReportText(report: DailyReport, papers: Paper[]) {
+export function buildReportText(report: DailyReport) {
 
-  const methods = report.common_methods.map((item) => `- ${item.name ?? item.item ?? '方法线索'}（${item.count} 篇）`)
-  const evidence = report.common_evidence.map((item) => `- ${item.name ?? item.item ?? '证据线索'}（${item.count} 篇）`)
+  const methods = report.common_methods.map((item) => `- ${item.name}（${item.count} 篇）`)
+  const evidence = report.common_evidence.map((item) => `- ${item.name}（${item.count} 篇）`)
   const overview = report.research_situation?.quality_overview
   const overviewLines = overview ? [
     '### 优质论文综合总览', '', overview.lead, '',
@@ -52,17 +52,13 @@ export function buildReportText(report: DailyReport, papers: Paper[]) {
     '',
     '## 执行摘要', '', report.executive_summary, '',
     ...aiLines,
-    ...(report.research_situation ? ['## 当日研究态势', '', report.research_situation.synthesis, '', `- 正式方向论文：${report.research_situation.volume.today} 篇`, `- 抓取候选：${report.coverage?.candidate_paper_count ?? report.research_situation.volume.today} 篇`, `- 较昨日：${report.research_situation.volume.change > 0 ? '+' : ''}${report.research_situation.volume.change} 篇`, `- 近 7 日均值：${report.research_situation.volume.recent_daily_average} 篇`, `- 上升方向：${report.research_situation.direction_dynamics.rising.join('、') || '暂无'}`, `- 回落方向：${report.research_situation.direction_dynamics.falling.join('、') || '暂无'}`, `- 共同方法：${report.research_situation.method_signals.join('、') || '尚未形成稳定共性'}`, `- 证据判断：${report.research_situation.evidence_maturity.assessment}`, '', ...overviewLines] : []),
-    '## 研究方向动态', '', ...report.topic_insights.flatMap((item) => [`### ${item.topic} · ${item.paper_count} 篇`, '', item.insight, '']),
+    ...(report.research_situation ? ['## 当日研究态势', '', report.research_situation.synthesis, '', `- 粗排入选：${report.research_situation.volume.today} 篇`, `- 较昨日：${report.research_situation.volume.change > 0 ? '+' : ''}${report.research_situation.volume.change} 篇`, `- 近 7 日均值：${report.research_situation.volume.recent_daily_average} 篇`, `- 平均分：${report.research_situation.score_summary.average == null ? '暂无' : Math.round(report.research_situation.score_summary.average)}`, `- 高分论文：${report.research_situation.score_summary.high_score_count} 篇`, `- 共同方法：${report.research_situation.method_signals.join('、') || '尚未形成稳定共性'}`, `- 证据判断：${report.research_situation.evidence_maturity.assessment}`, '', ...overviewLines] : []),
     '## 代表论文', '',
-    ...report.highlight_papers.flatMap((item, index) => {
-      const paper = papers.find((candidate) => String(candidate.id) === String(item.paper_id))
-      return [`### ${index + 1}. ${item.title}`, '', `- 推荐分：${Math.round(item.score ?? paper?.effective_score ?? 0)}`, `- arXiv：${item.arxiv_id ?? paper?.arxiv_id ?? ''}`, '', item.summary ?? paper?.summary ?? item.why_it_matters ?? '', '', item.why_it_matters ? `研究意义：${item.why_it_matters}` : '', '']
-    }),
+    ...report.highlight_papers.flatMap((item, index) => [`### ${index + 1}. ${item.title}`, '', `- 推荐分：${Math.round(item.score)}`, `- arXiv：${item.arxiv_id}`, '', item.summary, '']),
     '## 共同方法', '', ...methods, '', '## 共同证据', '', ...evidence, '',
-    '## 推荐阅读队列', '', ...report.suggested_reading_queue.map((item) => `${item.rank}. **${item.title}** · ${READING_QUEUE_LABELS[item.priority] ?? item.priority}${item.estimated_minutes ? ` · ${item.estimated_minutes} 分钟` : ''}\n   ${item.next_action ?? item.reason ?? ''}`), '',
-    '---', report.methodology_note ?? 'AI 总结仅用于快速筛选，重要结论请以论文原文为准。', '',
-    `当日抓取候选 ${report.coverage?.candidate_paper_count ?? report.coverage?.paper_count ?? 0} 篇，其中正式方向论文 ${report.coverage?.paper_count ?? 0} 篇。`,
+    '## 推荐阅读队列', '', ...report.suggested_reading_queue.map((item) => `${item.rank}. **${item.title}** · ${READING_QUEUE_LABELS[item.priority]} · ${item.estimated_minutes} 分钟\n   ${item.next_action}`), '',
+    '---', report.methodology_note, '',
+    `当日共有 ${report.coverage.paper_count} 篇论文通过摘要粗排。`,
   ]
   return lines.filter((line) => line !== undefined).join('\n')
 }

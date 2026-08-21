@@ -1,9 +1,8 @@
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, ExternalLink, Library, LoaderCircle, Mail, Network, Radar, RefreshCw, Save, Sparkles, TrendingUp } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, ExternalLink, Library, LoaderCircle, Mail, Network, Radar, RefreshCw, Save, Sparkles } from 'lucide-react'
 import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { BRAND_LOGO } from '../../lib/runtime'
 import type { DashboardData } from '../../types/dashboard'
-import type { Paper } from '../../types/papers'
 import type { DailyAggregateItem, DailyReport, DailyReportArchiveItem } from '../../types/reports'
 import type { LoadState, Toast } from '../../app/types'
 import { WorkspaceSkeleton, PageError, EmptyPapers, OrganizationBadge } from '../../shared/ui'
@@ -24,7 +23,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
   const latestCompleteDate = data?.latest_completed_date ?? ''
   const activeReportDate = selectedReportDate || latestReportDate
   const activeReport = report?.report_date === activeReportDate ? report : null
-  const digestText = activeReport ? buildReportText(activeReport, data?.items ?? []) : ''
+  const digestText = activeReport ? buildReportText(activeReport) : ''
   const activeDateMissingFromHistory = Boolean(activeReportDate && !reportHistory.some((item) => item.report_date === activeReportDate))
 
   const loadReport = useCallback(async () => {
@@ -125,7 +124,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
         <div>
           <div className="eyebrow-row"><Mail size={14} /> 每日自动整理</div>
           <h1>研究日报</h1>
-          <p>每天独立保存一份研究快照，可按日期回看研究方向、证据、缺口和阅读队列。</p>
+          <p>每天独立保存一份研究快照，可按日期回看粗排结果、证据、缺口和阅读队列。</p>
         </div>
         <div className="heading-actions">
           <button className="button secondary" onClick={() => void sendReport()} disabled={!activeReport || sendingEmail}><Mail size={16} /> {sendingEmail ? '发送中' : '发送邮件'}</button>
@@ -145,7 +144,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
             <div><dt>自动任务</dt><dd>Windows 计划任务</dd></div>
             <div><dt>应用记录时间</dt><dd>{data?.settings?.schedule_time ?? '13:30'}</dd></div>
             <div><dt>时区</dt><dd>{data?.settings?.schedule_timezone ?? 'Asia/Shanghai'}</dd></div>
-            <div><dt>统计口径</dt><dd>正式研究方向</dd></div>
+            <div><dt>统计口径</dt><dd>摘要粗排结果</dd></div>
             <div><dt>代表论文</dt><dd>最多 10 篇</dd></div>
           </dl>
           <div className="delivery-note"><Save size={16} /><span>每日任务结束后自动保存；启用 SMTP 后自动发送，也可手动重发所选日期。</span></div>
@@ -175,7 +174,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
           </div>
           {reportState === 'loading' && <div className="report-loading"><LoaderCircle className="spin" size={22} /><span>正在读取 {formatArchiveDate(activeReportDate)} 的研究快照</span></div>}
           {reportState !== 'loading' && !activeReport && <div className="report-error"><CircleAlert size={20} /><div><strong>结构化日报暂不可用</strong><p>{reportError}</p><small>论文列表仍可正常浏览；这里不会用演示内容冒充接口结果。</small></div><button className="button secondary compact" onClick={() => void loadReport()}><RefreshCw size={14} /> 重试</button></div>}
-          {reportState !== 'loading' && activeReport && tab === 'report' && <StructuredReport report={activeReport} papers={data?.items ?? []} />}
+          {reportState !== 'loading' && activeReport && tab === 'report' && <StructuredReport report={activeReport} />}
           {reportState !== 'loading' && activeReport && tab === 'preview' && <EmailPreview report={activeReport} />}
           {reportState !== 'loading' && activeReport && tab === 'plain' && <pre className="plain-preview">{digestText}</pre>}
         </section>
@@ -184,8 +183,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
   )
 }
 
-function StructuredReport({ report, papers }: { report: DailyReport; papers: Paper[] }) {
-  const findPaper = (paperId: Paper['id']) => papers.find((paper) => String(paper.id) === String(paperId))
+function StructuredReport({ report }: { report: DailyReport }) {
   return (
     <article className="structured-report">
       <header>
@@ -193,46 +191,29 @@ function StructuredReport({ report, papers }: { report: DailyReport; papers: Pap
         <h2>{report.title ?? `${report.report_date} 当日研究总结`}</h2>
         <p>{report.executive_summary}</p>
         <div>
-          {report.coverage && <>
-            <em>{report.coverage.paper_count} 篇正式方向论文</em>
-            {report.coverage.candidate_paper_count !== undefined && <em>{report.coverage.candidate_paper_count} 篇抓取候选</em>}
-            <em>{report.coverage.analyzed_paper_count ?? 0} 篇已分析</em>
-            <em>{report.coverage.deep_analysis_count ?? 0} 篇深读</em>
-          </>}
+          <em>{report.coverage.paper_count} 篇粗排入选</em>
+          <em>{report.coverage.analyzed_paper_count} 篇已分析</em>
+          <em>{report.coverage.deep_analysis_count} 篇深读</em>
         </div>
       </header>
 
-      {report.research_situation && <ResearchSituation situation={report.research_situation} />}
+      <ResearchSituation situation={report.research_situation} />
 
       <AiSynthesisSection synthesis={report.ai_synthesis} />
-
-      <section className="report-section">
-        <div className="report-section-title"><TrendingUp size={16} /><h3>研究方向动态</h3></div>
-        <div className="insight-list">
-          {report.topic_insights.map((insight) => (
-            <article key={insight.topic_id ?? insight.topic}>
-              <span className={`direction-dot ${insight.direction ?? 'stable'}`} />
-              <div><strong>{insight.topic}<em>{insight.paper_count} 篇</em></strong><p>{insight.insight}</p></div>
-            </article>
-          ))}
-        </div>
-      </section>
 
       <section className="report-section">
         <div className="report-section-title"><Sparkles size={16} /><h3>代表论文</h3></div>
         <div className="notable-list">
           {report.highlight_papers.map((item, index) => {
-            const paper = findPaper(item.paper_id)
-            const organizations = item.notable_organizations ?? paper?.notable_organizations ?? []
             return (
               <article key={String(item.paper_id)}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
                 <div>
-                  <div><strong>{Math.round(item.score ?? paper?.effective_score ?? 0)} 分</strong><em>{item.recommendation ?? '重点关注'}</em></div>
-                  {organizations.length > 0 && <div className="report-organizations">{organizations.map((organization) => <OrganizationBadge key={organization} name={organization} />)}</div>}
+                  <div><strong>{Math.round(item.score)} 分</strong><em>{item.recommendation}</em></div>
+                  {item.notable_organizations.length > 0 && <div className="report-organizations">{item.notable_organizations.map((organization) => <OrganizationBadge key={organization} name={organization} />)}</div>}
                   <h4>{item.title}</h4>
-                  <p>{item.summary ?? paper?.summary ?? item.why_it_matters ?? ''}</p>
-                  {(paper?.abs_url || item.arxiv_id) && <a href={paper?.abs_url ?? `https://arxiv.org/abs/${item.arxiv_id}`} target="_blank" rel="noreferrer">查看论文 <ExternalLink size={12} /></a>}
+                  <p>{item.summary}</p>
+                  <a href={`https://arxiv.org/abs/${item.arxiv_id}`} target="_blank" rel="noreferrer">查看论文 <ExternalLink size={12} /></a>
                 </div>
               </article>
             )
@@ -251,14 +232,14 @@ function StructuredReport({ report, papers }: { report: DailyReport; papers: Pap
           {report.suggested_reading_queue.map((item) => (
             <article key={`${item.rank}-${item.paper_id}`}>
               <span>{item.rank}</span>
-              <div><h4>{item.title}</h4><p>{item.next_action ?? item.reason}</p></div>
+              <div><h4>{item.title}</h4><p>{item.next_action}</p></div>
               <div><strong>{READING_QUEUE_LABELS[item.priority] ?? item.priority}</strong><small>{item.estimated_minutes ? `${item.estimated_minutes} 分钟` : ''}</small></div>
             </article>
           ))}
         </div>
       </section>
 
-      {report.methodology_note && <footer><CircleAlert size={14} /> {report.methodology_note}</footer>}
+      <footer><CircleAlert size={14} /> {report.methodology_note}</footer>
     </article>
   )
 }
@@ -296,16 +277,16 @@ function AiSynthesisSection({ synthesis }: { synthesis?: DailyReport['ai_synthes
 function ResearchSituation({ situation }: { situation: NonNullable<DailyReport['research_situation']> }) {
   const volumeChange = situation.volume.change
   const evidenceLabels: Record<string, string> = { no_signal: '暂无信号', insufficient_analysis: '分析不足', preliminary: '初步', mixed: '混合证据', strong: '较强证据' }
-  const overview = situation.quality_overview
-  return <section className="report-section situation-section"><div className="report-section-title"><Radar size={16} /><h3>当日研究态势</h3></div><p className="situation-synthesis">{situation.synthesis}</p><div className="situation-grid"><article><span>研究活动</span><strong>{situation.volume.today} 篇</strong><small>较昨日 {volumeChange > 0 ? '+' : ''}{volumeChange} · 近 7 日均值 {situation.volume.recent_daily_average}</small></article><article><span>方向变化</span><strong>{situation.direction_dynamics.rising.length ? situation.direction_dynamics.rising.join('、') : '暂无上升方向'}</strong><small>{situation.direction_dynamics.falling.length ? `回落：${situation.direction_dynamics.falling.join('、')}` : `头部方向占 ${Math.round(situation.direction_dynamics.top_direction_share_percent)}%`}</small></article><article><span>共同方法</span><strong>{situation.method_signals.length ? situation.method_signals.join('、') : '尚未形成稳定共性'}</strong><small>跨论文方法信号</small></article><article><span>证据成熟度</span><strong>{evidenceLabels[situation.evidence_maturity.status] ?? situation.evidence_maturity.status}</strong><small>{situation.evidence_maturity.assessment}</small></article></div>{overview && <QualityOverview overview={overview} />}</section>
+  const scores = situation.score_summary
+  return <section className="report-section situation-section"><div className="report-section-title"><Radar size={16} /><h3>当日研究态势</h3></div><p className="situation-synthesis">{situation.synthesis}</p><div className="situation-grid"><article><span>粗排入选</span><strong>{situation.volume.today} 篇</strong><small>较昨日 {volumeChange > 0 ? '+' : ''}{volumeChange} · 近 7 日均值 {situation.volume.recent_daily_average}</small></article><article><span>粗排分数</span><strong>{scores.average == null ? '暂无评分' : `${Math.round(scores.average)} 分`}</strong><small>高分 {scores.high_score_count} 篇 · 最高 {scores.highest == null ? '—' : Math.round(scores.highest)}</small></article><article><span>共同方法</span><strong>{situation.method_signals.length ? situation.method_signals.join('、') : '尚未形成稳定共性'}</strong><small>跨论文方法信号</small></article><article><span>证据成熟度</span><strong>{evidenceLabels[situation.evidence_maturity.status] ?? situation.evidence_maturity.status}</strong><small>{situation.evidence_maturity.assessment}</small></article></div><QualityOverview overview={situation.quality_overview} /></section>
 }
 
 function QualityOverview({ overview }: { overview: NonNullable<NonNullable<DailyReport['research_situation']>['quality_overview']> }) {
-  return <div className="quality-overview"><header><div><span>优质论文综合总览</span><h4>今日高分论文推进了什么</h4></div><small>推荐分 ≥ {Math.round(overview.score_threshold)} · 纳入 {overview.included_paper_count}/{overview.qualified_paper_count} 篇</small></header><p className="quality-overview-lead">{overview.lead}</p>{overview.main_threads.length > 0 && <div className="quality-threads">{overview.main_threads.map((thread) => <span key={thread.name}><strong>{thread.name}</strong><em>{thread.paper_count} 篇{thread.average_score != null ? ` · 均分 ${thread.average_score}` : ''}</em></span>)}</div>}<div className="quality-findings">{overview.paper_findings.map((item, index) => <article key={String(item.paper_id)}><div className="quality-finding-heading"><span>{String(index + 1).padStart(2, '0')}</span><div><h5>{item.title}</h5><small>{Math.round(item.score)} 分 · {item.analysis_kind === 'deep' ? '全文深读' : item.analysis_kind === 'screening' ? '摘要粗排' : '本地线索'}</small></div></div><p>{item.contribution}</p><dl><div><dt>路线</dt><dd>{item.method}</dd></div><div><dt>证据</dt><dd>{item.evidence}</dd></div><div><dt>留意</dt><dd>{item.limitation}</dd></div></dl></article>)}</div><div className="quality-conclusion"><p><strong>横向比较</strong>{overview.comparison}</p><p><strong>证据判断</strong>{overview.evidence_conclusion}</p></div></div>
+  return <div className="quality-overview"><header><div><span>优质论文综合总览</span><h4>今日高分论文推进了什么</h4></div><small>推荐分 ≥ {Math.round(overview.score_threshold)} · 纳入 {overview.included_paper_count}/{overview.qualified_paper_count} 篇</small></header><p className="quality-overview-lead">{overview.lead}</p><div className="quality-findings">{overview.paper_findings.map((item, index) => <article key={String(item.paper_id)}><div className="quality-finding-heading"><span>{String(index + 1).padStart(2, '0')}</span><div><h5>{item.title}</h5><small>{Math.round(item.score)} 分 · {item.analysis_kind === 'deep' ? '全文深读' : item.analysis_kind === 'screening' ? '摘要粗排' : '本地线索'}</small></div></div><p>{item.contribution}</p><dl><div><dt>路线</dt><dd>{item.method}</dd></div><div><dt>证据</dt><dd>{item.evidence}</dd></div><div><dt>留意</dt><dd>{item.limitation}</dd></div></dl></article>)}</div><div className="quality-conclusion"><p><strong>横向比较</strong>{overview.comparison}</p><p><strong>证据判断</strong>{overview.evidence_conclusion}</p></div></div>
 }
 
 function ReportEvidence({ title, icon, items }: { title: string; icon: ReactNode; items: DailyAggregateItem[] }) {
-  return <section className="report-section evidence-section"><div className="report-section-title">{icon}<h3>{title}</h3></div><div>{items.map((item, index) => { const label = item.name ?? item.item ?? '未命名线索'; return <span key={`${label}-${index}`}><strong>{label}</strong><em>{item.count} 篇</em></span> })}</div></section>
+  return <section className="report-section evidence-section"><div className="report-section-title">{icon}<h3>{title}</h3></div><div>{items.map((item, index) => <span key={`${item.name}-${index}`}><strong>{item.name}</strong><em>{item.count} 篇</em></span>)}</div></section>
 }
 
 function EmailPreview({ report }: { report: DailyReport }) {
@@ -318,21 +299,18 @@ function EmailPreview({ report }: { report: DailyReport }) {
       </header>
       <div className="email-intro">
         <span>当日研究摘要版</span>
-        <h2>当日有 {report.coverage?.high_score_paper_count ?? highlights.length} 篇论文值得关注</h2>
-        <p>共发现 {report.coverage?.candidate_paper_count ?? report.coverage?.paper_count ?? 0} 篇候选，其中 {report.coverage?.paper_count ?? 0} 篇可归入正式研究方向，{report.coverage?.analyzed_paper_count ?? 0} 篇已有分析。</p>
-      </div>
-      <div className="email-stats">
-        {report.topic_insights.slice(0, 4).map((item) => <span key={item.topic_id ?? item.topic}><strong>{item.paper_count}</strong>{item.topic}</span>)}
+        <h2>当日有 {report.coverage.high_score_paper_count} 篇论文值得关注</h2>
+        <p>共 {report.coverage.paper_count} 篇通过摘要粗排，其中 {report.coverage.analyzed_paper_count} 篇已有分析。</p>
       </div>
       <div className="email-papers">
         {highlights.length ? highlights.map((paper, index) => (
           <article key={String(paper.paper_id)}>
             <div className="email-rank">{String(index + 1).padStart(2, '0')}</div>
             <div>
-              <div className="email-paper-meta"><strong>{Math.round(paper.score ?? 0)} 分</strong><span>{paper.arxiv_id ?? paper.recommendation ?? '重点关注'}</span></div>
+              <div className="email-paper-meta"><strong>{Math.round(paper.score)} 分</strong><span>{paper.arxiv_id}</span></div>
               <h3>{paper.title}</h3>
-              <p>{paper.summary || paper.why_it_matters || '建议打开论文核查方法与证据。'}</p>
-              <small>{paper.why_it_matters || paper.recommendation || '已进入当日推荐列表'}</small>
+              <p>{paper.summary || '建议打开论文核查方法与证据。'}</p>
+              <small>{paper.recommendation}</small>
             </div>
           </article>
         )) : <EmptyPapers filtered={false} />}

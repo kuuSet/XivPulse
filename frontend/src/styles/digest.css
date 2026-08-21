@@ -208,38 +208,6 @@
   line-height: 1.7;
 }
 
-.email-stats {
-  display: flex;
-  flex-wrap: wrap;
-  border: solid var(--line);
-  border-width: 1px 0;
-}
-
-.email-stats span {
-  display: flex;
-  min-height: 49px;
-  flex: 1;
-  align-items: center;
-  gap: 5px;
-  padding: 0 12px;
-  border-right: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 8px;
-}
-
-.email-stats span:first-child {
-  padding-left: 0;
-}
-
-.email-stats span:last-child {
-  border-right: 0;
-}
-
-.email-stats strong {
-  color: var(--ink);
-  font-size: 15px;
-}
-
 .email-papers article {
   display: grid;
   grid-template-columns: 36px 1fr;

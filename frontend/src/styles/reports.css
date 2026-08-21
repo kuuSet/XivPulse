@@ -27,10 +27,6 @@
 .quality-overview > header h4 { margin: 4px 0 0; color: #263a33; font-family: Georgia, 'Noto Serif SC', serif; font-size: 16px; }
 .quality-overview > header small { color: var(--quiet); font-size: 8px; white-space: nowrap; }
 .quality-overview-lead { margin: 0; color: #465650; font-size: 10px; line-height: 1.8; }
-.quality-threads { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
-.quality-threads > span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 7px; border-left: 2px solid #4384bb; background: #edf5fb; }
-.quality-threads strong { color: #245f91; font-size: 8px; }
-.quality-threads em { color: var(--quiet); font-size: 7px; font-style: normal; }
 .quality-findings { margin-top: 12px; border-top: 1px solid var(--line); }
 .quality-findings > article { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .quality-finding-heading { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
@@ -72,14 +68,6 @@
 .ai-actions ol { display: grid; gap: 7px; margin: 0; padding: 0 0 0 21px; }
 .ai-actions li { padding-left: 3px; color: #4c5c56; font-size: 9px; line-height: 1.7; }
 .ai-synthesis-content > footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 7px; }
-.insight-list { display: grid; gap: 8px; }
-.insight-list article { display: grid; grid-template-columns: 8px 1fr; gap: 9px; padding: 9px 10px; background: #f3f8fc; }
-.direction-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: #8f9a96; }
-.direction-dot.rising, .direction-dot.new { background: #398062; }
-.direction-dot.falling { background: #b45359; }
-.insight-list strong { display: flex; align-items: center; gap: 6px; font-size: 9px; }
-.insight-list strong em { color: var(--muted); font-size: 7px; font-style: normal; font-weight: 500; }
-.insight-list p { margin: 3px 0 0; color: #5e6965; font-size: 9px; line-height: 1.6; }
 .notable-list > article { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .notable-list > article:last-child { border-bottom: 0; }
 .notable-list > article > span { color: #a0a8a5; font-family: Georgia, serif; font-size: 14px; }

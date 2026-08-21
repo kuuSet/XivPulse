@@ -1,11 +1,10 @@
-import { CheckCircle2, CircleAlert, KeyRound, LayoutDashboard, Library, LoaderCircle, LogOut, Mail, Menu, MoreHorizontal, NotebookTabs, Radar, Settings as SettingsIcon, SlidersHorizontal, TrendingUp, X } from 'lucide-react'
+import { CheckCircle2, CircleAlert, KeyRound, LayoutDashboard, Library, LoaderCircle, LogOut, Mail, Menu, MoreHorizontal, NotebookTabs, Radar, Settings as SettingsIcon, SlidersHorizontal, X } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { DigestView } from './features/digest/DigestView'
 import { PaperWorkspace } from './features/papers/PaperWorkspace'
 import { InterestsView } from './features/interests/InterestsView'
 import { ProjectsView } from './features/projects/ProjectsView'
 import { SettingsView } from './features/settings/SettingsView'
-import { TrendsView } from './features/trends/TrendsView'
 import { api } from './lib/api'
 import { BRAND_LOGO } from './lib/runtime'
 import { applyReading, getReading } from './shared/format'
@@ -20,7 +19,6 @@ const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof Radar }> = [
   { id: 'library', label: '论文库', icon: Library },
   { id: 'digest', label: '研究日报', icon: Mail },
   { id: 'projects', label: '分类库', icon: NotebookTabs },
-  { id: 'trends', label: '研究方向', icon: TrendingUp },
   { id: 'interests', label: '关注设置', icon: SlidersHorizontal },
   { id: 'settings', label: '系统设置', icon: SettingsIcon },
 ]
@@ -320,7 +318,6 @@ function App() {
           <DigestView data={dashboard} state={dashboardState} error={dashboardError} onRetry={() => void loadDashboard(locationDate())} onToast={pushToast} />
         )}
         {view === 'projects' && <ProjectsView projects={projects} onProjectsChange={syncProjects} onPapersReload={loadDashboard} onOpenPaper={(id) => openPaper(id, 'library')} onToast={pushToast} />}
-        {view === 'trends' && <TrendsView onToast={pushToast} />}
         {view === 'interests' && <InterestsView onToast={pushToast} />}
         {view === 'settings' && <SettingsView onToast={pushToast} onFontSizeChange={setUiFontSizePt} />}
       </main>

@@ -13,7 +13,6 @@ import type {
 import type { DailyReport, DailyReportArchiveItem } from '../types/reports'
 import type { AnalysisPromptCatalog, ModelStage, Settings } from '../types/settings'
 import type { AppStatus, AuthSession, JobCalendarData, JobInfo } from '../types/system'
-import type { ResearchRoadmap, TopicTrends } from '../types/trends'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? '/api'
 
@@ -161,9 +160,6 @@ export const api = {
     ),
   removeProjectPaper: (projectId: ProjectId, paperId: PaperId) =>
     request<void>(`/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`, { method: 'DELETE' }),
-  topicTrends: (date?: string) =>
-    request<TopicTrends>(`/trends/topics${date ? `?date=${encodeURIComponent(date)}` : ''}`),
-  roadmap: () => request<ResearchRoadmap>('/trends/roadmap'),
   dailyReport: (date: string) => request<DailyReport>(`/reports/daily?date=${encodeURIComponent(date)}`),
   dailyReportHistory: async (limit = 90) => (
     await request<{ items: DailyReportArchiveItem[]; count: number }>(`/reports/daily/history?limit=${encodeURIComponent(String(limit))}`)

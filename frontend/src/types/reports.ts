@@ -1,47 +1,38 @@
 import type { Paper } from './papers'
-import type { RepresentativePaper, TrendDirection } from './trends'
-
-interface DailyTopicInsight {
-  topic_id?: string
-  topic: string
-  paper_count: number
-  direction?: TrendDirection
-  average_score?: number | null
-  insight: string
-  representative_papers?: RepresentativePaper[]
-}
 
 interface DailyNotablePaper {
   paper_id: Paper['id']
-  arxiv_id?: string
+  arxiv_id: string
   title: string
-  score?: number
-  summary?: string
-  why_it_matters?: string
-  recommendation?: string
-  strengths?: string[]
-  limitations?: string[]
-  notable_organizations?: string[]
+  authors: string[]
+  notable_organizations: string[]
+  published_at: string
+  score: number
+  quality_score: number | null
+  summary: string
+  recommendation: string
+  contributions: string[]
+  methods: string[]
+  evidence: string[]
+  analysis_available: boolean
 }
 
 export interface DailyAggregateItem {
-  name?: string
-  item?: string
+  name: string
   count: number
-  paper_ids?: Array<Paper['id']>
-  papers?: RepresentativePaper[]
+  paper_ids: Array<Paper['id']>
+  shared: boolean
 }
 
 interface DailyReadingQueueItem {
   rank: number
   paper_id: Paper['id']
-  arxiv_id?: string
+  arxiv_id: string
   title: string
-  priority: 'must_read' | 'read' | 'skim' | 'skip' | string
-  score?: number
-  estimated_minutes?: number
-  next_action?: string
-  reason?: string
+  priority: 'must_read' | 'read' | 'skim' | 'skip'
+  score: number
+  estimated_minutes: number
+  next_action: string
 }
 
 interface DailyAiSynthesis {
@@ -76,35 +67,31 @@ interface DailyAiSynthesis {
 }
 
 export interface DailyReport {
-  id?: number
   snapshot_id?: number
   report_date: string
-  title?: string
-  timezone?: string
+  title: string
+  timezone: string
+  date_basis: string
   persisted?: boolean
   generated_at?: string
   updated_at?: string
-  version?: number
-  coverage?: {
+  coverage: {
     fetched?: number
     prefiltered?: number
     prefilter_kept?: number
     screened?: number
     deep_analyzed?: number
     paper_count: number
-    candidate_paper_count?: number
-    unattributed_candidate_count?: number
-    direction_attributed_paper_count?: number
-    direction_attribution_coverage_percent?: number
-    analyzed_paper_count?: number
-    deep_analysis_count?: number
-    analysis_coverage_percent?: number
-    deep_analysis_coverage_percent?: number
-    high_score_paper_count?: number
+    analyzed_paper_count: number
+    deep_analysis_count: number
+    analysis_coverage_percent: number
+    deep_analysis_coverage_percent: number
+    high_score_paper_count: number
+    average_score: number | null
   }
   executive_summary: string
   ai_synthesis?: DailyAiSynthesis
-  research_situation?: {
+  research_situation: {
     synthesis: string
     volume: {
       today: number
@@ -114,56 +101,54 @@ export interface DailyReport {
       status: 'above_baseline' | 'near_baseline' | 'below_baseline'
       assessment: string
     }
-    direction_dynamics: {
-      active: string[]
-      rising: string[]
-      falling: string[]
-      top_direction_share_percent: number
-      concentration: 'high' | 'medium' | 'distributed'
+    score_summary: {
+      average: number | null
+      previous_average: number | null
+      change: number | null
+      highest: number | null
+      high_score_count: number
+      high_score_threshold: number
     }
     method_signals: string[]
     evidence_maturity: {
       status: 'no_signal' | 'insufficient_analysis' | 'preliminary' | 'mixed' | 'strong'
       assessment: string
       strong_signal_count: number
-      shared_strong_signals?: string[]
-      deep_analysis_coverage_percent?: number
+      shared_strong_signals: string[]
+      deep_analysis_coverage_percent: number
     }
-    quality_overview?: {
+    quality_overview: {
       score_threshold: number
       qualified_paper_count: number
       included_paper_count: number
       analyzed_paper_count: number
       deep_analysis_count: number
       lead: string
-      main_threads: Array<{
-        name: string
-        paper_count: number
-        average_score?: number | null
-        paper_ids: Array<Paper['id']>
-      }>
+      score_range: {
+        lowest: number
+        highest: number
+        average: number
+      } | null
       paper_findings: Array<{
         paper_id: Paper['id']
         arxiv_id: string
         title: string
         score: number
-        topics: string[]
         contribution: string
         method: string
         evidence: string
         limitation: string
-        analysis_kind?: string | null
+        analysis_kind: string | null
       }>
       comparison: string
       evidence_conclusion: string
     }
   }
-  topic_insights: DailyTopicInsight[]
   highlight_papers: DailyNotablePaper[]
   common_methods: DailyAggregateItem[]
   common_evidence: DailyAggregateItem[]
   suggested_reading_queue: DailyReadingQueueItem[]
-  methodology_note?: string
+  methodology_note: string
 }
 
 export interface DailyReportArchiveItem {
