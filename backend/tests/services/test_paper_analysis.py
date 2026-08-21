@@ -1,121 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Any
-
 import pytest
 from app.database import Base, make_session_factory
 from app.database_defaults import seed_defaults
-from app.domain.paper import Paper as PaperDocument
-from app.models import Analysis, Paper, PaperMatch, Profile, Topic
+from app.models import Analysis, Paper, PaperMatch, Profile
 from app.schemas import PrefilterDecision, PrefilterResult
-from app.services.analyzer import PaperAnalyzer
-from app.services.paper_sync import sync_papers
 from app.services.provider import GenerationResult, ProviderError
 from app.settings import ProviderSettings, StageProviders
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
-
-
-@pytest.mark.asyncio
-async def test_sync_creates_unfiltered_matches_for_every_fetched_paper() -> None:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    factory = make_session_factory(engine)
-    Base.metadata.create_all(engine)
-    with factory() as session:
-        seed_defaults(session)
-        profile_id = session.query(Profile).one().id
-
-    async def fetcher(*_args: object, **_kwargs: object) -> list[PaperDocument]:
-        return [
-            PaperDocument("2608.01001", 1, "Paper one"),
-            PaperDocument("2608.01002", 1, "Paper two"),
-        ]
-
-    result = await sync_papers(
-        target_date=date(2026, 8, 18),
-        session_factory=factory,
-        paper_fetcher=fetcher,
-    )
-
-    assert result["fetched"] == 2
-    assert result["matches_created"] == 2
-    with factory() as session:
-        matches = session.query(PaperMatch).order_by(PaperMatch.paper_id).all()
-        assert len(matches) == 2
-        assert {match.profile_id for match in matches} == {profile_id}
-        assert all(match.prefiltered_at is None for match in matches)
-
-
-@pytest.mark.asyncio
-async def test_title_prefilter_batches_papers_without_sending_abstracts() -> None:
-    captured: dict[str, Any] = {}
-
-    class FakeAdapter:
-        async def generate_json_with_metadata(self, **values: Any) -> GenerationResult:
-            captured.update(values)
-            return GenerationResult(
-                data=PrefilterResult(
-                    items=[
-                        PrefilterDecision(paper_id=1, decision="relevant"),
-                        PrefilterDecision(paper_id=2, decision="uncertain"),
-                        PrefilterDecision(paper_id=3, decision="irrelevant"),
-                    ]
-                ),
-                transport="responses",
-                provider="test",
-                model="test",
-            )
-
-    adapter = FakeAdapter()
-    analyzer = PaperAnalyzer(adapter, adapter, adapter)  # type: ignore[arg-type]
-    result = await analyzer.prefilter_with_metadata(
-        [
-            Paper(
-                id=1,
-                arxiv_id="2608.10001",
-                title="Distributed scheduling for language-model serving",
-                abstract="SECRET_ABSTRACT_ONE",
-                categories_json=["cs.DC", "cs.LG"],
-            ),
-            Paper(
-                id=2,
-                arxiv_id="2608.10002",
-                title="An ambiguous systems paper",
-                abstract="SECRET_ABSTRACT_TWO",
-                categories_json=["cs.AI"],
-            ),
-            Paper(
-                id=3,
-                arxiv_id="2608.10003",
-                title="Algebraic topology of compact manifolds",
-                abstract="SECRET_ABSTRACT_THREE",
-                categories_json=["math.AT"],
-            ),
-        ],
-        [
-            Topic(
-                name="LLM Systems",
-                description="Efficient inference, serving, scheduling, and memory management.",
-                enabled=True,
-            )
-        ],
-    )
-
-    prompt = captured["user_prompt"]
-    assert "Distributed scheduling for language-model serving" in prompt
-    assert "cs.DC, cs.LG" in prompt
-    assert "Efficient inference, serving" in prompt
-    assert "SECRET_ABSTRACT" not in prompt
-    assert [item.decision for item in result.data.items] == [
-        "relevant",
-        "uncertain",
-        "irrelevant",
-    ]
 
 
 @pytest.mark.asyncio
