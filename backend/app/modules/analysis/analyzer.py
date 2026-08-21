@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from ...models import Paper, Topic
 from ...schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
-from ..provider import GenerationResult, StructuredModelAdapter
+from ...services.provider import GenerationResult, StructuredModelAdapter
 from .fulltext import FullTextDocument, FullTextFetcher
 from .prompts import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,

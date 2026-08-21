@@ -13,10 +13,10 @@ from ...arxiv.repository import PaperRepository
 from ...database import SessionLocal, session_scope
 from ...jobs.service import update_job_progress
 from ...models import Analysis, Paper, PaperMatch, utcnow
+from ...services.provider import TokenUsage
+from ...services.provider_factory import create_model_adapter
+from ...services.state import active_profile
 from ...settings import load_runtime_settings
-from ..provider import TokenUsage
-from ..provider_factory import create_model_adapter
-from ..state import active_profile
 from .analyzer import PaperAnalyzer
 
 

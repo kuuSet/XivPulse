@@ -15,8 +15,8 @@ from sqlalchemy.pool import StaticPool
 async def test_pipeline_screens_only_relevant_and_uncertain_titles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.modules.analysis import pipeline as paper_analysis
     from app.schemas import ScreeningResult
-    from app.services.analysis import pipeline as paper_analysis
 
     engine = create_engine(
         "sqlite://",
@@ -94,7 +94,7 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
 async def test_provider_failure_stops_the_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services.analysis import pipeline as paper_analysis
+    from app.modules.analysis import pipeline as paper_analysis
 
     engine = create_engine(
         "sqlite://",

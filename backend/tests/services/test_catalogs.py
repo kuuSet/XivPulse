@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import pytest
+from app.modules.analysis.analyzer import ANALYSIS_BUDGETS, analysis_budget
+from app.modules.analysis.prompts import (
+    DEEP_ANALYSIS_SYSTEM_PROMPT,
+    PROMPT_TEMPLATES,
+    SCREENING_SYSTEM_PROMPT,
+    prompt_catalog_payload,
+)
 from app.modules.interests.presets import (
     INTEREST_PRESETS,
     PRESET_VERSION,
     initial_topic_values,
     interest_presets_payload,
-)
-from app.services.analysis.analyzer import ANALYSIS_BUDGETS, analysis_budget
-from app.services.analysis.prompts import (
-    DEEP_ANALYSIS_SYSTEM_PROMPT,
-    PROMPT_TEMPLATES,
-    SCREENING_SYSTEM_PROMPT,
-    prompt_catalog_payload,
 )
 from app.services.organizations import watched_organizations
 

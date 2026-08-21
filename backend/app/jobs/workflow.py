@@ -5,7 +5,7 @@ from functools import partial
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..database import SessionLocal
-from ..services.analysis.pipeline import analyze_papers
+from ..modules.analysis.pipeline import analyze_papers
 from ..services.paper_sync import sync_papers
 from ..services.reporting.service import finalize_daily_stage
 from .service import PipelineCoordinator

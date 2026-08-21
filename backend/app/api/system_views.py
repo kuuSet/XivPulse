@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..integrations.codex.catalog import CODEX_MODEL_OPTIONS, CODEX_REASONING_OPTIONS
 from ..models import Analysis, DailyResearchReport, Paper, ReportSynthesisRun
-from ..services.analysis.prompts import resolve_prompt_settings
+from ..modules.analysis.prompts import resolve_prompt_settings
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 
