@@ -180,11 +180,3 @@ def _token_usage_summary(db: Session) -> dict[str, Any]:
             else None
         ),
     }
-
-
-def _provider_public_status(db: Session) -> dict[str, Any]:
-    providers = load_runtime_settings(db).providers
-    return {
-        stage: providers.for_stage(stage).public_dict()
-        for stage in ("prefilter", "screening", "deep", "synthesis")
-    }

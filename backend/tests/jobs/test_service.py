@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 from app.database import Base, make_engine, make_session_factory
-from app.jobs.service import JobConflict, PipelineCoordinator
 from app.models import Job
+from app.modules.jobs.service import JobConflict, PipelineCoordinator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -115,7 +115,7 @@ async def test_analyze_pipeline_skips_sync_and_daily_finalization(
 
 @pytest.mark.asyncio
 async def test_command_runs_the_injected_pipeline() -> None:
-    from app.jobs import command
+    from app.modules.jobs import command
 
     class FakePipeline:
         async def run_daily(self, *, trigger: str) -> dict[str, Any]:

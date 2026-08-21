@@ -10,11 +10,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..bootstrap import bootstrap_application
-from ..database import SessionLocal
-from ..models import Job
-from ..modules.papers.sync import latest_complete_submission_date
-from ..settings import load_runtime_settings
+from ...bootstrap import bootstrap_application
+from ...database import SessionLocal
+from ...models import Job
+from ...settings import load_runtime_settings
+from ..papers.sync import latest_complete_submission_date
 from .service import PipelineCoordinator
 from .workflow import build_pipeline
 

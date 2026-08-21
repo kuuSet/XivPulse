@@ -8,8 +8,8 @@ from app.database import init_db, make_engine, make_session_factory
 
 
 def test_docker_scheduler_runs_at_most_once_per_local_day() -> None:
-    from app.jobs import scheduler
     from app.models import Job
+    from app.modules.jobs import scheduler
 
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)

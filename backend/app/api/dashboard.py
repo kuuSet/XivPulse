@@ -10,7 +10,6 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..jobs.service import RUNNING_STATUSES
 from ..models import (
     Analysis,
     DailyResearchReport,
@@ -21,12 +20,13 @@ from ..models import (
     utcnow,
 )
 from ..modules.interests.views import interests_view
+from ..modules.jobs.service import RUNNING_STATUSES
+from ..modules.jobs.views import _job_wire, _provider_public_status
 from ..modules.papers.views import _paper_wire, _query_papers
 from ..profile import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
-from .presenters.jobs import _job_wire
-from .system_views import _provider_public_status, _settings_wire
+from .system_views import _settings_wire
 
 router = APIRouter()
 

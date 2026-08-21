@@ -6,13 +6,13 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import app.bootstrap as bootstrap_module
-import app.jobs.workflow as workflow
+import app.modules.jobs.workflow as workflow
 import pytest
 from app.bootstrap import bootstrap_application
 from app.database import make_engine, make_session_factory
-from app.jobs.service import PipelineCoordinator
 from app.main import create_app
 from app.models import Job, Profile, utcnow
+from app.modules.jobs.service import PipelineCoordinator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select

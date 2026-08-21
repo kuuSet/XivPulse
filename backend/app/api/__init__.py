@@ -3,12 +3,12 @@
 from fastapi import APIRouter
 
 from ..modules.interests.routes import router as interests_router
+from ..modules.jobs.routes import router as jobs_router
 from ..modules.papers.routes import router as papers_router
 from ..modules.projects.routes import router as projects_router
 from ..modules.reports.routes import router as reports_router
 from .auth import router as auth_router
 from .dashboard import router as dashboard_router
-from .jobs import router as jobs_router
 from .settings import router as settings_router
 
 router = APIRouter()

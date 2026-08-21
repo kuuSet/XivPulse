@@ -4,10 +4,10 @@ from functools import partial
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..database import SessionLocal
-from ..modules.analysis.pipeline import analyze_papers
-from ..modules.papers.sync import sync_papers
-from ..modules.reports.service import finalize_daily_stage
+from ...database import SessionLocal
+from ..analysis.pipeline import analyze_papers
+from ..papers.sync import sync_papers
+from ..reports.service import finalize_daily_stage
 from .service import PipelineCoordinator, update_job_progress
 
 

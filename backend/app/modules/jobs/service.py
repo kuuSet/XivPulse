@@ -16,9 +16,9 @@ from uuid import uuid4
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..database import SessionLocal, session_scope
-from ..models import Job, utcnow
-from ..settings import get_process_settings
+from ...database import SessionLocal, session_scope
+from ...models import Job, utcnow
+from ...settings import get_process_settings
 
 LOG = logging.getLogger("xivpulse.jobs")
 RUNNING_STATUSES = ("queued", "running")

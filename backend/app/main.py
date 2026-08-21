@@ -13,8 +13,8 @@ from .api import router as api_router
 from .api.auth import require_server_auth
 from .bootstrap import bootstrap_application
 from .database import SessionLocal
-from .jobs.service import PipelineCoordinator
-from .jobs.workflow import build_pipeline
+from .modules.jobs.service import PipelineCoordinator
+from .modules.jobs.workflow import build_pipeline
 from .settings import get_process_settings
 from .web import register_frontend
 

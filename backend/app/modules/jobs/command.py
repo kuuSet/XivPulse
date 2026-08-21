@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from ..bootstrap import bootstrap_application
+from ...bootstrap import bootstrap_application
 from .service import PipelineCoordinator
 from .workflow import build_pipeline
 

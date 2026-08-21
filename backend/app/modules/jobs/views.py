@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from ...models import Job
+from ...settings import load_runtime_settings
 
 
 def _job_wire(job: Job | None) -> dict[str, Any] | None:
@@ -21,4 +24,12 @@ def _job_wire(job: Job | None) -> dict[str, Any] | None:
         "created_at": job.created_at,
         "started_at": job.started_at,
         "completed_at": job.completed_at,
+    }
+
+
+def _provider_public_status(db: Session) -> dict[str, Any]:
+    providers = load_runtime_settings(db).providers
+    return {
+        stage: providers.for_stage(stage).public_dict()
+        for stage in ("prefilter", "screening", "deep", "synthesis")
     }

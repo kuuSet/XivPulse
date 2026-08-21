@@ -31,7 +31,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["python", "-m", "app.docker_scheduler"]
+    command: ["python", "-m", "app.modules.jobs.scheduler"]
     env_file:
       - .env.server
     environment:
