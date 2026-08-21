@@ -95,7 +95,7 @@ def build_daily_message(
             [
                 f"{index}. {paper.get('title', '未命名论文')}",
                 f"   推荐分：{paper.get('score', 0)}  arXiv: {paper.get('arxiv_id', '')}",
-                f"   {paper.get('summary') or paper.get('why_it_matters') or ''}",
+                f"   {paper.get('summary') or ''}",
                 f"   {url}" if url else "",
             ]
         )
@@ -109,7 +109,7 @@ def build_daily_message(
             f"<h2>{escape(str(paper.get('title') or '未命名论文'))}</h2>"
             f'<p class="meta">推荐分 {escape(str(paper.get("score", 0)))} · '
             f"arXiv {escape(str(paper.get('arxiv_id') or ''))}</p>"
-            f"<p>{escape(str(paper.get('summary') or paper.get('why_it_matters') or ''))}</p>"
+            f"<p>{escape(str(paper.get('summary') or ''))}</p>"
             + (
                 f'<a href="{escape(_paper_url(settings, paper.get("paper_id")))}">打开论文详情</a>'
                 if _paper_url(settings, paper.get("paper_id"))
