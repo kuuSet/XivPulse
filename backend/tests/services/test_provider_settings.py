@@ -444,7 +444,7 @@ async def test_invalid_responses_output_stops_without_calling_chat() -> None:
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        with pytest.raises(ProviderProtocolError, match="invalid JSON"):
+        with pytest.raises(ProviderProtocolError, match="required schema"):
             await OpenAICompatibleAdapter(
                 _provider_settings(), http_client=client
             ).generate_json_with_metadata(

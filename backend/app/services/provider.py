@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from ..schemas import ProviderTestResult
-from ..settings import ProcessSettings, ProviderSettings, get_process_settings
+from ..settings import ProviderSettings, get_process_settings
 
 TModel = TypeVar("TModel", bound=BaseModel)
 
@@ -98,7 +98,7 @@ class StructuredModelAdapter(Protocol):
     async def test_connection(self) -> ProviderTestResult: ...
 
 
-def _strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
+def strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
     """Convert Pydantic output to the strict object subset expected by Responses."""
 
     schema = model.model_json_schema()
@@ -125,13 +125,6 @@ def _strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
 def _schema_name(model: type[BaseModel]) -> str:
     value = re.sub(r"[^A-Za-z0-9_-]", "_", model.__name__).strip("_")
     return (value or "structured_response")[:64]
-
-
-def _parse_json_text(value: str) -> Any:
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError as exc:
-        raise ProviderProtocolError("Provider returned invalid JSON output") from exc
 
 
 def _responses_text(payload: Mapping[str, Any]) -> str:
@@ -253,7 +246,7 @@ class OpenAICompatibleAdapter:
             raise ProviderError("No API key is configured")
 
         schema_name = schema_name or _schema_name(response_model)
-        schema = _strict_json_schema(response_model)
+        schema = strict_json_schema(response_model)
         common_input = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -338,8 +331,8 @@ class OpenAICompatibleAdapter:
         }
         try:
             raw = await self._request("responses", payload)
-            output = _parse_json_text(_responses_text(raw))
-            return response_model.model_validate(output), _provider_usage(raw, "responses")
+            data = response_model.model_validate_json(_responses_text(raw))
+            return data, _provider_usage(raw, "responses")
         except _ProviderHTTPError as exc:
             raise ProviderError(f"Model provider returned HTTP {exc.status_code}") from exc
         except ValidationError as exc:
@@ -370,8 +363,8 @@ class OpenAICompatibleAdapter:
         }
         try:
             raw = await self._request("chat/completions", payload)
-            output = _parse_json_text(_chat_text(raw))
-            return response_model.model_validate(output), _provider_usage(raw, "chat")
+            data = response_model.model_validate_json(_chat_text(raw))
+            return data, _provider_usage(raw, "chat")
         except _ProviderHTTPError as exc:
             raise ProviderError(f"Model provider returned HTTP {exc.status_code}") from exc
         except ValidationError as exc:
@@ -420,15 +413,3 @@ class _ProviderHTTPError(Exception):
     def __init__(self, status_code: int) -> None:
         self.status_code = status_code
         super().__init__(f"HTTP {status_code}")
-
-
-def create_model_adapter(
-    settings: ProviderSettings,
-    *,
-    process: ProcessSettings | None = None,
-) -> StructuredModelAdapter:
-    if settings.model_source == "codex":
-        from ..integrations.codex.client import CodexAdapter
-
-        return CodexAdapter(settings, process=process)
-    return OpenAICompatibleAdapter(settings)

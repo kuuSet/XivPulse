@@ -21,7 +21,7 @@ from ...models import (
 from ...settings import load_runtime_settings
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ..methods.catalog import clean_custom_methods
-from ..provider import create_model_adapter
+from ..provider_factory import create_model_adapter
 from ..state import active_profile
 from .builder import build_daily_research_report
 from .records import current_date_in_timezone

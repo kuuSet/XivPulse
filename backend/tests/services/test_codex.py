@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 from app.integrations.codex.client import CodexAdapter
-from app.services.provider import ProviderError, create_model_adapter
+from app.services.provider import ProviderError
+from app.services.provider_factory import create_model_adapter
 from app.settings import ProcessSettings, ProviderSettings
 from pydantic import BaseModel
 

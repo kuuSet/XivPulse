@@ -16,7 +16,8 @@ from ..models import Analysis, Paper, PaperMatch, utcnow
 from ..settings import load_runtime_settings
 from .analyzer import PaperAnalyzer
 from .prompt_catalog import resolve_prompt_settings
-from .provider import TokenUsage, create_model_adapter
+from .provider import TokenUsage
+from .provider_factory import create_model_adapter
 from .state import active_profile
 
 

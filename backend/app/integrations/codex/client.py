@@ -17,7 +17,7 @@ from ...services.provider import (
     ProviderError,
     ProviderProtocolError,
     TokenUsage,
-    _strict_json_schema,
+    strict_json_schema,
 )
 from ...settings import ProcessSettings, ProviderSettings, get_process_settings
 
@@ -57,7 +57,7 @@ class CodexAdapter:
             output_path = root / "output.json"
             workspace.mkdir()
             schema_path.write_text(
-                json.dumps(_strict_json_schema(response_model), ensure_ascii=False),
+                json.dumps(strict_json_schema(response_model), ensure_ascii=False),
                 encoding="utf-8",
             )
             environment = self._environment(root)
