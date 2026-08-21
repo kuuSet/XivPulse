@@ -2,11 +2,11 @@
 
 from datetime import UTC, datetime
 
-from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
 from app.database import init_db, make_engine
 from app.domain.paper import Paper as PaperDocument
 from app.models import Paper, PaperVersion
+from app.modules.papers.repository import PaperRepository
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 

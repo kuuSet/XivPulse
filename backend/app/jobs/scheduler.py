@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..bootstrap import bootstrap_application
 from ..database import SessionLocal
 from ..models import Job
-from ..services.paper_sync import latest_complete_submission_date
+from ..modules.papers.sync import latest_complete_submission_date
 from ..settings import load_runtime_settings
 from .service import PipelineCoordinator
 from .workflow import build_pipeline

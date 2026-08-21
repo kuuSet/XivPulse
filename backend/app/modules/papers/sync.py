@@ -10,13 +10,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..arxiv.fetch import fetch_daily
-from ..arxiv.repository import PaperRepository
-from ..database import SessionLocal, session_scope
-from ..domain.paper import Paper
-from ..models import PaperMatch, Topic
-from ..profile import active_profile
-from ..settings import load_runtime_settings
+from ...arxiv.fetch import fetch_daily
+from ...database import SessionLocal, session_scope
+from ...domain.paper import Paper
+from ...models import PaperMatch, Topic
+from ...profile import active_profile
+from ...settings import load_runtime_settings
+from .repository import PaperRepository
 
 
 @dataclass(frozen=True, slots=True)

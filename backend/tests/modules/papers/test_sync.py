@@ -7,7 +7,7 @@ from app.bootstrap import bootstrap_application
 from app.database import make_session_factory
 from app.domain.paper import Paper as PaperDocument
 from app.models import PaperMatch, Profile
-from app.services.paper_sync import sync_papers
+from app.modules.papers.sync import sync_papers
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
