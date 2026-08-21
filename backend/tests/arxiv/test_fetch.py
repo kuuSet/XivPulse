@@ -1,82 +1,13 @@
-"""arXiv metadata, persistence, and affiliation tests."""
+"""arXiv daily-fetch tests."""
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, date, datetime
 
 import arxiv
-import httpx
 import pytest
-from app.arxiv.affiliations import fetch_affiliations
 from app.arxiv.fetch import ArxivFetchError, fetch_daily
-from app.arxiv.repository import PaperRepository
-from app.arxiv.results import parse_arxiv_id
-from app.database import init_db, make_engine
 from app.domain.paper import Paper as PaperDocument
-from app.models import Paper, PaperVersion
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
-
-
-def test_parse_dedupe_and_version_upsert() -> None:
-    assert parse_arxiv_id("https://arxiv.org/pdf/2608.01234v3.pdf") == (
-        "2608.01234",
-        3,
-    )
-    records = [
-        PaperDocument(
-            arxiv_id="2608.01234",
-            version=2,
-            title="Revised title",
-            abstract="Revised robot learning abstract.",
-            authors=["Alice", "Bob"],
-            affiliations=["OpenAI"],
-            categories=["cs.RO", "cs.AI"],
-            primary_category="cs.RO",
-            published_at=datetime(2026, 8, 11, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 8, 12, 10, tzinfo=UTC),
-        )
-    ]
-
-    engine = make_engine("sqlite:///:memory:")
-    init_db(engine, seed=False)
-    with Session(engine) as session:
-        first = PaperDocument(
-            arxiv_id="2608.01234",
-            version=1,
-            title="First title",
-            abstract="First abstract",
-            authors=["Alice"],
-            categories=["cs.RO"],
-        )
-        result = PaperRepository(session).upsert([first])
-        session.commit()
-        assert result.inserted == 1
-        assert result.versions_added == 1
-
-        result = PaperRepository(session).upsert(records)
-        session.commit()
-        paper = session.scalar(select(Paper).where(Paper.arxiv_id == "2608.01234"))
-        assert paper is not None
-        assert paper.latest_version == 2
-        assert paper.title == "Revised title"
-        assert result.updated == 1
-        assert session.scalar(select(func.count()).select_from(Paper)) == 1
-        assert session.scalar(select(func.count()).select_from(PaperVersion)) == 2
-
-        result = PaperRepository(session).upsert(records)
-        assert result.unchanged == 1
-        assert result.versions_added == 0
-        latest_version = session.scalar(
-            select(PaperVersion).where(
-                PaperVersion.paper_id == paper.id,
-                PaperVersion.version == paper.latest_version,
-            )
-        )
-        assert latest_version is not None
-        latest_version.affiliations = ["NVIDIA Research"]
-        assert latest_version.affiliations == ["NVIDIA Research"]
 
 
 class _FakeArxivMetadataClient:
@@ -270,77 +201,3 @@ async def test_daily_fetch_keeps_invalid_input_separate_from_fetch_errors(
             client=metadata,
         )
     assert metadata.searches == []
-
-
-@pytest.mark.asyncio
-async def test_affiliation_fetch_falls_back_to_arxiv_author_header() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "api.semanticscholar.org":
-            return httpx.Response(200, json=[])
-        assert request.url.path == "/html/2608.01234"
-        return httpx.Response(
-            200,
-            text=(
-                '<div class="ltx_authors"><span class="ltx_role_affiliation">'
-                '<span class="ltx_contact_name">Affiliation:</span>Meta AI</span></div>'
-                "<article>NVIDIA baseline.</article>"
-            ),
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await fetch_affiliations(
-            ["2608.01234v2"], http_client=client, rate_limit_seconds=0
-        )
-
-    assert values == {"2608.01234": ["Meta AI"]}
-
-
-@pytest.mark.asyncio
-async def test_affiliation_html_has_an_independent_streaming_limit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from app.arxiv import affiliations as affiliations_module
-
-    monkeypatch.setattr(affiliations_module, "_MAX_AFFILIATION_HTML_BYTES", 8)
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "api.semanticscholar.org":
-            return httpx.Response(200, json=[])
-        return httpx.Response(200, content=b"x" * 9)
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await fetch_affiliations(
-            ["2608.01234"],
-            http_client=client,
-            rate_limit_seconds=0,
-        )
-
-    assert values == {}
-
-
-@pytest.mark.asyncio
-async def test_semantic_scholar_affiliations_require_exact_arxiv_ids() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)
-        assert body == {"ids": ["ARXIV:2608.01234"]}
-        return httpx.Response(
-            200,
-            json=[
-                {
-                    "externalIds": {"ArXiv": "2608.01234"},
-                    "authors": [
-                        {"affiliations": ["Google DeepMind"]},
-                        {"affiliations": ["University College London"]},
-                    ],
-                },
-                {
-                    "externalIds": {"ArXiv": "2608.99999"},
-                    "authors": [{"affiliations": ["OpenAI"]}],
-                },
-            ],
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        values = await fetch_affiliations(["2608.01234v2"], http_client=client)
-
-    assert values == {"2608.01234": ["Google DeepMind", "University College London"]}
