@@ -6,8 +6,8 @@ from email.message import EmailMessage
 from unittest.mock import Mock
 
 import pytest
-from app.services import mailer
-from app.services.mailer import SmtpSettings, build_daily_message, deliver_message
+from app.integrations import mail
+from app.integrations.mail import SmtpSettings, build_daily_message, deliver_message
 
 
 def _smtp_settings(*, security: str = "starttls") -> SmtpSettings:
@@ -74,8 +74,8 @@ def test_delivery_selects_the_configured_smtp_transport(
     client.__enter__ = Mock(return_value=client)
     client.__exit__ = Mock(return_value=False)
     constructor = Mock(return_value=client)
-    monkeypatch.setattr(mailer.ssl, "create_default_context", lambda: context)
-    monkeypatch.setattr(mailer.smtplib, constructor_name, constructor)
+    monkeypatch.setattr(mail.ssl, "create_default_context", lambda: context)
+    monkeypatch.setattr(mail.smtplib, constructor_name, constructor)
     message = EmailMessage()
     message.set_content("test")
 

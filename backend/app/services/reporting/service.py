@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ...database import SessionLocal, session_scope
+from ...integrations.mail import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ...jobs.service import update_job_progress
 from ...models import (
     DailyResearchReport,
@@ -19,7 +20,6 @@ from ...models import (
     utcnow,
 )
 from ...settings import load_runtime_settings
-from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ..provider_factory import create_model_adapter
 from ..state import active_profile
 from .builder import build_daily_research_report
