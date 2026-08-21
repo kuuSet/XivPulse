@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from app.models import Paper, Topic
 from app.schemas import PrefilterDecision, PrefilterResult
-from app.services.analyzer import PaperAnalyzer
+from app.services.analysis.analyzer import PaperAnalyzer
 from app.services.provider import GenerationResult
 
 

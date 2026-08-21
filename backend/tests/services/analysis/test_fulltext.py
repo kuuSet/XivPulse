@@ -10,7 +10,7 @@ from app.models import Paper
 
 @pytest.mark.asyncio
 async def test_fulltext_prefers_html_and_skips_pdf() -> None:
-    from app.services.fulltext import FullTextFetcher
+    from app.services.analysis.fulltext import FullTextFetcher
 
     paths: list[str] = []
 
@@ -53,7 +53,7 @@ async def test_limited_download_stops_reading_as_soon_as_it_exceeds_limit() -> N
 async def test_fulltext_streams_larger_pdfs_to_a_temporary_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.services.fulltext import FullTextFetcher
+    from app.services.analysis.fulltext import FullTextFetcher
 
     paths: list[str] = []
 

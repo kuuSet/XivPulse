@@ -1,4 +1,4 @@
-"""Versioned, user-editable analysis-focus templates with fixed safety rules."""
+"""Versioned analysis-focus templates with fixed safety rules."""
 
 from __future__ import annotations
 

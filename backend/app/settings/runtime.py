@@ -13,8 +13,8 @@ from pydantic_settings import (
 )
 
 from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
+from ..services.analysis.prompts import DEFAULT_PROMPT_TEMPLATE_ID, PROMPT_TEMPLATE_IDS
 from ..services.methods.types import CustomMethod
-from ..services.prompt_catalog import DEFAULT_PROMPT_TEMPLATE_ID, PROMPT_TEMPLATE_IDS
 from .process import (
     ProcessSettings,
     ProviderSettings,

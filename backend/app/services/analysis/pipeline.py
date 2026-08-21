@@ -8,16 +8,16 @@ from typing import Any
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload, sessionmaker
 
-from ..arxiv.affiliations import fetch_affiliations
-from ..arxiv.repository import PaperRepository
-from ..database import SessionLocal, session_scope
-from ..jobs.service import update_job_progress
-from ..models import Analysis, Paper, PaperMatch, utcnow
-from ..settings import load_runtime_settings
+from ...arxiv.affiliations import fetch_affiliations
+from ...arxiv.repository import PaperRepository
+from ...database import SessionLocal, session_scope
+from ...jobs.service import update_job_progress
+from ...models import Analysis, Paper, PaperMatch, utcnow
+from ...settings import load_runtime_settings
+from ..provider import TokenUsage
+from ..provider_factory import create_model_adapter
+from ..state import active_profile
 from .analyzer import PaperAnalyzer
-from .provider import TokenUsage
-from .provider_factory import create_model_adapter
-from .state import active_profile
 
 
 def _date_condition(report_date: date | None):

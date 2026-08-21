@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from html import escape
 from typing import Any, Literal
 
-from ..models import Paper, Topic
-from ..schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
+from ...models import Paper, Topic
+from ...schemas import DeepAnalysisResult, PrefilterResult, ScreeningResult
+from ..provider import GenerationResult, StructuredModelAdapter
 from .fulltext import FullTextDocument, FullTextFetcher
-from .prompt_catalog import (
+from .prompts import (
     DEEP_ANALYSIS_SYSTEM_PROMPT,
     DEFAULT_PROMPT_TEMPLATE_ID,
     PREFILTER_SYSTEM_PROMPT,
@@ -18,7 +19,6 @@ from .prompt_catalog import (
     analysis_prompt_metadata,
     prompt_template,
 )
-from .provider import GenerationResult, StructuredModelAdapter
 
 AnalysisBudgetMode = Literal["economy", "balanced", "deep"]
 

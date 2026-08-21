@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 from app.models import Topic
-from app.services.analyzer import ANALYSIS_BUDGETS, analysis_budget
+from app.services.analysis.analyzer import ANALYSIS_BUDGETS, analysis_budget
+from app.services.analysis.prompts import (
+    DEEP_ANALYSIS_SYSTEM_PROMPT,
+    PROMPT_TEMPLATES,
+    SCREENING_SYSTEM_PROMPT,
+    prompt_catalog_payload,
+)
 from app.services.directions.catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -18,12 +24,6 @@ from app.services.methods.catalog import (
     method_catalog_payload,
 )
 from app.services.organizations import watched_organizations
-from app.services.prompt_catalog import (
-    DEEP_ANALYSIS_SYSTEM_PROMPT,
-    PROMPT_TEMPLATES,
-    SCREENING_SYSTEM_PROMPT,
-    prompt_catalog_payload,
-)
 
 
 def test_direction_catalog_is_versioned_searchable_and_collision_free() -> None:

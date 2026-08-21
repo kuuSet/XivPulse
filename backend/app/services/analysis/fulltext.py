@@ -17,8 +17,8 @@ from bs4 import BeautifulSoup
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from ..arxiv.download import DEFAULT_USER_AGENT, limited_bytes
-from ..models import Paper
+from ...arxiv.download import DEFAULT_USER_AGENT, limited_bytes
+from ...models import Paper
 
 
 @dataclass(slots=True)

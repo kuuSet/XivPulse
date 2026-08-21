@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..analyzer import AnalysisBudgetMode, analysis_budget
+from ..analysis.analyzer import AnalysisBudgetMode, analysis_budget
 from ..provider import (
     GenerationResult,
     ProviderProtocolError,

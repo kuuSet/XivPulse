@@ -7,8 +7,8 @@ import json
 import httpx
 import pytest
 from app.models import Paper, Topic
-from app.services.analyzer import PaperAnalyzer
-from app.services.prompt_catalog import SCREENING_SYSTEM_PROMPT
+from app.services.analysis.analyzer import PaperAnalyzer
+from app.services.analysis.prompts import SCREENING_SYSTEM_PROMPT
 from app.services.provider import OpenAICompatibleAdapter
 from app.settings import ProviderSettings
 
