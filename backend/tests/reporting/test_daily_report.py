@@ -4,10 +4,18 @@ from datetime import UTC, date, datetime
 
 import app.services.reporting.service as reporting_service
 import pytest
+from app.api.reports import router as reports_router
 from app.models import Analysis, Paper, PaperMatch, Profile
 from app.services.reporting.builder import build_daily_research_report
+from app.services.reporting.service import persist_daily_report, report_snapshot
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+
+def test_direction_reporting_routes_are_removed() -> None:
+    paths = {route.path for route in reports_router.routes}
+    assert "/api/trends/topics" not in paths
+    assert "/api/trends/roadmap" not in paths
 
 
 @pytest.mark.asyncio
@@ -54,68 +62,84 @@ async def test_daily_finalize_merges_report_synthesis_and_delivery_results(
     assert reported_progress == [88, 94]
 
 
-def test_daily_report_contains_all_research_sections(analytics_session: Session) -> None:
+def test_daily_report_uses_scores_and_saved_analysis(analytics_session: Session) -> None:
     report = build_daily_research_report(
         analytics_session,
         1,
         report_date=date(2026, 8, 12),
         timezone_name="UTC",
     )
+
     assert report["coverage"] == {
         "paper_count": 2,
-        "candidate_paper_count": 2,
-        "direction_attributed_paper_count": 2,
-        "direction_attribution_coverage_percent": 100.0,
         "analyzed_paper_count": 2,
         "deep_analysis_count": 2,
         "analysis_coverage_percent": 100.0,
         "deep_analysis_coverage_percent": 100.0,
         "high_score_paper_count": 2,
+        "average_score": 90.0,
     }
     assert "共纳入 2 篇" in report["executive_summary"]
     assert report["highlight_papers"][0]["arxiv_id"] == "2608.00001"
     assert report["highlight_papers"][0]["recommendation"] == "must_read"
     assert report["suggested_reading_queue"][0]["priority"] == "must_read"
+    assert "topics" not in report["highlight_papers"][0]
+    assert "why_it_matters" not in report["highlight_papers"][0]
+    assert "reason" not in report["suggested_reading_queue"][0]
+    assert "topic_insights" not in report
+    assert "daily_trend" not in report
 
     methods = {item["name"]: item for item in report["common_methods"]}
     assert methods["模仿学习"]["count"] == 2
     assert methods["模仿学习"]["shared"] is True
-    overview_limitations = {
-        item["limitation"]
-        for item in report["research_situation"]["quality_overview"]["paper_findings"]
-    }
-    assert "Evaluation uses one robot platform" in overview_limitations
-    assert report["topic_insights"][0]["paper_count"] >= 1
-    assert report["daily_trend"]["previous_paper_count"] == 1
     situation = report["research_situation"]
     assert situation["volume"]["today"] == 2
     assert situation["volume"]["previous_day"] == 1
-    assert situation["direction_dynamics"]["active"][:3] == [
-        "Robot Learning",
-        "World Models",
-        "VLA",
-    ]
+    assert situation["score_summary"] == {
+        "average": 90.0,
+        "previous_average": 78.0,
+        "change": 12.0,
+        "highest": 94.0,
+        "high_score_count": 2,
+        "high_score_threshold": 80.0,
+    }
+    assert "direction_dynamics" not in situation
     assert "模仿学习" in situation["method_signals"]
-    assert "当日共纳入 2 篇" in situation["synthesis"]
     assert situation["evidence_maturity"]["status"] in {"mixed", "strong"}
-    assert situation["evidence_maturity"]["strong_signal_count"] == 1
     assert situation["evidence_maturity"]["shared_strong_signals"] == ["真实机器人实验"]
-    assert situation["evidence_maturity"]["deep_analysis_coverage_percent"] == 100.0
+
     overview = situation["quality_overview"]
-    assert overview["score_threshold"] == 80.0
     assert overview["qualified_paper_count"] == 2
-    assert overview["included_paper_count"] == 2
-    assert overview["deep_analysis_count"] == 2
+    assert overview["score_range"] == {"lowest": 86.0, "highest": 94.0, "average": 90.0}
+    assert "main_threads" not in overview
     assert overview["paper_findings"][0]["arxiv_id"] == "2608.00001"
-    assert overview["paper_findings"][0]["analysis_kind"] == "deep"
+    assert "topics" not in overview["paper_findings"][0]
     assert "Action-conditioned latent dynamics" in overview["paper_findings"][0]["contribution"]
-    assert "模仿学习" in overview["comparison"]
     assert "submittedDate" in report["date_basis"]
-    assert "按设置时区" in report["date_basis"]
-    assert "submittedDate" in report["methodology_note"]
+    assert "关键词或 arXiv 分类伪造关注标签归因" in report["methodology_note"]
 
 
-def test_report_aggregates_controlled_labels_but_keeps_paper_level_details(
+def test_daily_report_persists_the_score_only_contract(analytics_session: Session) -> None:
+    snapshot = persist_daily_report(
+        analytics_session,
+        1,
+        report_date=date(2026, 8, 12),
+        timezone_name="UTC",
+    )
+    analytics_session.commit()
+    payload = report_snapshot(snapshot)
+
+    assert payload["persisted"] is True
+    assert payload["snapshot_id"] == snapshot.id
+    assert payload["report_date"] == "2026-08-12"
+    assert payload["coverage"]["paper_count"] == 2
+    assert payload["highlight_papers"][0]["score"] == 94.0
+    assert payload["suggested_reading_queue"][0]["score"] == 94.0
+    assert "generated_at" in payload
+    assert "updated_at" in payload
+
+
+def test_report_keeps_controlled_aggregates_and_paper_details(
     analytics_session: Session,
 ) -> None:
     paper = analytics_session.scalar(select(Paper).where(Paper.arxiv_id == "2608.00001"))
@@ -150,36 +174,34 @@ def test_report_aggregates_controlled_labels_but_keeps_paper_level_details(
     assert long_evidence in highlight["evidence"]
 
 
-def test_report_is_complete_when_no_paper_or_analysis_exists(
-    analytics_session: Session,
-) -> None:
+def test_report_is_complete_when_no_scored_paper_exists(analytics_session: Session) -> None:
     report = build_daily_research_report(
         analytics_session,
         1,
         report_date=date(2026, 8, 20),
         timezone_name="UTC",
     )
+
     assert report["coverage"]["paper_count"] == 0
-    assert "未发现" in report["executive_summary"]
-    assert report["topic_insights"] == []
+    assert report["coverage"]["average_score"] is None
+    assert "没有已完成摘要粗排" in report["executive_summary"]
     assert report["highlight_papers"] == []
     assert report["common_methods"] == []
     assert report["common_evidence"] == []
     assert report["suggested_reading_queue"] == []
     assert report["research_situation"]["volume"]["today"] == 0
+    assert report["research_situation"]["score_summary"]["average"] is None
     assert report["research_situation"]["evidence_maturity"]["status"] == "no_signal"
-    assert "低活动日" in report["research_situation"]["synthesis"]
 
 
-def test_report_falls_back_to_abstract_without_any_analysis(
-    analytics_session: Session,
-) -> None:
+def test_report_falls_back_to_abstract_without_analysis(analytics_session: Session) -> None:
     report = build_daily_research_report(
         analytics_session,
         1,
         report_date=date(2026, 8, 11),
         timezone_name="UTC",
     )
+
     assert report["coverage"]["paper_count"] == 1
     assert report["coverage"]["analyzed_paper_count"] == 0
     assert report["highlight_papers"][0]["analysis_available"] is False
@@ -190,24 +212,22 @@ def test_report_falls_back_to_abstract_without_any_analysis(
     assert report["suggested_reading_queue"][0]["priority"] == "skim"
 
 
-def test_daily_report_accepts_llm_topics_and_rejects_unknown_labels(
+def test_report_includes_every_scored_paper_without_direction_attribution(
     analytics_session: Session,
 ) -> None:
     profile = analytics_session.get(Profile, 1)
     assert profile is not None
+    published_at = datetime(2026, 8, 12, 13, tzinfo=UTC)
     paper = Paper(
         arxiv_id="2608.00995",
-        title="Transformer Benchmark for an Unrelated Candidate",
-        abstract=(
-            "A benchmark with a user study and real robot experiments, but no "
-            "configured research-direction evidence."
-        ),
+        title="A High-scoring Systems Paper",
+        abstract="A systems paper selected by the score-only screening stage.",
         authors_json=["Researcher"],
-        categories_json=["cs.RO"],
-        primary_category="cs.RO",
-        published_at=datetime(2026, 8, 12, 13, tzinfo=UTC),
-        first_seen_at=datetime(2026, 8, 12, 13, tzinfo=UTC),
-        last_seen_at=datetime(2026, 8, 12, 13, tzinfo=UTC),
+        categories_json=["cs.DC"],
+        primary_category="cs.DC",
+        published_at=published_at,
+        first_seen_at=published_at,
+        last_seen_at=published_at,
     )
     analytics_session.add(paper)
     analytics_session.flush()
@@ -215,29 +235,10 @@ def test_daily_report_accepts_llm_topics_and_rejects_unknown_labels(
         PaperMatch(
             paper_id=paper.id,
             profile_id=profile.id,
-            matched_topics_json=["cs.RO", "Navigation"],
             prefilter_decision="relevant",
-            prefiltered_at=paper.published_at,
+            prefiltered_at=published_at,
             screening_relevance_score=99,
-            screened_at=paper.published_at,
-        )
-    )
-    analytics_session.add(
-        Analysis(
-            paper_id=paper.id,
-            profile_id=profile.id,
-            kind="deep",
-            status="completed",
-            provider="mock",
-            model="mock",
-            summary="An intentionally unrelated analyzed candidate.",
-            relevance_score=99,
-            payload_json={
-                "methods": ["Candidate-only method"],
-                "evidence": ["Candidate-only evidence"],
-                "limitations": ["Candidate-only limitation"],
-            },
-            created_at=datetime(2026, 8, 12, 13, tzinfo=UTC),
+            screened_at=published_at,
         )
     )
     analytics_session.commit()
@@ -249,24 +250,13 @@ def test_daily_report_accepts_llm_topics_and_rejects_unknown_labels(
         timezone_name="UTC",
     )
 
-    assert report["coverage"]["candidate_paper_count"] == 3
     assert report["coverage"]["paper_count"] == 3
-    assert report["coverage"]["direction_attribution_coverage_percent"] == 100.0
-    assert report["daily_trend"]["candidate_paper_count"] == 3
-    assert report["daily_trend"]["paper_count"] == 3
-    assert paper.id in {item["paper_id"] for item in report["highlight_papers"]}
-    assert paper.id in {item["paper_id"] for item in report["suggested_reading_queue"]}
-    assert {item["name"] for item in report["daily_trend"]["topics"]} >= {"Navigation"}
-    overview_ids = {
-        item["paper_id"]
-        for item in report["research_situation"]["quality_overview"]["paper_findings"]
-    }
-    assert paper.id in overview_ids
+    assert report["coverage"]["average_score"] == 93.0
+    assert report["highlight_papers"][0]["paper_id"] == paper.id
+    assert report["suggested_reading_queue"][0]["paper_id"] == paper.id
 
 
-def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
-    analytics_session: Session,
-) -> None:
+def test_screening_only_batch_is_not_strong_evidence(analytics_session: Session) -> None:
     profile = analytics_session.get(Profile, 1)
     assert profile is not None
     for index in range(3):
@@ -291,7 +281,6 @@ def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
             PaperMatch(
                 paper_id=paper.id,
                 profile_id=profile.id,
-                matched_topics_json=["VLA"],
                 prefilter_decision="relevant",
                 prefiltered_at=published_at,
                 screening_relevance_score=85,
@@ -306,8 +295,6 @@ def test_screening_only_batch_cannot_be_reported_as_strong_evidence(
                 status="completed",
                 provider="mock",
                 model="mock",
-                summary="Screening only.",
-                payload_json={"matched_topics": ["VLA"]},
                 created_at=published_at,
             )
         )

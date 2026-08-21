@@ -84,8 +84,7 @@ def build_daily_message(
         synthesis = f"{synthesis[:1599]}…"
     report_url = _report_url(settings, report_date)
     coverage_text = (
-        f"候选 {coverage.get('candidate_paper_count', 0)} 篇，"
-        f"正式方向相关 {coverage.get('paper_count', 0)} 篇，"
+        f"摘要粗排 {coverage.get('paper_count', 0)} 篇，"
         f"已分析 {coverage.get('analyzed_paper_count', 0)} 篇，"
         f"深读 {coverage.get('deep_analysis_count', 0)} 篇"
     )

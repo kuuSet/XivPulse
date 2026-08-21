@@ -30,7 +30,6 @@ def test_daily_message_contains_links_and_escapes_html() -> None:
             "report_date": "2026-08-21",
             "executive_summary": "Evidence <must> remain text.",
             "coverage": {
-                "candidate_paper_count": 3,
                 "paper_count": 2,
                 "analyzed_paper_count": 1,
                 "deep_analysis_count": 1,
@@ -53,6 +52,7 @@ def test_daily_message_contains_links_and_escapes_html() -> None:
     assert message["Subject"] == "2026-08-21 arXiv 当日研究总结"
     assert "view=digest" in plain
     assert "paper=7" in plain
+    assert "摘要粗排 2 篇" in plain
     assert "<script>alert(1)</script>" in plain
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html

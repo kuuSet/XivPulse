@@ -1,31 +1,22 @@
-"""Deterministic direction trends, research maps, and daily research reports.
-
-The analytics in this module deliberately stay local and model-free.  They
-summarize the data already stored in ``Paper``, ``PaperMatch`` and ``Analysis``
-and return JSON-ready dictionaries that can be exposed by an API route.
-"""
+"""Shared records and values for daily research reports."""
 
 from __future__ import annotations
 
-import hashlib
 import math
 import re
 import unicodedata
-from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
-from typing import Any, Literal
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ...models import Analysis, Paper, PaperMatch, Profile, Topic
-from ..directions.matching import canonical_requested_direction_names
+from ...models import Analysis, Paper, PaperMatch
 
 DEFAULT_TIMEZONE = "Asia/Shanghai"
-DEFAULT_TREND_LIMIT = 12
 DAILY_QUALITY_SCORE_THRESHOLD = 80.0
 DAILY_QUALITY_OVERVIEW_LIMIT = 6
 ARXIV_BATCH_DATE_BASIS = (
@@ -56,20 +47,11 @@ _EVIDENCE_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 @dataclass(frozen=True, slots=True)
-class _Label:
-    key: str
-    name: str
-    source: Literal["followed_topic"]
-    terms: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class _PaperSignal:
     paper: Paper
     match: PaperMatch
     analysis: Analysis | None
     timestamp: datetime
-    labels: tuple[_Label, ...]
 
 
 def _as_timezone(timezone_name: str) -> tzinfo:
@@ -87,8 +69,6 @@ def _target_day(value: date | datetime | None, timezone: tzinfo) -> date:
 
 
 def current_date_in_timezone(timezone_name: str = DEFAULT_TIMEZONE) -> date:
-    """Return the current calendar date in the configured research timezone."""
-
     return _target_day(None, _as_timezone(timezone_name))
 
 
@@ -98,9 +78,7 @@ def _day_bounds(day: date, timezone: tzinfo) -> tuple[datetime, datetime]:
 
 
 def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _paper_time(paper: Paper) -> datetime:
@@ -149,11 +127,6 @@ def _key(value: str) -> str:
     return _clean_phrase(value).casefold()
 
 
-def _topic_id(key: str) -> str:
-    digest = hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
-    return f"topic-{digest}"
-
-
 def _payload(analysis: Analysis | None) -> dict[str, Any]:
     return dict(analysis.payload_json or {}) if analysis is not None else {}
 
@@ -192,72 +165,24 @@ def _latest_analysis(paper: Paper, profile_id: int) -> Analysis | None:
     )
 
 
-def _labels(
-    match: PaperMatch,
-    *,
-    topics_by_key: Mapping[str, _Label],
-    configured_topics: Sequence[Topic],
-) -> tuple[_Label, ...]:
-    """Return current followed topics selected by abstract LLM screening."""
-
-    names = canonical_requested_direction_names(
-        match.matched_topics,
-        configured_topics,
-        relevant=True,
-    )
-    return tuple(topics_by_key[_key(name)] for name in names)
-
-
 def _load_records(session: Session, profile_id: int) -> list[_PaperSignal]:
-    profile = session.scalar(
-        select(Profile)
-        .where(Profile.id == profile_id)
-        .options(selectinload(Profile.topics))
-        .execution_options(populate_existing=True)
-    )
-    configured_topics = profile.topics if profile is not None else []
-    topics_by_key: dict[str, _Label] = {}
-    for topic in configured_topics:
-        if not topic.enabled:
-            continue
-        name = _clean_phrase(topic.name, max_length=120)
-        normalized = _key(name)
-        if not name or not normalized:
-            continue
-        topics_by_key.setdefault(
-            normalized,
-            _Label(normalized, name, "followed_topic", tuple(topic.keywords)),
-        )
-
     matches = session.scalars(
         select(PaperMatch)
-        .where(
-            PaperMatch.profile_id == profile_id,
-            PaperMatch.screened_at.is_not(None),
-        )
+        .where(PaperMatch.profile_id == profile_id, PaperMatch.screened_at.is_not(None))
         .options(selectinload(PaperMatch.paper).selectinload(Paper.analyses))
         .execution_options(populate_existing=True)
         .order_by(PaperMatch.paper_id)
     ).all()
-    records: list[_PaperSignal] = []
-    for match in matches:
-        if match.paper.withdrawn:
-            continue
-        analysis = _latest_analysis(match.paper, profile_id)
-        records.append(
-            _PaperSignal(
-                paper=match.paper,
-                match=match,
-                analysis=analysis,
-                timestamp=_paper_time(match.paper),
-                labels=_labels(
-                    match,
-                    topics_by_key=topics_by_key,
-                    configured_topics=[topic for topic in configured_topics if topic.enabled],
-                ),
-            )
+    return [
+        _PaperSignal(
+            paper=match.paper,
+            match=match,
+            analysis=_latest_analysis(match.paper, profile_id),
+            timestamp=_paper_time(match.paper),
         )
-    return records
+        for match in matches
+        if not match.paper.withdrawn
+    ]
 
 
 def _within(records: Iterable[_PaperSignal], start: datetime, end: datetime) -> list[_PaperSignal]:
@@ -275,106 +200,3 @@ def _sort_records(records: Iterable[_PaperSignal]) -> list[_PaperSignal]:
             record.paper.id,
         ),
     )
-
-
-def _representative_papers(
-    records: Iterable[_PaperSignal], *, limit: int = 3
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "paper_id": record.paper.id,
-            "arxiv_id": record.paper.arxiv_id,
-            "title": record.paper.title,
-            "score": _score(record.match),
-        }
-        for record in _sort_records(records)[:limit]
-    ]
-
-
-def _period_payload(
-    current: Sequence[_PaperSignal],
-    previous: Sequence[_PaperSignal],
-    *,
-    granularity: Literal["day", "week"],
-    current_start: date,
-    current_end: date,
-    previous_start: date,
-    previous_end: date,
-    limit: int,
-) -> dict[str, Any]:
-    candidate_count = len(current)
-    previous_candidate_count = len(previous)
-    current = [record for record in current if record.labels]
-    previous = [record for record in previous if record.labels]
-    current_counts: Counter[str] = Counter()
-    previous_counts: Counter[str] = Counter()
-    labels: dict[str, _Label] = {}
-    sources: defaultdict[str, set[str]] = defaultdict(set)
-    current_records: defaultdict[str, list[_PaperSignal]] = defaultdict(list)
-
-    for record in current:
-        for label in record.labels:
-            current_counts[label.key] += 1
-            current_records[label.key].append(record)
-            labels.setdefault(label.key, label)
-            sources[label.key].add(label.source)
-    for record in previous:
-        for label in record.labels:
-            previous_counts[label.key] += 1
-            labels.setdefault(label.key, label)
-            sources[label.key].add(label.source)
-
-    keys = sorted(
-        current_counts.keys() | previous_counts.keys(),
-        key=lambda value: (
-            -current_counts[value],
-            -(current_counts[value] - previous_counts[value]),
-            labels[value].name.casefold(),
-        ),
-    )[: max(0, limit)]
-    topics: list[dict[str, Any]] = []
-    for value in keys:
-        count = current_counts[value]
-        previous_count = previous_counts[value]
-        change = count - previous_count
-        if count > 0 and previous_count == 0:
-            direction = "new"
-        elif change > 0:
-            direction = "rising"
-        elif change < 0:
-            direction = "falling"
-        else:
-            direction = "stable"
-        records_for_topic = current_records[value]
-        topics.append(
-            {
-                "id": _topic_id(value),
-                "name": labels[value].name,
-                "sources": sorted(sources[value]),
-                "count": count,
-                "previous_count": previous_count,
-                "change": change,
-                "change_percent": (
-                    round(change / previous_count * 100.0, 1) if previous_count else None
-                ),
-                "direction": direction,
-                "share_percent": round(count / len(current) * 100.0, 1) if current else 0.0,
-                "average_score": _mean(_score(item.match) for item in records_for_topic),
-                "average_quality": _mean(_quality(item.analysis) for item in records_for_topic),
-                "representative_papers": _representative_papers(records_for_topic),
-            }
-        )
-    return {
-        "granularity": granularity,
-        "start_date": current_start.isoformat(),
-        "end_date": current_end.isoformat(),
-        "previous_start_date": previous_start.isoformat(),
-        "previous_end_date": previous_end.isoformat(),
-        "paper_count": len(current),
-        "previous_paper_count": len(previous),
-        "candidate_paper_count": candidate_count,
-        "previous_candidate_paper_count": previous_candidate_count,
-        "direction_attributed_paper_count": len(current),
-        "previous_direction_attributed_paper_count": len(previous),
-        "topics": topics,
-    }

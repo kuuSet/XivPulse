@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 from app.database import Base, make_engine
-from app.models import Analysis, Paper, PaperMatch, Profile, Topic
+from app.models import Analysis, Paper, PaperMatch, Profile
 from sqlalchemy.orm import Session
 
 
@@ -16,22 +16,6 @@ def analytics_session() -> Session:
     profile = Profile()
     session.add(profile)
     session.flush()
-    configured_topics = {
-        "VLA": ["vision language action", "vla"],
-        "World Models": ["world model"],
-        "Robot Learning": ["robot learning", "behavior cloning"],
-        "Navigation": ["visual navigation"],
-    }
-    for name, keywords in configured_topics.items():
-        session.add(
-            Topic(
-                profile_id=profile.id,
-                name=name,
-                keywords_json=keywords,
-                arxiv_categories_json=["cs.RO"],
-                enabled=True,
-            )
-        )
 
     def add_paper(
         arxiv_id: str,
@@ -39,8 +23,6 @@ def analytics_session() -> Session:
         abstract: str,
         published_at: datetime,
         *,
-        topics: list[str],
-        keywords: list[str],
         score: float,
         analysis: dict[str, object] | None = None,
     ) -> None:
@@ -61,11 +43,9 @@ def analytics_session() -> Session:
             PaperMatch(
                 paper_id=paper.id,
                 profile_id=profile.id,
-                matched_topics_json=topics,
                 prefilter_decision="relevant",
                 prefiltered_at=published_at,
                 screening_relevance_score=score,
-                reason=f"Relevant to {', '.join(topics)}",
                 screened_at=published_at,
             )
         )
@@ -103,8 +83,6 @@ def analytics_session() -> Session:
         "Vision Language Action with a World Model",
         "Real robot experiments and an ablation study demonstrate generalization.",
         datetime(2026, 8, 12, 2, tzinfo=UTC),
-        topics=["VLA", "World Models"],
-        keywords=["vision language action", "world model"],
         score=94,
         analysis={
             "summary": "A world model improves a vision-language-action policy.",
@@ -126,8 +104,6 @@ def analytics_session() -> Session:
         "Scalable Robot Learning via Behavior Cloning",
         "A benchmark and real robot evaluation across multiple tasks.",
         datetime(2026, 8, 12, 7, tzinfo=UTC),
-        topics=["Robot Learning"],
-        keywords=["robot learning", "behavior cloning"],
         score=86,
         analysis={
             "summary": "Large-scale behavior cloning for robot control.",
@@ -144,8 +120,6 @@ def analytics_session() -> Session:
         "Previous VLA Study",
         "A simulation benchmark.",
         datetime(2026, 8, 11, 4, tzinfo=UTC),
-        topics=["VLA"],
-        keywords=["vision language action"],
         score=78,
     )
     add_paper(
@@ -153,8 +127,6 @@ def analytics_session() -> Session:
         "Earlier Navigation Study",
         "Visual navigation in simulation.",
         datetime(2026, 8, 4, 4, tzinfo=UTC),
-        topics=["Navigation"],
-        keywords=["visual navigation"],
         score=70,
     )
     session.commit()

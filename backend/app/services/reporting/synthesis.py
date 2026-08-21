@@ -45,7 +45,6 @@ _SOURCE_KEYS = (
     "coverage",
     "executive_summary",
     "research_situation",
-    "topic_insights",
     "highlight_papers",
     "common_methods",
     "common_evidence",

@@ -1,1 +1,1 @@
-"""Trend, roadmap, and daily research reporting."""
+"""Daily research reporting."""

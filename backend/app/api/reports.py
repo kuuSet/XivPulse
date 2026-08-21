@@ -12,55 +12,17 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import DailyResearchReport
-from ..services.reporting.roadmap import build_research_roadmap
 from ..services.reporting.service import (
     persist_daily_report,
     report_snapshot,
     send_daily_report_email,
     synthesize_daily_report,
 )
-from ..services.reporting.trends import build_topic_trends
 from ..services.state import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 
 router = APIRouter()
-
-
-@router.get("/api/trends/topics")
-def topic_trends(
-    as_of: date | None = Query(default=None, alias="date"),
-    limit: int = Query(default=12, ge=1, le=30),
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    profile = active_profile(db)
-    timezone_name = load_runtime_settings(db).schedule_timezone
-    return build_topic_trends(
-        db,
-        profile.id,
-        as_of=as_of,
-        timezone_name=timezone_name,
-        limit=limit,
-    )
-
-
-@router.get("/api/trends/roadmap")
-def research_roadmap(
-    as_of: date | None = Query(default=None, alias="date"),
-    days: int = Query(default=90, ge=7, le=730),
-    max_nodes: int = Query(default=30, ge=5, le=60),
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    profile = active_profile(db)
-    timezone_name = load_runtime_settings(db).schedule_timezone
-    return build_research_roadmap(
-        db,
-        profile.id,
-        as_of=as_of,
-        timezone_name=timezone_name,
-        days=days,
-        max_nodes=max_nodes,
-    )
 
 
 @router.get("/api/reports/daily/history")
