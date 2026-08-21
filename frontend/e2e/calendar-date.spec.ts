@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { mockAppShell } from './support'
 
 test('calendar dates load only papers from the selected day', async ({ page }) => {
+  await mockAppShell(page)
   const requestedDates: Array<string | null> = []
   const runDates: string[] = []
   const paper = (day: string) => ({
@@ -35,7 +37,6 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
         screened_papers: 1,
         high_priority_papers: 1,
         items: [paper(day)],
-        topic_stats: [],
         interests: { watched_authors: [], watched_organizations: [] },
       }),
     })
@@ -97,6 +98,7 @@ test('calendar dates load only papers from the selected day', async ({ page }) =
 })
 
 test('opening a paper preserves the workspace position and resets only the reader', async ({ page }) => {
+  await mockAppShell(page)
   const paper = (id: number) => ({
     id,
     arxiv_id: `2608.2000${id}`,
@@ -126,7 +128,6 @@ test('opening a paper preserves the workspace position and resets only the reade
         screened_papers: 2,
         high_priority_papers: 2,
         items: [paper(1), paper(2)],
-        topic_stats: [],
         interests: { watched_authors: [], watched_organizations: [] },
       }),
     })

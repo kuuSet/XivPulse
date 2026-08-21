@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { mockAppShell } from './support'
 
 test('watch categories are peer sections and auto-save independently', async ({ page }) => {
+  await mockAppShell(page)
   const savedInterests: Array<{
     topics: Array<{ name: string, description: string }>
     watched_authors: string[]
@@ -8,7 +10,7 @@ test('watch categories are peer sections and auto-save independently', async ({ 
   }> = []
   await page.route('**/api/interests', async (route) => {
     if (route.request().method() !== 'PUT') {
-      await route.continue()
+      await route.fallback()
       return
     }
     const payload = route.request().postDataJSON() as typeof savedInterests[number]

@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { mockAppShell } from './support'
 
 test('today papers can prioritize watched authors or organizations', async ({ page }) => {
+  await mockAppShell(page)
   const paper = (id: number, title: string, authors: string[], affiliations: string[], score: number) => ({
     id,
     arxiv_id: `2608.5000${id}`,
@@ -34,7 +36,6 @@ test('today papers can prioritize watched authors or organizations', async ({ pa
           paper(2, 'Watched author paper', ['Jane Doe'], ['Other Lab'], 75),
           paper(3, 'Watched organization paper', ['John Smith'], ['NVIDIA Research'], 70),
         ],
-        topic_stats: [],
         interests: {
           watched_authors: ['Jane Doe'],
           watched_organizations: ['NVIDIA'],
@@ -55,6 +56,7 @@ test('today papers can prioritize watched authors or organizations', async ({ pa
 })
 
 test('abstract-scored papers show the LLM relevance score', async ({ page }) => {
+  await mockAppShell(page)
   await page.route('**/api/dashboard*', async (route) => {
     await route.fulfill({
       status: 200,
@@ -97,7 +99,6 @@ test('abstract-scored papers show the LLM relevance score', async ({ page }) => 
           reading: { state: 'unread', priority: 3, notes: '', tags: [] },
           project_memberships: [],
         }],
-        topic_stats: [],
         interests: { watched_authors: [], watched_organizations: [] },
       }),
     })

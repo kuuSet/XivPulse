@@ -1,17 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { mockAppShell } from './support'
 
 test('daily report opens the latest saved date without treating it as a completed run', async ({ page }) => {
+  await mockAppShell(page)
   const requestedDates: Array<string | null> = []
-
-  await page.route('**/api/auth/session', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: false, authenticated: true }) })
-  })
-  await page.route('**/api/projects', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], count: 0 }) })
-  })
-  await page.route('**/api/status', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ busy: false, active_job: null, latest_job: null }) })
-  })
   await page.route('**/api/dashboard*', async (route) => {
     await route.fulfill({
       status: 200,
@@ -24,14 +16,13 @@ test('daily report opens the latest saved date without treating it as a complete
         screened_papers: 0,
         high_priority_papers: 0,
         items: [],
-        topic_stats: [],
         interests: { topics: [], watched_authors: [], watched_organizations: [] },
         latest_report_date: '2026-08-13',
         latest_completed_date: '2026-08-12',
       }),
     })
   })
-  await page.route('**/api/reports/daily*', async (route) => {
+  await page.route('**/api/reports/daily**', async (route) => {
     const url = new URL(route.request().url())
     if (url.pathname.endsWith('/history')) {
       await route.fulfill({
@@ -59,7 +50,6 @@ test('daily report opens the latest saved date without treating it as a complete
         highlight_papers: [],
         common_methods: [],
         common_evidence: [],
-        limitations_and_research_gaps: [],
         suggested_reading_queue: [],
       }),
     })
