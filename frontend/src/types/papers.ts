@@ -74,9 +74,7 @@ export interface Paper {
   html_url?: string | null
   prefilter_decision?: 'relevant' | 'uncertain' | 'irrelevant' | null
   effective_score: number
-  matched_topics: string[]
   summary?: string | null
-  why_recommended?: string | null
   feedback?: Feedback | null
   reading: ReadingData
   project_memberships: ProjectMembership[]

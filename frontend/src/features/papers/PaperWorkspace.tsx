@@ -106,7 +106,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
         if (priority === 'saved' && paper.feedback?.action !== 'save') return false
         if (priority === 'unread' && getReading(paper).state !== 'unread') return false
         if (!normalized) return true
-        return [paper.title, paper.abstract, paper.authors.join(' '), paper.categories.join(' '), paper.matched_topics.join(' ')]
+        return [paper.title, paper.abstract, paper.authors.join(' '), paper.categories.join(' ')]
           .join(' ')
           .toLowerCase()
           .includes(normalized)
@@ -422,7 +422,6 @@ function PaperListItem({ paper, active, onSelect, onFeedback }: { paper: Paper; 
   const score = Math.round(paper.effective_score)
   const saved = paper.feedback?.action === 'save'
   const dismissed = paper.feedback?.action === 'dismiss'
-  const matchSignals = paperMatchSignals(paper, 2)
   return (
     <article className={`paper-row ${active ? 'active' : ''} ${dismissed ? 'dismissed' : ''}`} onClick={onSelect} tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter') onSelect() }}>
       <div className="paper-row-top">
@@ -438,10 +437,6 @@ function PaperListItem({ paper, active, onSelect, onFeedback }: { paper: Paper; 
       <p className="authors">{formatAuthors(paper.authors)}</p>
       {(paper.summary || paper.abstract) && <p className="paper-summary">{paper.summary || paper.abstract}</p>}
       <div className="paper-row-foot">
-        <div className="match-basis">
-          <small>匹配</small>
-          {matchSignals.map((reason) => <span key={reason}>{reason}</span>)}
-        </div>
         <div className="row-actions">
           <button className={dismissed ? 'selected dislike' : ''} onClick={(event) => { event.stopPropagation(); onFeedback('dismiss') }} aria-label="不感兴趣" title="不感兴趣"><ThumbsDown size={16} /></button>
           <button className={saved ? 'selected' : ''} onClick={(event) => { event.stopPropagation(); onFeedback('save') }} aria-label={saved ? '取消收藏' : '收藏'} title={saved ? '取消收藏' : '收藏'}>
@@ -468,11 +463,7 @@ function compactSignals(values: Array<string | null | undefined>, limit = 4) {
   return result
 }
 
-function paperMatchSignals(paper: Paper, limit = 4) {
-  return compactSignals(paper.matched_topics, limit)
-}
-
-function paperAnalysisSignals(paper: Paper, analysis: PaperAnalysis, limit = 4) {
+function paperAnalysisSignals(analysis: PaperAnalysis, limit = 4) {
   return compactSignals(analysis.tags ?? [], limit)
 }
 
@@ -551,7 +542,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
     ['证据', analysis.evidence_score, '#7c4d9e'],
     ['潜力', analysis.potential_score ?? paper.effective_score, '#b54747'],
   ] as Array<[string, number | null | undefined, string]>
-  const analysisSignals = paperAnalysisSignals(paper, analysis)
+  const analysisSignals = paperAnalysisSignals(analysis)
   const analysisStage = analysis.kind === 'deep'
     ? 'AI 全文深读'
     : analysis.kind === 'screening'
@@ -610,7 +601,6 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
           <section className="decision-summary">
             <div className="decision-copy"><span>一句话结论</span><p>{paper.summary || analysis.overview || '尚未生成中文总结。刷新或等待深度分析任务完成后可在这里查看。'}</p></div>
             <div className="decision-signals">
-              <SignalGroup label="AI 确认方向" values={paper.matched_topics} empty="初筛尚未确认正式方向" />
               <SignalGroup label="分析标签" values={analysisSignals} empty="待深度分析后提取" tone="analysis" />
             </div>
           </section>
@@ -619,7 +609,6 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
             <div className="five-scores">
               {scores.map(([label, score, color]) => <ScoreGauge key={label} label={label} score={score} color={color} />)}
             </div>
-            <p className="recommendation-note"><Sparkles size={15} /> {paper.why_recommended || '已根据关注标签计算推荐得分。'}</p>
           </section>
 
           <DetailSection title="核心贡献" pending={!analysis.contributions?.length}>

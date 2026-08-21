@@ -190,7 +190,7 @@
   .paper-row h2 { font-size: 13px; }
   .paper-summary { font-size: 10px; }
   .paper-identifiers .category-tag:nth-of-type(2) { display: none; }
-  .reason-tags span:nth-child(n + 3), .match-basis span:nth-of-type(n + 3) { display: none; }
+  .reason-tags span:nth-child(n + 3) { display: none; }
   .detail-header { padding: 14px 14px 12px; }
   .detail-header h2 { font-size: 18px; }
   .detail-scroll { padding: 16px 14px 28px; }
