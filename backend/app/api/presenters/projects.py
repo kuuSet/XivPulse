@@ -6,7 +6,7 @@ from collections import Counter
 from typing import Any
 
 from ...models import PaperReadingState, ProjectPaper, ResearchProject
-from ...services.library import FAVORITES_LIBRARY_KIND
+from ...modules.projects.library import FAVORITES_LIBRARY_KIND
 
 
 def _reading_wire(reading: PaperReadingState | None) -> dict[str, Any]:

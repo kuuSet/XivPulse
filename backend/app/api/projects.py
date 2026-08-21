@@ -12,11 +12,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..database import get_db
 from ..models import Paper, ProjectPaper, ResearchProject
+from ..modules.projects.library import FAVORITES_LIBRARY_KIND, set_saved_feedback
 from ..profile import active_profile
-from ..services.library import (
-    FAVORITES_LIBRARY_KIND,
-    set_saved_feedback,
-)
 from .presenters.common import _clean_tags
 from .presenters.projects import _project_membership_wire, _project_wire
 

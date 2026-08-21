@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Feedback, PaperReadingState, ProjectPaper, ResearchProject
+from ...models import Feedback, PaperReadingState, ProjectPaper, ResearchProject
 
 FAVORITES_LIBRARY_KIND = "favorites"
 FAVORITES_LIBRARY_NAME = "收藏库"

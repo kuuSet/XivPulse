@@ -9,13 +9,13 @@ from .database import SessionLocal, init_db, session_scope
 from .jobs.service import recover_stale_jobs
 from .models import Profile, ResearchProject, Topic
 from .modules.interests.presets import initial_topic_values
-from .services.auth import auth_settings
-from .services.library import (
+from .modules.projects.library import (
     FAVORITES_LIBRARY_COLOR,
     FAVORITES_LIBRARY_DESCRIPTION,
     FAVORITES_LIBRARY_KIND,
     FAVORITES_LIBRARY_NAME,
 )
+from .services.auth import auth_settings
 
 
 def bootstrap_application(
