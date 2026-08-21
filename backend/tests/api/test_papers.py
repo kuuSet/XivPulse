@@ -3,8 +3,9 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from app.models import Analysis, Profile
 from fastapi.testclient import TestClient
-
+from sqlalchemy.orm import Session, sessionmaker
 
 PAPER_FIELDS = {
     "abstract",
@@ -33,11 +34,31 @@ PAPER_FIELDS = {
     "why_recommended",
 }
 DETAIL_FIELDS = {"analyses", "comment", "doi", "journal_ref", "versions"}
+ANALYSIS_FIELDS = {
+    "advocate",
+    "budget_mode",
+    "contributions",
+    "evidence",
+    "evidence_score",
+    "input_scope",
+    "kind",
+    "limitations",
+    "method",
+    "method_score",
+    "novelty_score",
+    "overview",
+    "potential_score",
+    "relevance_score",
+    "skeptic",
+    "tags",
+    "token_usage",
+}
 
 
 def test_paper_library_uses_only_abstract_llm_scores(
     client: TestClient,
     insert_paper: Callable[..., int],
+    session_factory: sessionmaker[Session],
 ) -> None:
     selected = datetime(2026, 8, 18, 8, tzinfo=UTC)
     paper_id = insert_paper(
@@ -53,6 +74,25 @@ def test_paper_library_uses_only_abstract_llm_scores(
         published_at=selected,
         prefilter_decision="relevant",
     )
+    with session_factory() as session:
+        profile = session.query(Profile).one()
+        session.add(
+            Analysis(
+                paper_id=paper_id,
+                profile_id=profile.id,
+                kind="deep",
+                summary="Compact summary",
+                relevance_score=82,
+                payload_json={
+                    "problem": "System problem",
+                    "key_contributions": ["Contribution"],
+                    "methods": ["Method"],
+                    "evidence": ["Evidence"],
+                    "limitations": ["Limitation"],
+                },
+            )
+        )
+        session.commit()
 
     payload = client.get("/api/papers").json()
     paper = payload["items"][0]
@@ -72,6 +112,7 @@ def test_paper_library_uses_only_abstract_llm_scores(
         "updated_at": None,
     }
     assert paper["project_memberships"] == []
+    assert set(paper["analysis"]) == ANALYSIS_FIELDS
 
     detail = client.get(f"/api/papers/{paper_id}")
     assert detail.status_code == 200
@@ -79,6 +120,7 @@ def test_paper_library_uses_only_abstract_llm_scores(
     assert set(detail_payload) == PAPER_FIELDS | DETAIL_FIELDS
     assert detail_payload["matched_topics"] == ["Embodied AI"]
     assert detail_payload["reading"]["state"] == "unread"
+    assert all(set(analysis) == ANALYSIS_FIELDS for analysis in detail_payload["analyses"])
 
 
 def test_feedback_uses_dismiss_and_nested_reasons(

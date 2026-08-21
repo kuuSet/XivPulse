@@ -12,11 +12,8 @@ def _analysis_wire(analysis: Analysis | None) -> dict[str, Any] | None:
         return None
     payload = analysis.payload
     return {
-        "id": analysis.id,
         "kind": analysis.kind,
-        "status": analysis.status,
         "overview": payload.get("problem") or analysis.summary,
-        "summary": analysis.summary,
         "contributions": payload.get("key_contributions", []),
         "method": "；".join(payload.get("methods", [])),
         "evidence": "；".join(payload.get("evidence", [])),
@@ -38,11 +35,5 @@ def _analysis_wire(analysis: Analysis | None) -> dict[str, Any] | None:
         "method_score": analysis.rigor_score,
         "evidence_score": analysis.rigor_score,
         "potential_score": analysis.impact_score,
-        "verdict": analysis.verdict,
-        "strengths": analysis.strengths,
-        "weaknesses": analysis.weaknesses,
         "tags": analysis.tags,
-        "payload": payload,
-        "error": analysis.error,
-        "created_at": analysis.created_at,
     }
