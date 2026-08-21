@@ -4,9 +4,9 @@ from datetime import UTC, date, datetime
 
 import app.modules.reports.service as reporting_service
 import pytest
-from app.api.reports import router as reports_router
 from app.models import Analysis, Paper, PaperMatch, Profile
 from app.modules.reports.builder import build_daily_research_report
+from app.modules.reports.routes import router as reports_router
 from app.modules.reports.service import persist_daily_report, report_snapshot
 from sqlalchemy import select
 from sqlalchemy.orm import Session

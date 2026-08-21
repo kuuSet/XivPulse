@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-import app.api.reports as reports_api
+import app.modules.reports.routes as reports_api
 import pytest
 from app.models import DailyResearchReport, Profile
 from fastapi.testclient import TestClient
