@@ -11,7 +11,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from ..settings import get_process_settings
+from .settings import get_process_settings
 
 SESSION_COOKIE = "xivpulse_session"
 SESSION_MAX_AGE = 7 * 24 * 60 * 60

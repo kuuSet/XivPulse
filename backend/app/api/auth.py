@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..services.auth import (
+from ..security import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
     auth_settings,

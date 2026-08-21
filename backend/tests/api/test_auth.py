@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import app.api.auth as auth_api
 import pytest
-from app.services.auth import SESSION_COOKIE, AuthSettings, clear_login_failures
+from app.security import SESSION_COOKIE, AuthSettings, clear_login_failures
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
 

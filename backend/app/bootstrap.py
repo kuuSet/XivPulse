@@ -15,7 +15,7 @@ from .modules.projects.library import (
     FAVORITES_LIBRARY_KIND,
     FAVORITES_LIBRARY_NAME,
 )
-from .services.auth import auth_settings
+from .security import auth_settings
 
 
 def bootstrap_application(
