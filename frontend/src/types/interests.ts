@@ -3,16 +3,13 @@ export interface BackendTopic {
   name: string
   description: string
   aliases: string[]
-  query?: string
   arxiv_categories: string[]
   keywords: string[]
-  context_keywords: string[]
-  negative_keywords: string[]
-  weight?: number
   enabled?: boolean
 }
 
 export interface DirectionCatalogItem extends BackendTopic {
+  context_keywords: string[]
   slug: string
   group: string
   level: 'main' | 'specialty'

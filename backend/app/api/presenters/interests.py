@@ -21,12 +21,8 @@ def _interests_wire(
                 "name": topic.name,
                 "description": topic.description,
                 "aliases": topic.aliases,
-                "query": topic.query,
                 "arxiv_categories": topic.arxiv_categories,
                 "keywords": topic.keywords,
-                "context_keywords": topic.context_keywords,
-                "negative_keywords": topic.negative_keywords,
-                "weight": topic.weight,
                 "enabled": topic.enabled,
             }
             for topic in profile.topics

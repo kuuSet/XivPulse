@@ -126,86 +126,6 @@ def test_llm_topic_drives_reports_without_local_revalidation(
     assert paper.id in {item["paper_id"] for item in report["suggested_reading_queue"]}
 
 
-def test_context_keywords_do_not_override_llm_attribution(
-    analytics_session: Session,
-) -> None:
-    profile = analytics_session.get(Profile, 1)
-    assert profile is not None
-    robot_learning = next(topic for topic in profile.topics if topic.name == "Robot Learning")
-    robot_learning.context_keywords = ["robot", "humanoid"]
-
-    paper = Paper(
-        arxiv_id="2608.00994",
-        title="Behavior Cloning for Financial Decision Making",
-        abstract="We learn a policy from accounting records.",
-        authors_json=["Researcher"],
-        categories_json=["cs.LG"],
-        primary_category="cs.LG",
-        published_at=datetime(2026, 8, 12, 14, tzinfo=UTC),
-        first_seen_at=datetime(2026, 8, 12, 14, tzinfo=UTC),
-        last_seen_at=datetime(2026, 8, 12, 14, tzinfo=UTC),
-    )
-    analytics_session.add(paper)
-    analytics_session.flush()
-    analytics_session.add(
-        PaperMatch(
-            paper_id=paper.id,
-            profile_id=profile.id,
-            matched_topics_json=["Robot Learning"],
-            prefilter_decision="relevant",
-            prefiltered_at=paper.published_at,
-            screening_relevance_score=80,
-            screened_at=paper.published_at,
-        )
-    )
-    analytics_session.commit()
-
-    trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
-    daily = {item["name"]: item for item in trends["daily"]["topics"]}
-
-    assert daily["Robot Learning"]["count"] == 2
-    assert trends["daily"]["candidate_paper_count"] == 3
-    assert trends["daily"]["paper_count"] == 3
-
-
-def test_negative_keywords_do_not_override_llm_attribution(
-    analytics_session: Session,
-) -> None:
-    profile = analytics_session.get(Profile, 1)
-    assert profile is not None
-    vla = next(topic for topic in profile.topics if topic.name == "VLA")
-    vla.negative_keywords = ["vehicle-to-load"]
-    paper = Paper(
-        arxiv_id="2608.00997",
-        title="VLA Vehicle-to-Load Power Systems",
-        abstract="A power-grid study rather than a robot policy.",
-        authors_json=["Researcher"],
-        categories_json=["cs.RO"],
-        primary_category="cs.RO",
-        published_at=datetime(2026, 8, 12, 11, tzinfo=UTC),
-        first_seen_at=datetime(2026, 8, 12, 11, tzinfo=UTC),
-        last_seen_at=datetime(2026, 8, 12, 11, tzinfo=UTC),
-    )
-    analytics_session.add(paper)
-    analytics_session.flush()
-    analytics_session.add(
-        PaperMatch(
-            paper_id=paper.id,
-            profile_id=profile.id,
-            matched_topics_json=["VLA"],
-            prefilter_decision="relevant",
-            prefiltered_at=paper.published_at,
-            screening_relevance_score=20,
-            screened_at=paper.published_at,
-        )
-    )
-    analytics_session.commit()
-
-    trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
-    daily = {item["name"]: item for item in trends["daily"]["topics"]}
-    assert daily["VLA"]["count"] == 2
-
-
 def test_paper_match_is_the_only_llm_topic_snapshot(
     analytics_session: Session,
 ) -> None:
@@ -252,5 +172,4 @@ def test_paper_match_is_the_only_llm_topic_snapshot(
     trends = build_topic_trends(analytics_session, 1, as_of=date(2026, 8, 12), timezone_name="UTC")
     daily = {item["name"]: item for item in trends["daily"]["topics"]}
     assert daily["VLA"]["count"] == 2
-
 

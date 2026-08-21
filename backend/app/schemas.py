@@ -10,18 +10,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class TopicBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=2000)
     aliases: list[str] = Field(default_factory=list)
-    query: str = Field(default="", max_length=2000)
     arxiv_categories: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
-    context_keywords: list[str] = Field(default_factory=list)
-    negative_keywords: list[str] = Field(default_factory=list)
-    weight: float = Field(default=1.0, ge=0.0, le=5.0)
     enabled: bool = True
 
-    @field_validator("name", "description", "query")
+    @field_validator("name", "description")
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.strip()
@@ -30,8 +28,6 @@ class TopicBase(BaseModel):
         "aliases",
         "arxiv_categories",
         "keywords",
-        "context_keywords",
-        "negative_keywords",
     )
     @classmethod
     def clean_list(cls, values: list[str]) -> list[str]:

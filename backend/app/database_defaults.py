@@ -42,12 +42,8 @@ def _default_topic(slug: str) -> dict[str, object]:
         "name": item["name"],
         "description": _DEFAULT_DESCRIPTIONS[slug],
         "aliases_json": list(item["aliases"]),
-        "query": "",
         "arxiv_categories_json": list(item["arxiv_categories"]),
         "keywords_json": list(item["keywords"]),
-        "context_keywords_json": list(item["context_keywords"]),
-        "negative_keywords_json": list(item["negative_keywords"]),
-        "weight": item["weight"],
     }
 
 

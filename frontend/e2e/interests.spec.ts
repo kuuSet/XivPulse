@@ -80,4 +80,11 @@ test('watch categories are peer sections and auto-save independently', async ({ 
   await topicSection.getByRole('button', { name: `删除 ${customLabel}` }).click()
   await expect.poll(() => savedInterests.at(-1)?.topics.some((topic) => topic.name === customLabel)).toBe(false)
   expect(savedInterests.at(-1)?.topics.some((topic) => topic.name === customLabel)).toBe(false)
+  for (const saved of savedInterests) {
+    for (const topic of saved.topics) {
+      for (const field of ['query', 'context_keywords', 'negative_keywords', 'weight']) {
+        expect(topic).not.toHaveProperty(field)
+      }
+    }
+  }
 })

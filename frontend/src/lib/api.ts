@@ -198,13 +198,8 @@ function interestsUpdatePayload(interests: Interests) {
       name: topic.name.trim(),
       description: topic.description.trim(),
       aliases: unique(topic.aliases ?? []),
-      // The visual editor treats keywords as the source of truth for arXiv queries.
-      query: '',
       arxiv_categories: unique(topic.arxiv_categories ?? []),
       keywords: unique(topic.keywords ?? []),
-      context_keywords: unique(topic.context_keywords ?? []),
-      negative_keywords: unique(topic.negative_keywords ?? []),
-      weight: topic.weight ?? 1,
       enabled: topic.enabled !== false,
     })),
     watched_authors: unique(interests.watched_authors),

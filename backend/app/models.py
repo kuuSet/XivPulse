@@ -69,12 +69,8 @@ class Topic(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
     aliases_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    query: Mapped[str] = mapped_column(Text, default="")
     arxiv_categories_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    context_keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    negative_keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    weight: Mapped[float] = mapped_column(Float, default=1.0)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     profile: Mapped[Profile] = relationship(back_populates="topics")
@@ -102,22 +98,6 @@ class Topic(TimestampMixin, Base):
     @keywords.setter
     def keywords(self, value: list[str]) -> None:
         self.keywords_json = list(value)
-
-    @property
-    def context_keywords(self) -> list[str]:
-        return list(self.context_keywords_json or [])
-
-    @context_keywords.setter
-    def context_keywords(self, value: list[str]) -> None:
-        self.context_keywords_json = list(value)
-
-    @property
-    def negative_keywords(self) -> list[str]:
-        return list(self.negative_keywords_json or [])
-
-    @negative_keywords.setter
-    def negative_keywords(self, value: list[str]) -> None:
-        self.negative_keywords_json = list(value)
 
 
 class Paper(TimestampMixin, Base):

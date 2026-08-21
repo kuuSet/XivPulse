@@ -107,8 +107,15 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       setCatalogQuery('')
       return
     }
-    const { slug: _slug, group: _group, level: _level, parent_slug: _parentSlug, parent_name: _parentName, ...topic } = item
-    setInterests({ ...interests, topics: [...interests.topics, { ...topic, description: catalogDescription(item), query: '' }] })
+    const topic: BackendTopic = {
+      name: item.name,
+      description: catalogDescription(item),
+      aliases: item.aliases,
+      arxiv_categories: item.arxiv_categories,
+      keywords: item.keywords,
+      enabled: item.enabled,
+    }
+    setInterests({ ...interests, topics: [...interests.topics, topic] })
     setCatalogQuery('')
     setDescriptionDraft('')
   }
@@ -160,13 +167,9 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       topics: [...interests.topics, {
         name,
         description,
-        query: '',
         arxiv_categories: categories.length ? categories : ['cs.AI'],
         keywords: [name],
-        context_keywords: [],
         aliases: [],
-        negative_keywords: [],
-        weight: 1,
         enabled: true,
       }],
     })
