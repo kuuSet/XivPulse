@@ -1,0 +1,1386 @@
+{
+  "version": "2026.08.1",
+  "items": [
+    {
+      "slug": "ml-theory",
+      "group": "机器学习基础",
+      "name": "机器学习理论与泛化",
+      "description": "Research on Learning Theory, including learning theory, generalization bound, statistical learning theory, optimization theory.",
+      "aliases": [
+        "Learning Theory",
+        "Statistical Learning Theory"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "stat.ML",
+        "math.OC"
+      ]
+    },
+    {
+      "slug": "representation-self-supervised",
+      "group": "机器学习基础",
+      "name": "表示学习与自监督学习",
+      "description": "Research on Representation Learning, including representation learning, self-supervised learning, self supervised learning, contrastive learning.",
+      "aliases": [
+        "Representation Learning",
+        "Self-Supervised Learning"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "stat.ML"
+      ]
+    },
+    {
+      "slug": "reinforcement-learning",
+      "group": "机器学习基础",
+      "name": "强化学习与决策",
+      "description": "Research on Reinforcement Learning, including reinforcement learning, offline reinforcement learning, model-based reinforcement learning, sequential decision making.",
+      "aliases": [
+        "Reinforcement Learning",
+        "RL and Decision Making"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.MA"
+      ]
+    },
+    {
+      "slug": "causal-ml",
+      "group": "机器学习基础",
+      "name": "因果学习与因果推断",
+      "description": "Research on Causal Machine Learning, including causal inference, causal discovery, causal representation learning, counterfactual learning.",
+      "aliases": [
+        "Causal Machine Learning",
+        "Causal Inference"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "stat.ML",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "probabilistic-bayesian-ml",
+      "group": "机器学习基础",
+      "name": "概率建模与贝叶斯学习",
+      "description": "Research on Probabilistic Machine Learning, including probabilistic machine learning, Bayesian learning, probabilistic graphical model, variational inference, probabilistic programming.",
+      "aliases": [
+        "Probabilistic Machine Learning",
+        "Bayesian Machine Learning"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "stat.ML",
+        "stat.ME"
+      ]
+    },
+    {
+      "slug": "graph-geometric-ml",
+      "group": "机器学习基础",
+      "name": "图机器学习与几何深度学习",
+      "description": "Research on Graph Machine Learning, including graph neural network, graph machine learning, geometric deep learning, equivariant neural network.",
+      "aliases": [
+        "Graph Machine Learning",
+        "Geometric Deep Learning",
+        "GNN"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.SI",
+        "stat.ML"
+      ]
+    },
+    {
+      "slug": "temporal-spatiotemporal-ml",
+      "group": "机器学习基础",
+      "name": "时序与时空学习",
+      "description": "Research on Time Series Learning, including time series forecasting, time series representation learning, spatiotemporal learning, temporal modeling.",
+      "aliases": [
+        "Time Series Learning",
+        "Spatiotemporal Machine Learning"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "stat.ML",
+        "eess.SP"
+      ]
+    },
+    {
+      "slug": "continual-meta-transfer",
+      "group": "机器学习基础",
+      "name": "持续学习、元学习与迁移学习",
+      "description": "Research on Continual Learning, including continual learning, lifelong learning, meta-learning, meta learning, transfer learning.",
+      "aliases": [
+        "Continual Learning",
+        "Meta Learning and Transfer Learning"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "stat.ML"
+      ]
+    },
+    {
+      "slug": "federated-distributed-ml",
+      "group": "机器学习基础",
+      "name": "联邦学习与分布式学习",
+      "description": "Research on Federated Learning, including federated learning, distributed machine learning, decentralized learning, split learning.",
+      "aliases": [
+        "Federated Learning",
+        "Distributed Machine Learning"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.DC",
+        "cs.CR"
+      ]
+    },
+    {
+      "slug": "foundation-language-models",
+      "group": "基础模型与生成式 AI",
+      "name": "大语言模型与基础模型",
+      "description": "Large language model systems covering pretraining, adaptation, reasoning, long-context processing, and scalable deployment.",
+      "aliases": [
+        "LLM",
+        "Large Language Models",
+        "Foundation Models"
+      ],
+      "arxiv_categories": [
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "default_order": 3
+    },
+    {
+      "slug": "generative-models",
+      "group": "基础模型与生成式 AI",
+      "name": "生成模型与生成式 AI",
+      "description": "Research on Generative AI, including generative model, generative models, generative artificial intelligence, controllable generation.",
+      "aliases": [
+        "Generative AI",
+        "Generative Models"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.CV",
+        "cs.CL"
+      ]
+    },
+    {
+      "slug": "diffusion-flow-models",
+      "group": "基础模型与生成式 AI",
+      "name": "扩散模型与流模型",
+      "description": "Research on Diffusion Models, including diffusion model, diffusion models, score-based generative, flow matching, rectified flow.",
+      "aliases": [
+        "Diffusion Models",
+        "Flow Matching"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.CV",
+        "stat.ML"
+      ]
+    },
+    {
+      "slug": "efficient-models",
+      "group": "基础模型与生成式 AI",
+      "name": "高效模型与模型压缩",
+      "description": "Research on Efficient AI, including model compression, model quantization, knowledge distillation, parameter-efficient fine-tuning, mixture of experts.",
+      "aliases": [
+        "Efficient AI",
+        "Model Compression",
+        "PEFT"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.DC"
+      ]
+    },
+    {
+      "slug": "computer-vision",
+      "group": "感知与多模态",
+      "name": "计算机视觉与视觉理解",
+      "description": "Research on Computer Vision, including computer vision, visual recognition, object detection, semantic segmentation, video understanding.",
+      "aliases": [
+        "Computer Vision",
+        "Visual Understanding"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "3d-vision-generation",
+      "group": "感知与多模态",
+      "name": "三维视觉与神经渲染",
+      "description": "Research on 3D Vision, including 3d vision, 3D reconstruction, neural rendering, neural radiance field, gaussian splatting, 3d generation.",
+      "aliases": [
+        "3D Vision",
+        "Neural Rendering"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.GR"
+      ]
+    },
+    {
+      "slug": "nlp",
+      "group": "感知与多模态",
+      "name": "自然语言处理",
+      "description": "Research on Natural Language Processing, including natural language processing, language understanding, machine translation, information extraction, text generation.",
+      "aliases": [
+        "NLP",
+        "Natural Language Processing",
+        "Computational Linguistics"
+      ],
+      "arxiv_categories": [
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "speech-audio",
+      "group": "感知与多模态",
+      "name": "语音、音频与音乐智能",
+      "description": "Research on Speech AI, including speech recognition, speech synthesis, audio understanding, speaker recognition, music generation.",
+      "aliases": [
+        "Speech AI",
+        "Audio Intelligence",
+        "Music AI"
+      ],
+      "arxiv_categories": [
+        "cs.SD",
+        "eess.AS",
+        "cs.CL"
+      ]
+    },
+    {
+      "slug": "multimodal-learning",
+      "group": "感知与多模态",
+      "name": "多模态学习与视觉语言模型",
+      "description": "Research on Multimodal Learning, including multimodal learning, vision-language model, vision language model, multimodal large language model, image-text alignment.",
+      "aliases": [
+        "Multimodal Learning",
+        "Vision-Language Models",
+        "VLM"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "information-retrieval-rag",
+      "group": "知识、推理与智能体",
+      "name": "信息检索与检索增强生成",
+      "description": "Research on Information Retrieval, including information retrieval, retrieval-augmented generation, retrieval augmented generation, dense retrieval, neural search.",
+      "aliases": [
+        "Information Retrieval",
+        "RAG",
+        "Retrieval-Augmented Generation"
+      ],
+      "arxiv_categories": [
+        "cs.IR",
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "recommender-systems",
+      "group": "知识、推理与智能体",
+      "name": "推荐系统与个性化",
+      "description": "Research on Recommender Systems, including recommender system, recommendation system, sequential recommendation, collaborative filtering, personalized ranking.",
+      "aliases": [
+        "Recommender Systems",
+        "Personalized Recommendation"
+      ],
+      "arxiv_categories": [
+        "cs.IR",
+        "cs.LG",
+        "cs.SI"
+      ]
+    },
+    {
+      "slug": "knowledge-reasoning",
+      "group": "知识、推理与智能体",
+      "name": "知识表示与自动推理",
+      "description": "Research on Knowledge Representation and Reasoning, including knowledge representation, knowledge graph reasoning, automated reasoning, automated theorem proving, neuro-symbolic.",
+      "aliases": [
+        "Knowledge Representation and Reasoning",
+        "Neuro-Symbolic AI"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.CL",
+        "cs.LO"
+      ]
+    },
+    {
+      "slug": "reasoning-planning",
+      "group": "知识、推理与智能体",
+      "name": "模型推理与任务规划",
+      "description": "Research on AI Reasoning, including reasoning model, test-time compute, chain-of-thought reasoning, task planning, planning and search.",
+      "aliases": [
+        "AI Reasoning",
+        "Reasoning and Planning"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.CL",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "ai-agents",
+      "group": "知识、推理与智能体",
+      "name": "AI 智能体与工具使用",
+      "description": "LLM agents that use tools, memory, planning, and multi-agent coordination to complete long-horizon tasks.",
+      "aliases": [
+        "AI Agents",
+        "Agentic AI",
+        "LLM Agents"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.CL",
+        "cs.MA"
+      ],
+      "default_order": 4
+    },
+    {
+      "slug": "human-ai-interaction",
+      "group": "知识、推理与智能体",
+      "name": "人机交互与人机协作",
+      "description": "Research on Human-AI Interaction, including human-AI interaction, human AI collaboration, interactive machine learning, human-centered AI.",
+      "aliases": [
+        "Human-AI Interaction",
+        "Human-Centered AI"
+      ],
+      "arxiv_categories": [
+        "cs.HC",
+        "cs.AI",
+        "cs.CY"
+      ]
+    },
+    {
+      "slug": "embodied-generalist",
+      "group": "机器人与具身智能",
+      "name": "具身智能与通用机器人",
+      "description": "Embodied AI systems that integrate perception, reasoning, learning, planning, and physical action in real-world robots.",
+      "aliases": [
+        "Embodied AI",
+        "Embodied Intelligence",
+        "Generalist Robot"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.AI"
+      ],
+      "default_order": 1
+    },
+    {
+      "slug": "vision-language-action",
+      "group": "机器人与具身智能",
+      "name": "视觉-语言-动作模型",
+      "description": "Vision-language-action models that map visual and language inputs to robot actions and policies.",
+      "aliases": [
+        "VLA",
+        "Vision-Language-Action"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.CV",
+        "cs.AI"
+      ],
+      "default_order": 2
+    },
+    {
+      "slug": "robot-learning",
+      "group": "机器人与具身智能",
+      "name": "机器人学习与强化学习",
+      "description": "Research on Robot Learning, including robot learning, reinforcement learning, imitation learning, behavior cloning, policy learning, robot, robotic, robotics, humanoid, manipulation, locomotion, real robot.",
+      "aliases": [
+        "Robot Learning",
+        "Reinforcement Learning for Robotics"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "robot-world-models",
+      "group": "机器人与具身智能",
+      "name": "世界模型与机器人规划",
+      "description": "Research on Robot World Models, including world model, model-based planning, predictive control, latent dynamics, robot, robotic, robotics, manipulation, navigation, autonomous vehicle, embodied.",
+      "aliases": [
+        "世界模型与规划",
+        "Robot World Models",
+        "World Models for Robotics"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.AI",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "robot-manipulation",
+      "group": "机器人与具身智能",
+      "name": "机器人操作与灵巧手",
+      "description": "Research on Robot Manipulation, including robot manipulation, dexterous manipulation, dexterous hand, robot grasping, bimanual manipulation.",
+      "aliases": [
+        "Robot Manipulation",
+        "Dexterous Manipulation"
+      ],
+      "arxiv_categories": [
+        "cs.RO"
+      ]
+    },
+    {
+      "slug": "robot-navigation",
+      "group": "机器人与具身智能",
+      "name": "机器人导航与空间智能",
+      "description": "Research on Robot Navigation, including robot navigation, visual navigation, embodied navigation, spatial intelligence, mobile robot navigation.",
+      "aliases": [
+        "导航与空间智能",
+        "Robot Navigation",
+        "Embodied Navigation",
+        "Spatial Intelligence for Robotics"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.CV",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "autonomous-driving",
+      "group": "机器人与具身智能",
+      "name": "自动驾驶与自主系统",
+      "description": "Research on Autonomous Driving, including autonomous driving, self-driving, end-to-end driving, autonomous vehicle, driving policy.",
+      "aliases": [
+        "Autonomous Driving",
+        "Self-Driving Systems"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.CV",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "ai-safety-alignment",
+      "group": "可信、安全与评测",
+      "name": "AI 安全、对齐与可控性",
+      "description": "Research on AI Safety, including AI safety, AI alignment, scalable oversight, safe reinforcement learning, model control.",
+      "aliases": [
+        "AI Safety",
+        "AI Alignment",
+        "Safe AI"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.LG",
+        "cs.CY"
+      ]
+    },
+    {
+      "slug": "interpretability",
+      "group": "可信、安全与评测",
+      "name": "可解释 AI 与机制可解释性",
+      "description": "Research on Interpretability, including interpretable machine learning, explainable AI, mechanistic interpretability, feature attribution.",
+      "aliases": [
+        "Interpretability",
+        "Explainable AI",
+        "XAI",
+        "Mechanistic Interpretability"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.HC"
+      ]
+    },
+    {
+      "slug": "robustness-ood-uncertainty",
+      "group": "可信、安全与评测",
+      "name": "鲁棒性、分布外泛化与不确定性",
+      "description": "Research on Robust Machine Learning, including adversarial robustness, out-of-distribution, distribution shift, uncertainty estimation, model calibration.",
+      "aliases": [
+        "Robust Machine Learning",
+        "OOD Generalization",
+        "Uncertainty Quantification"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "stat.ML"
+      ]
+    },
+    {
+      "slug": "privacy-security-ml",
+      "group": "可信、安全与评测",
+      "name": "隐私保护与机器学习安全",
+      "description": "Research on Privacy-Preserving ML, including privacy-preserving machine learning, differential privacy, model extraction, machine learning security, backdoor attack.",
+      "aliases": [
+        "Privacy-Preserving ML",
+        "Machine Learning Security"
+      ],
+      "arxiv_categories": [
+        "cs.CR",
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "fairness-accountability",
+      "group": "可信、安全与评测",
+      "name": "公平性、责任与 AI 治理",
+      "description": "Research on Fairness in AI, including algorithmic fairness, responsible AI, algorithmic accountability, AI governance, bias mitigation.",
+      "aliases": [
+        "Fairness in AI",
+        "Responsible AI",
+        "AI Governance"
+      ],
+      "arxiv_categories": [
+        "cs.CY",
+        "cs.AI",
+        "cs.HC"
+      ]
+    },
+    {
+      "slug": "evaluation-benchmarks",
+      "group": "可信、安全与评测",
+      "name": "AI 评测与基准方法",
+      "description": "Research on AI Evaluation, including AI evaluation, model evaluation, benchmark contamination, red teaming, evaluation methodology.",
+      "aliases": [
+        "AI Evaluation",
+        "Benchmarking AI"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.LG",
+        "cs.CL"
+      ]
+    },
+    {
+      "slug": "ml-systems",
+      "group": "系统与基础设施",
+      "name": "机器学习系统与基础设施",
+      "description": "AI infrastructure for distributed training, compilers, parallelism, resource scheduling, and reliable model serving.",
+      "aliases": [
+        "ML Systems",
+        "AI Infrastructure"
+      ],
+      "arxiv_categories": [
+        "cs.DC",
+        "cs.LG",
+        "cs.PF"
+      ],
+      "default_order": 5
+    },
+    {
+      "slug": "data-centric-ml",
+      "group": "系统与基础设施",
+      "name": "数据中心 AI 与数据工程",
+      "description": "Research on Data-Centric AI, including data-centric AI, data quality, synthetic data, data curation, dataset distillation.",
+      "aliases": [
+        "Data-Centric AI",
+        "Training Data Curation"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.DB"
+      ]
+    },
+    {
+      "slug": "automl-nas",
+      "group": "系统与基础设施",
+      "name": "自动机器学习与架构搜索",
+      "description": "Research on AutoML, including automated machine learning, AutoML, neural architecture search, hyperparameter optimization.",
+      "aliases": [
+        "AutoML",
+        "Neural Architecture Search",
+        "NAS"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "neuroevolution-computational-intelligence",
+      "group": "系统与基础设施",
+      "name": "神经演化与计算智能",
+      "description": "Research on Neuroevolution, including neuroevolution, evolutionary computation, evolutionary optimization, swarm intelligence, genetic programming.",
+      "aliases": [
+        "Neuroevolution",
+        "Evolutionary Computation",
+        "Computational Intelligence"
+      ],
+      "arxiv_categories": [
+        "cs.NE",
+        "cs.AI",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "quantum-machine-learning",
+      "group": "系统与基础设施",
+      "name": "量子机器学习",
+      "description": "Research on Quantum Machine Learning, including quantum machine learning, quantum neural network, variational quantum algorithm, quantum learning algorithm.",
+      "aliases": [
+        "Quantum Machine Learning",
+        "QML"
+      ],
+      "arxiv_categories": [
+        "quant-ph",
+        "cs.LG",
+        "cs.ET"
+      ]
+    },
+    {
+      "slug": "ai-science",
+      "group": "AI for Science 与应用",
+      "name": "AI for Science 与科学发现",
+      "description": "Research on AI for Science, including AI for science, machine learning for science, scientific machine learning, AI-driven discovery.",
+      "aliases": [
+        "AI for Science",
+        "Scientific Machine Learning",
+        "SciML"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.AI",
+        "physics.comp-ph",
+        "stat.ML"
+      ]
+    },
+    {
+      "slug": "ai-social-economic",
+      "group": "AI for Science 与应用",
+      "name": "社会科学与经济 AI",
+      "description": "Research on AI for Social Science, including computational social science, machine learning for economics, AI for social science, algorithmic mechanism design.",
+      "aliases": [
+        "AI for Social Science",
+        "AI for Economics",
+        "Computational Social Science"
+      ],
+      "arxiv_categories": [
+        "cs.SI",
+        "cs.CY",
+        "econ.EM",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "ai-education",
+      "group": "AI for Science 与应用",
+      "name": "教育 AI 与智能辅导",
+      "description": "Research on AI in Education, including artificial intelligence in education, intelligent tutoring system, student modeling, educational data mining.",
+      "aliases": [
+        "AI in Education",
+        "Educational AI",
+        "Intelligent Tutoring Systems"
+      ],
+      "arxiv_categories": [
+        "cs.CY",
+        "cs.HC",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "ai-biology-drug",
+      "group": "AI for Science 与应用",
+      "name": "生物医学 AI 与药物发现",
+      "description": "Research on AI for Biology, including AI for drug discovery, protein language model, molecular generation, biomedical AI, computational biology.",
+      "aliases": [
+        "AI for Biology",
+        "AI Drug Discovery",
+        "Biomedical AI"
+      ],
+      "arxiv_categories": [
+        "q-bio.BM",
+        "q-bio.QM",
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "ai-healthcare",
+      "group": "AI for Science 与应用",
+      "name": "医疗健康 AI",
+      "description": "Research on Healthcare AI, including medical artificial intelligence, clinical language model, medical image analysis, clinical decision support.",
+      "aliases": [
+        "Healthcare AI",
+        "Medical AI",
+        "Clinical AI"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.CV",
+        "cs.CL",
+        "eess.IV"
+      ]
+    },
+    {
+      "slug": "ai-climate-earth",
+      "group": "AI for Science 与应用",
+      "name": "气候、地球与环境智能",
+      "description": "Research on Climate AI, including AI for climate, machine learning for weather, earth observation, climate modeling, environmental AI.",
+      "aliases": [
+        "Climate AI",
+        "AI for Earth Science"
+      ],
+      "arxiv_categories": [
+        "physics.ao-ph",
+        "cs.LG",
+        "cs.CV"
+      ]
+    },
+    {
+      "slug": "ai-materials-chemistry",
+      "group": "AI for Science 与应用",
+      "name": "材料、化学与分子 AI",
+      "description": "Research on Materials AI, including AI for materials, materials discovery, molecular property prediction, reaction prediction, machine learning chemistry.",
+      "aliases": [
+        "Materials AI",
+        "AI for Chemistry",
+        "Molecular Machine Learning"
+      ],
+      "arxiv_categories": [
+        "cond-mat.mtrl-sci",
+        "physics.chem-ph",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "llm-post-training",
+      "group": "基础模型与生成式 AI",
+      "name": "语言模型后训练与偏好学习",
+      "description": "Research on LLM Post-Training, including language model post-training, instruction tuning, preference optimization, RLHF, DPO, reward modeling.",
+      "aliases": [
+        "LLM Post-Training",
+        "Preference Learning for Language Models"
+      ],
+      "arxiv_categories": [
+        "cs.CL",
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "long-context-language-models",
+      "group": "基础模型与生成式 AI",
+      "name": "长上下文语言模型",
+      "description": "Research on Long-Context Language Models, including long-context language model, long context language model, context window extension, long document reasoning, context compression.",
+      "aliases": [
+        "Long-Context Language Models",
+        "Long-Context LLM"
+      ],
+      "arxiv_categories": [
+        "cs.CL",
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "language-model-factuality",
+      "group": "基础模型与生成式 AI",
+      "name": "语言模型事实性与幻觉",
+      "description": "Research on LLM Factuality, including language model factuality, hallucination detection, factual consistency, attribution verification, knowledge conflict.",
+      "aliases": [
+        "LLM Factuality",
+        "Hallucination in Language Models"
+      ],
+      "arxiv_categories": [
+        "cs.CL",
+        "cs.AI",
+        "cs.IR"
+      ]
+    },
+    {
+      "slug": "text-image-video-generation",
+      "group": "基础模型与生成式 AI",
+      "name": "图像与视频生成编辑",
+      "description": "Research on Image and Video Generation, including text-to-image generation, text-to-video generation, image editing, video generation, controllable image generation.",
+      "aliases": [
+        "Image and Video Generation",
+        "Visual Content Generation"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.LG",
+        "cs.GR"
+      ]
+    },
+    {
+      "slug": "video-understanding",
+      "group": "感知与多模态",
+      "name": "视频理解与时序视觉",
+      "description": "Research on Video Understanding, including video understanding, video question answering, temporal action localization, long video understanding, video prediction.",
+      "aliases": [
+        "Video Understanding",
+        "Temporal Vision"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "document-intelligence",
+      "group": "感知与多模态",
+      "name": "文档智能与视觉文档理解",
+      "description": "Research on Document AI, including document intelligence, document understanding, document question answering, chart understanding, layout analysis.",
+      "aliases": [
+        "Document AI",
+        "Visual Document Understanding"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "multimodal-reasoning",
+      "group": "感知与多模态",
+      "name": "多模态推理与视觉问答",
+      "description": "Research on Multimodal Reasoning, including multimodal reasoning, visual question answering, vision-language reasoning, multimodal chain of thought, visual reasoning.",
+      "aliases": [
+        "Multimodal Reasoning",
+        "Visual Reasoning"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "speech-language-models",
+      "group": "感知与多模态",
+      "name": "语音语言模型与对话语音",
+      "description": "Research on Speech Language Models, including speech language model, audio language model, speech-to-speech, spoken dialogue model, unified speech model.",
+      "aliases": [
+        "Speech Language Models",
+        "Audio Language Models"
+      ],
+      "arxiv_categories": [
+        "cs.SD",
+        "eess.AS",
+        "cs.CL"
+      ]
+    },
+    {
+      "slug": "code-intelligence-agents",
+      "group": "知识、推理与智能体",
+      "name": "代码智能与软件工程智能体",
+      "description": "Research on Code Intelligence, including code language model, software engineering agent, coding agent, program repair, repository-level code generation.",
+      "aliases": [
+        "Code Intelligence",
+        "Software Engineering Agents",
+        "Coding Agents"
+      ],
+      "arxiv_categories": [
+        "cs.SE",
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "formal-reasoning-theorem-proving",
+      "group": "知识、推理与智能体",
+      "name": "形式化推理与自动定理证明",
+      "description": "Research on Formal Reasoning, including formal reasoning, automated theorem proving, formal mathematics, proof generation, interactive theorem proving.",
+      "aliases": [
+        "Formal Reasoning",
+        "AI Theorem Proving"
+      ],
+      "arxiv_categories": [
+        "cs.LO",
+        "cs.AI",
+        "cs.CL"
+      ]
+    },
+    {
+      "slug": "multi-agent-systems",
+      "group": "知识、推理与智能体",
+      "name": "多智能体系统与协作",
+      "description": "Research on Multi-Agent Systems, including multi-agent system, multi-agent collaboration, agent communication, agent coordination, multi-agent debate.",
+      "aliases": [
+        "Multi-Agent Systems",
+        "Agent Collaboration"
+      ],
+      "arxiv_categories": [
+        "cs.MA",
+        "cs.AI",
+        "cs.CL"
+      ]
+    },
+    {
+      "slug": "web-computer-use-agents",
+      "group": "知识、推理与智能体",
+      "name": "网页与计算机操作智能体",
+      "description": "Research on Web Agents, including web agent, browser agent, computer use agent, GUI agent, desktop agent.",
+      "aliases": [
+        "Web Agents",
+        "Computer-Use Agents",
+        "GUI Agents"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.CL",
+        "cs.HC"
+      ]
+    },
+    {
+      "slug": "agent-memory-tool-learning",
+      "group": "知识、推理与智能体",
+      "name": "智能体记忆与工具学习",
+      "description": "Research on Agent Memory, including agent memory, long-term agent memory, tool learning, tool selection, agent skill library.",
+      "aliases": [
+        "Agent Memory",
+        "Tool Learning for Agents"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.CL",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "humanoid-locomotion",
+      "group": "机器人与具身智能",
+      "name": "人形机器人与运动控制",
+      "description": "Research on Humanoid Robotics, including humanoid robot, humanoid locomotion, whole-body control, bipedal locomotion, humanoid motion.",
+      "aliases": [
+        "Humanoid Robotics",
+        "Humanoid Locomotion"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "tactile-contact-robot-learning",
+      "group": "机器人与具身智能",
+      "name": "触觉感知与接触学习",
+      "description": "Research on Tactile Robot Learning, including robot tactile sensing, tactile representation learning, contact-rich manipulation, visuotactile learning, force tactile fusion.",
+      "aliases": [
+        "Tactile Robot Learning",
+        "Contact-Rich Robot Learning"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.CV",
+        "eess.SY"
+      ]
+    },
+    {
+      "slug": "sim-to-real-robot-adaptation",
+      "group": "机器人与具身智能",
+      "name": "仿真到现实与机器人适应",
+      "description": "Research on Sim-to-Real Robotics, including sim-to-real robotics, simulation-to-real robot, robot domain randomization, robot online adaptation, cross-embodiment transfer.",
+      "aliases": [
+        "Sim-to-Real Robotics",
+        "Robot Policy Adaptation"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "robot-data-teleoperation",
+      "group": "机器人与具身智能",
+      "name": "机器人数据与遥操作学习",
+      "description": "Research on Robot Data, including robot data collection, robot teleoperation, robot demonstration data, large-scale robot dataset, robot data curation.",
+      "aliases": [
+        "Robot Data",
+        "Robot Teleoperation Learning"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.HC",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "human-robot-interaction",
+      "group": "机器人与具身智能",
+      "name": "人机协作与机器人交互",
+      "description": "Research on Human-Robot Interaction, including human-robot interaction, human robot collaboration, shared autonomy, social robot, collaborative robot.",
+      "aliases": [
+        "Human-Robot Interaction",
+        "HRI",
+        "Human-Robot Collaboration"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.HC",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "multi-robot-swarm",
+      "group": "机器人与具身智能",
+      "name": "多机器人系统与群体机器人",
+      "description": "Research on Multi-Robot Systems, including multi-robot system, swarm robotics, multi-robot coordination, robot formation control, distributed robot planning.",
+      "aliases": [
+        "Multi-Robot Systems",
+        "Swarm Robotics"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.MA",
+        "cs.SY"
+      ]
+    },
+    {
+      "slug": "aerial-robotics",
+      "group": "机器人与具身智能",
+      "name": "无人机与空中机器人",
+      "description": "Research on Aerial Robotics, including aerial robotics, autonomous drone, unmanned aerial vehicle, drone navigation, quadrotor control.",
+      "aliases": [
+        "Aerial Robotics",
+        "Autonomous Drones"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "eess.SY",
+        "cs.CV"
+      ]
+    },
+    {
+      "slug": "surgical-medical-robotics",
+      "group": "机器人与具身智能",
+      "name": "手术与医疗机器人",
+      "description": "Research on Surgical Robotics, including surgical robotics, robot-assisted surgery, medical robot learning, autonomous surgery, interventional robot.",
+      "aliases": [
+        "Surgical Robotics",
+        "Medical Robotics"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "cs.CV",
+        "eess.IV"
+      ]
+    },
+    {
+      "slug": "soft-robotics-learning",
+      "group": "机器人与具身智能",
+      "name": "软体机器人与可变形控制",
+      "description": "Research on Soft Robotics Learning, including soft robotics, soft robot control, deformable robot, morphological computation, continuum robot learning.",
+      "aliases": [
+        "Soft Robotics Learning",
+        "Learning for Soft Robots"
+      ],
+      "arxiv_categories": [
+        "cs.RO",
+        "eess.SY"
+      ]
+    },
+    {
+      "slug": "adversarial-machine-learning",
+      "group": "可信、安全与评测",
+      "name": "对抗机器学习",
+      "description": "Research on Adversarial ML, including adversarial machine learning, adversarial example, adversarial attack, adversarial training, certified robustness.",
+      "aliases": [
+        "Adversarial ML",
+        "Adversarial Robustness"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "cs.CR",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "model-red-teaming-jailbreak",
+      "group": "可信、安全与评测",
+      "name": "模型红队与越狱防御",
+      "description": "Research on AI Red Teaming, including model red teaming, language model jailbreak, prompt injection, automated red teaming, jailbreak defense.",
+      "aliases": [
+        "AI Red Teaming",
+        "Jailbreak Defense",
+        "Prompt Injection Security"
+      ],
+      "arxiv_categories": [
+        "cs.CR",
+        "cs.CL",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "data-poisoning-backdoors",
+      "group": "可信、安全与评测",
+      "name": "数据投毒与模型后门",
+      "description": "Research on Data Poisoning, including data poisoning, model backdoor, backdoor attack, training data attack, backdoor detection.",
+      "aliases": [
+        "Data Poisoning",
+        "Model Backdoors"
+      ],
+      "arxiv_categories": [
+        "cs.CR",
+        "cs.LG",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "foundation-model-privacy",
+      "group": "可信、安全与评测",
+      "name": "基础模型隐私与数据泄露",
+      "description": "Research on Foundation Model Privacy, including language model privacy, training data memorization, membership inference language model, data leakage foundation model, privacy auditing.",
+      "aliases": [
+        "Foundation Model Privacy",
+        "LLM Privacy"
+      ],
+      "arxiv_categories": [
+        "cs.CR",
+        "cs.CL",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "efficient-model-inference",
+      "group": "系统与基础设施",
+      "name": "高效模型推理与服务",
+      "description": "Efficient LLM inference and serving, including batching, caching, scheduling, decoding acceleration, throughput, and tail latency.",
+      "aliases": [
+        "Efficient AI Inference",
+        "Model Serving Systems"
+      ],
+      "arxiv_categories": [
+        "cs.DC",
+        "cs.PF",
+        "cs.LG"
+      ],
+      "default_order": 6
+    },
+    {
+      "slug": "distributed-foundation-training",
+      "group": "系统与基础设施",
+      "name": "基础模型分布式训练系统",
+      "description": "Research on Distributed LLM Training, including distributed foundation model training, large model training system, tensor parallelism, pipeline parallelism, expert parallelism.",
+      "aliases": [
+        "Distributed LLM Training",
+        "Large-Scale Model Training Systems"
+      ],
+      "arxiv_categories": [
+        "cs.DC",
+        "cs.PF",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "edge-on-device-ai",
+      "group": "系统与基础设施",
+      "name": "边缘与端侧 AI",
+      "description": "Research on Edge AI, including on-device AI, edge AI, mobile AI, embedded machine learning, edge inference.",
+      "aliases": [
+        "Edge AI",
+        "On-Device AI",
+        "TinyML"
+      ],
+      "arxiv_categories": [
+        "cs.DC",
+        "cs.PF",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "ai-hardware-accelerators",
+      "group": "系统与基础设施",
+      "name": "AI 芯片与硬件加速",
+      "description": "Research on AI Hardware Accelerators, including AI accelerator, neural network accelerator, in-memory computing AI, hardware-software co-design, machine learning hardware.",
+      "aliases": [
+        "AI Hardware Accelerators",
+        "Machine Learning Accelerators"
+      ],
+      "arxiv_categories": [
+        "cs.AR",
+        "cs.ET",
+        "cs.PF"
+      ]
+    },
+    {
+      "slug": "sustainable-green-ai",
+      "group": "系统与基础设施",
+      "name": "绿色 AI 与可持续计算",
+      "description": "Research on Green AI, including green AI, sustainable AI, energy-efficient machine learning, AI carbon footprint, energy-aware AI.",
+      "aliases": [
+        "Green AI",
+        "Sustainable AI Computing"
+      ],
+      "arxiv_categories": [
+        "cs.DC",
+        "cs.LG",
+        "cs.CY"
+      ]
+    },
+    {
+      "slug": "physics-informed-operator-learning",
+      "group": "AI for Science 与应用",
+      "name": "物理信息学习与算子学习",
+      "description": "Research on Physics-Informed Machine Learning, including physics-informed neural network, neural operator, operator learning, PDE surrogate, scientific surrogate model.",
+      "aliases": [
+        "Physics-Informed Machine Learning",
+        "Neural Operator Learning",
+        "PINN"
+      ],
+      "arxiv_categories": [
+        "cs.LG",
+        "physics.comp-ph",
+        "math.NA"
+      ]
+    },
+    {
+      "slug": "automated-scientific-discovery",
+      "group": "AI for Science 与应用",
+      "name": "自动化科学发现与实验智能体",
+      "description": "Research on Scientific Agents, including automated scientific discovery, autonomous laboratory, scientific agent, AI experiment design, self-driving lab.",
+      "aliases": [
+        "Scientific Agents",
+        "Autonomous Laboratories",
+        "Self-Driving Labs"
+      ],
+      "arxiv_categories": [
+        "cs.AI",
+        "cs.LG",
+        "physics.comp-ph"
+      ]
+    },
+    {
+      "slug": "protein-structure-design",
+      "group": "AI for Science 与应用",
+      "name": "蛋白质结构与设计",
+      "description": "Research on AI Protein Design, including protein structure prediction, protein design, protein sequence generation, protein engineering, protein foundation model.",
+      "aliases": [
+        "AI Protein Design",
+        "Protein Machine Learning"
+      ],
+      "arxiv_categories": [
+        "q-bio.BM",
+        "q-bio.QM",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "genomics-single-cell-ai",
+      "group": "AI for Science 与应用",
+      "name": "基因组与单细胞智能",
+      "description": "Research on Genomics AI, including genomic language model, single-cell machine learning, perturbation prediction, multi-omics integration, genomics AI.",
+      "aliases": [
+        "Genomics AI",
+        "Single-Cell AI"
+      ],
+      "arxiv_categories": [
+        "q-bio.GN",
+        "q-bio.QM",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "medical-imaging-pathology-ai",
+      "group": "AI for Science 与应用",
+      "name": "医学影像与计算病理",
+      "description": "Research on Medical Imaging AI, including medical image analysis, computational pathology, radiology AI, pathology foundation model, medical image segmentation.",
+      "aliases": [
+        "Medical Imaging AI",
+        "Computational Pathology"
+      ],
+      "arxiv_categories": [
+        "eess.IV",
+        "cs.CV",
+        "cs.AI"
+      ]
+    },
+    {
+      "slug": "weather-forecasting-ai",
+      "group": "AI for Science 与应用",
+      "name": "天气与气候预测模型",
+      "description": "Research on AI Weather Forecasting, including machine learning weather forecasting, AI weather model, data-driven weather prediction, climate prediction model, extreme weather forecasting.",
+      "aliases": [
+        "AI Weather Forecasting",
+        "Machine Learning Weather Models"
+      ],
+      "arxiv_categories": [
+        "physics.ao-ph",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "geospatial-remote-sensing-ai",
+      "group": "AI for Science 与应用",
+      "name": "地理空间与遥感智能",
+      "description": "Research on Geospatial AI, including geospatial AI, remote sensing foundation model, earth observation machine learning, satellite image analysis, geospatial foundation model.",
+      "aliases": [
+        "Geospatial AI",
+        "Remote Sensing AI"
+      ],
+      "arxiv_categories": [
+        "cs.CV",
+        "eess.IV",
+        "physics.geo-ph"
+      ]
+    },
+    {
+      "slug": "financial-ai",
+      "group": "AI for Science 与应用",
+      "name": "金融智能与量化建模",
+      "description": "Research on Financial AI, including financial machine learning, AI for finance, quantitative finance machine learning, financial time series, algorithmic trading learning.",
+      "aliases": [
+        "Financial AI",
+        "Machine Learning for Finance"
+      ],
+      "arxiv_categories": [
+        "q-fin.ST",
+        "q-fin.RM",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "ai-for-cybersecurity",
+      "group": "AI for Science 与应用",
+      "name": "AI for Cybersecurity",
+      "description": "Research on Cybersecurity AI, including AI for cybersecurity, machine learning malware detection, AI vulnerability discovery, security operations agent, intrusion detection machine learning.",
+      "aliases": [
+        "Cybersecurity AI",
+        "Machine Learning for Cybersecurity"
+      ],
+      "arxiv_categories": [
+        "cs.CR",
+        "cs.AI",
+        "cs.LG"
+      ]
+    },
+    {
+      "slug": "legal-ai-computational-law",
+      "group": "AI for Science 与应用",
+      "name": "法律 AI 与计算法学",
+      "description": "Research on Legal AI, including legal AI, computational law, legal language model, legal information retrieval, legal reasoning.",
+      "aliases": [
+        "Legal AI",
+        "Computational Law"
+      ],
+      "arxiv_categories": [
+        "cs.CL",
+        "cs.IR",
+        "cs.CY"
+      ]
+    }
+  ]
+}

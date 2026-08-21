@@ -1,6 +1,6 @@
 import type { Page, Route } from '@playwright/test'
 import type { DashboardData } from '../src/types/dashboard'
-import type { DirectionCatalog, Interests } from '../src/types/interests'
+import type { InterestPresets, Interests } from '../src/types/interests'
 
 const interests = {
   topics: [{
@@ -9,49 +9,33 @@ const interests = {
     description: 'Robotic systems that connect perception, reasoning, planning, and physical action.',
     aliases: ['Embodied AI'],
     arxiv_categories: ['cs.RO', 'cs.AI'],
-    keywords: ['robot learning'],
     enabled: true,
   }],
   watched_authors: [],
   watched_organizations: [],
 } satisfies Interests
 
-const directionCatalog = {
+const interestPresets = {
   version: 'test',
-  updated_at: '2026-08-21',
-  groups: ['Systems'],
-  count: 2,
   items: [
     {
       slug: 'embodied-ai',
       group: 'Systems',
-      level: 'main',
       name: 'Embodied AI Systems',
-      description: 'Embodied agents and robots.',
+      description: 'Embodied agents and robots that connect perception, reasoning, and control.',
       aliases: ['Embodied AI'],
       arxiv_categories: ['cs.RO', 'cs.AI'],
-      keywords: ['robot learning'],
-      context_keywords: ['perception', 'control'],
-      enabled: true,
     },
     {
       slug: 'llm-systems',
       group: 'Systems',
-      level: 'specialty',
-      parent_slug: null,
-      parent_name: null,
       name: 'Large Language Model Systems',
       description: 'Training and serving infrastructure for language models.',
       aliases: ['LLM Systems'],
       arxiv_categories: ['cs.CL', 'cs.DC'],
-      keywords: ['model serving'],
-      context_keywords: ['inference', 'distributed training'],
-      enabled: true,
     },
   ],
-  sources: [],
-  scope_note: 'Deterministic Playwright catalog.',
-} satisfies DirectionCatalog
+} satisfies InterestPresets
 
 const dashboard = {
   date: '2026-08-21',
@@ -82,5 +66,5 @@ export async function mockAppShell(page: Page) {
     month: '2026-08', latest_available_date: '2026-08-21', days: [],
   }))
   await page.route('**/api/interests', (route) => json(route, interests))
-  await page.route('**/api/directions/catalog', (route) => json(route, directionCatalog))
+  await page.route('**/api/interests/presets', (route) => json(route, interestPresets))
 }

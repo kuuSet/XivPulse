@@ -4,36 +4,21 @@ export interface BackendTopic {
   description: string
   aliases: string[]
   arxiv_categories: string[]
-  keywords: string[]
   enabled?: boolean
 }
 
-export interface DirectionCatalogItem extends BackendTopic {
-  context_keywords: string[]
+export interface InterestPreset {
   slug: string
   group: string
-  level: 'main' | 'specialty'
-  parent_slug?: string | null
-  parent_name?: string | null
-}
-
-interface DirectionCatalogSource {
   name: string
-  url: string
-  role: string
-  retrieved_at: string
+  description: string
+  aliases: string[]
+  arxiv_categories: string[]
 }
 
-export interface DirectionCatalog {
+export interface InterestPresets {
   version: string
-  updated_at: string
-  groups: string[]
-  count: number
-  main_count?: number
-  specialty_count?: number
-  items: DirectionCatalogItem[]
-  sources: DirectionCatalogSource[]
-  scope_note: string
+  items: InterestPreset[]
 }
 
 export interface Interests {

@@ -11,7 +11,6 @@ TOPIC_FIELDS = {
     "description",
     "enabled",
     "id",
-    "keywords",
     "name",
 }
 
@@ -34,3 +33,29 @@ def test_interests_reject_unknown_topic_fields(client: TestClient) -> None:
     response = client.put("/api/interests", json=interests)
 
     assert response.status_code == 422
+
+
+def test_interests_reject_blank_topic_names(client: TestClient) -> None:
+    interests = client.get("/api/interests").json()
+    interests["topics"][0]["name"] = "   "
+
+    response = client.put("/api/interests", json=interests)
+
+    assert response.status_code == 422
+
+
+def test_interest_presets_are_read_only_input_options(client: TestClient) -> None:
+    response = client.get("/api/interests/presets")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {"version", "items"}
+    assert payload["items"]
+    assert set(payload["items"][0]) == {
+        "slug",
+        "group",
+        "name",
+        "description",
+        "aliases",
+        "arxiv_categories",
+    }

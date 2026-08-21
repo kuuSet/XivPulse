@@ -8,7 +8,7 @@ from ...models import Profile
 from ...settings import RuntimeSettings
 
 
-def _interests_wire(
+def interests_view(
     profile: Profile,
     settings: RuntimeSettings,
 ) -> dict[str, Any]:
@@ -22,9 +22,11 @@ def _interests_wire(
                 "description": topic.description,
                 "aliases": topic.aliases,
                 "arxiv_categories": topic.arxiv_categories,
-                "keywords": topic.keywords,
                 "enabled": topic.enabled,
             }
             for topic in profile.topics
         ],
     }
+
+
+__all__ = ["interests_view"]

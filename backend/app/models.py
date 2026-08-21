@@ -70,7 +70,6 @@ class Topic(TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text, default="")
     aliases_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     arxiv_categories_json: Mapped[list[str]] = mapped_column(JSON, default=list)
-    keywords_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     profile: Mapped[Profile] = relationship(back_populates="topics")
@@ -90,15 +89,6 @@ class Topic(TimestampMixin, Base):
     @arxiv_categories.setter
     def arxiv_categories(self, value: list[str]) -> None:
         self.arxiv_categories_json = list(value)
-
-    @property
-    def keywords(self) -> list[str]:
-        return list(self.keywords_json or [])
-
-    @keywords.setter
-    def keywords(self, value: list[str]) -> None:
-        self.keywords_json = list(value)
-
 
 class Paper(TimestampMixin, Base):
     __tablename__ = "papers"

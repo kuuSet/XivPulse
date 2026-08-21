@@ -20,10 +20,10 @@ from ..models import (
     Profile,
     utcnow,
 )
+from ..modules.interests.views import interests_view
 from ..services.state import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
-from .presenters.interests import _interests_wire
 from .presenters.jobs import _job_wire
 from .presenters.papers import _paper_wire, _query_papers
 from .system_views import _provider_public_status, _settings_wire
@@ -229,7 +229,7 @@ def dashboard(
             "deep_analysis_threshold": deep_threshold,
         },
         "items": items,
-        "interests": _interests_wire(profile, current_settings),
+        "interests": interests_view(profile, current_settings),
         "settings": _settings_wire(db),
         "latest_report_date": latest_report_date,
         "latest_completed_date": latest_completed_date,

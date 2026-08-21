@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter
 
+from ..modules.interests.routes import router as interests_router
 from .auth import router as auth_router
 from .dashboard import router as dashboard_router
-from .interests import router as interests_router
 from .jobs import router as jobs_router
 from .papers import router as papers_router
 from .projects import router as projects_router

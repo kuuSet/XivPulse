@@ -1,5 +1,5 @@
 import type {
-  DirectionCatalog,
+  InterestPresets,
   Interests,
 } from '../types/interests'
 import type { DashboardData } from '../types/dashboard'
@@ -95,7 +95,7 @@ export const api = {
   }),
   logout: () => request<AuthSession>('/auth/logout', { method: 'POST' }),
   interests: () => request<Interests>('/interests'),
-  directionCatalog: () => request<DirectionCatalog>('/directions/catalog'),
+  interestPresets: () => request<InterestPresets>('/interests/presets'),
   saveInterests: (interests: Interests) =>
     request<Interests>('/interests', {
       method: 'PUT',
@@ -183,7 +183,6 @@ function interestsUpdatePayload(interests: Interests) {
       description: topic.description.trim(),
       aliases: unique(topic.aliases ?? []),
       arxiv_categories: unique(topic.arxiv_categories ?? []),
-      keywords: unique(topic.keywords ?? []),
       enabled: topic.enabled !== false,
     })),
     watched_authors: unique(interests.watched_authors),

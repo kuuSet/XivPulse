@@ -1,7 +1,7 @@
 import { Building2, Check, CheckCircle2, CircleAlert, LoaderCircle, Pencil, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
-import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Interests } from '../../types/interests'
+import type { BackendTopic, InterestPreset, InterestPresets, Interests } from '../../types/interests'
 import type { LoadState, Toast } from '../../app/types'
 import { Modal, FormSection, WorkspaceSkeleton, PageError } from '../../shared/ui'
 
@@ -9,8 +9,8 @@ type WatchKind = 'topic' | 'author' | 'organization'
 
 export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], message: string) => void }) {
   const [interests, setInterests] = useState<Interests | null>(null)
-  const [catalog, setCatalog] = useState<DirectionCatalog | null>(null)
-  const [catalogQuery, setCatalogQuery] = useState('')
+  const [presets, setPresets] = useState<InterestPresets | null>(null)
+  const [pickerQuery, setPickerQuery] = useState('')
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [editingTopicIndex, setEditingTopicIndex] = useState<number | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -27,10 +27,10 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
   const load = useCallback(async () => {
     setState('loading')
     try {
-      const [nextInterests, nextCatalog] = await Promise.all([api.interests(), api.directionCatalog()])
+      const [nextInterests, nextPresets] = await Promise.all([api.interests(), api.interestPresets()])
       savedInterestsRef.current = interestsFingerprint(nextInterests)
       setInterests(nextInterests)
-      setCatalog(nextCatalog)
+      setPresets(nextPresets)
       setSaveState('saved')
       setState('ready')
       setError('')
@@ -76,27 +76,27 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
   }, [interests, onToast, saveRetry, state])
 
   const topicIdentities = useMemo(
-    () => new Set((interests?.topics ?? []).filter((topic) => topic.enabled !== false).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(directionIdentity)),
+    () => new Set((interests?.topics ?? []).filter((topic) => topic.enabled !== false).flatMap((topic) => [topic.name, ...(topic.aliases ?? [])]).map(interestIdentity)),
     [interests],
   )
-  const visibleCatalogItems = useMemo(() => {
-    if (!catalog) return []
-    const query = catalogQuery.normalize('NFKC').trim().toLocaleLowerCase()
-    return catalog.items.filter((item) => {
+  const visiblePresets = useMemo(() => {
+    if (!presets) return []
+    const query = pickerQuery.normalize('NFKC').trim().toLocaleLowerCase()
+    return presets.items.filter((item) => {
       if (!query) return true
-      return [englishDirectionLabel(item), item.name, item.group, item.description, ...item.aliases, ...item.keywords]
+      return [englishInterestLabel(item), item.name, item.group, item.description, ...item.aliases]
         .join('\n').toLocaleLowerCase().includes(query)
     })
-  }, [catalog, catalogQuery])
+  }, [presets, pickerQuery])
 
-  const catalogItemExists = (item: DirectionCatalogItem) =>
-    [item.name, ...item.aliases].some((label) => topicIdentities.has(directionIdentity(label)))
+  const presetExists = (item: InterestPreset) =>
+    [item.name, ...item.aliases].some((label) => topicIdentities.has(interestIdentity(label)))
 
-  const addCatalogTopic = (item: DirectionCatalogItem) => {
+  const addPresetTopic = (item: InterestPreset) => {
     if (!interests) return
-    const identities = new Set([item.name, ...item.aliases].map(directionIdentity))
+    const identities = new Set([item.name, ...item.aliases].map(interestIdentity))
     const existingIndex = interests.topics.findIndex((topic) =>
-      [topic.name, ...(topic.aliases ?? [])].some((label) => identities.has(directionIdentity(label))),
+      [topic.name, ...(topic.aliases ?? [])].some((label) => identities.has(interestIdentity(label))),
     )
     if (existingIndex >= 0 && interests.topics[existingIndex].enabled !== false) {
       onToast('error', '该关注标签已经存在')
@@ -104,19 +104,18 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
     }
     if (existingIndex >= 0) {
       setInterests({ ...interests, topics: interests.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
-      setCatalogQuery('')
+      setPickerQuery('')
       return
     }
     const topic: BackendTopic = {
       name: item.name,
-      description: catalogDescription(item),
+      description: item.description,
       aliases: item.aliases,
       arxiv_categories: item.arxiv_categories,
-      keywords: item.keywords,
-      enabled: item.enabled,
+      enabled: true,
     }
     setInterests({ ...interests, topics: [...interests.topics, topic] })
-    setCatalogQuery('')
+    setPickerQuery('')
     setDescriptionDraft('')
   }
 
@@ -131,17 +130,17 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
 
   const addCustomTopic = () => {
     if (!interests) return
-    const name = catalogQuery.normalize('NFKC').trim()
-    if (!isEnglishDirectionLabel(name)) {
+    const name = pickerQuery.normalize('NFKC').trim()
+    if (!isEnglishInterestLabel(name)) {
 
       onToast('error', '请使用清晰的英文短语，例如 Multimodal robot learning')
       return
     }
-    const preset = catalog?.items.find((item) =>
-      [item.name, ...item.aliases].some((label) => directionIdentity(label) === directionIdentity(name)),
+    const preset = presets?.items.find((item) =>
+      [item.name, ...item.aliases].some((label) => interestIdentity(label) === interestIdentity(name)),
     )
     if (preset) {
-      addCatalogTopic(preset)
+      addPresetTopic(preset)
       return
     }
     const description = descriptionDraft.trim()
@@ -150,7 +149,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       return
     }
     const existingIndex = interests.topics.findIndex((topic) =>
-      [topic.name, ...(topic.aliases ?? [])].some((label) => directionIdentity(label) === directionIdentity(name)),
+      [topic.name, ...(topic.aliases ?? [])].some((label) => interestIdentity(label) === interestIdentity(name)),
     )
     if (existingIndex >= 0 && interests.topics[existingIndex].enabled !== false) {
       onToast('error', '该关注标签已经存在')
@@ -158,7 +157,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
     }
     if (existingIndex >= 0) {
       setInterests({ ...interests, topics: interests.topics.map((topic, index) => index === existingIndex ? { ...topic, enabled: true } : topic) })
-      setCatalogQuery('')
+      setPickerQuery('')
       return
     }
     const categories = Array.from(new Set(interests.topics.filter((topic) => topic.enabled !== false).flatMap((topic) => topic.arxiv_categories)))
@@ -168,12 +167,11 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
         name,
         description,
         arxiv_categories: categories.length ? categories : ['cs.AI'],
-        keywords: [name],
         aliases: [],
         enabled: true,
       }],
     })
-    setCatalogQuery('')
+    setPickerQuery('')
     setDescriptionDraft('')
   }
 
@@ -194,7 +192,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
 
   const addNamedWatch = () => {
     if (!interests) return
-    const value = catalogQuery.normalize('NFKC').trim()
+    const value = pickerQuery.normalize('NFKC').trim()
     if (value.length < 2) {
       onToast('error', pickerKind === 'author' ? '请输入作者姓名' : '请输入机构名称')
       return
@@ -205,7 +203,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       return
     }
     setInterests({ ...interests, [field]: [...interests[field], value] })
-    setCatalogQuery('')
+    setPickerQuery('')
   }
 
   const removeNamedWatch = (field: 'watched_authors' | 'watched_organizations', index: number) => {
@@ -231,9 +229,9 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
             <div className="interest-tag-editor">
               <div className="interest-tags">
                 {interests.topics.map((topic, index) => topic.enabled === false ? null : <span className="interest-tag topic" title={topic.description || '尚未填写标签描述'} key={topic.id ?? `new-${index}`}>
-                  {englishDirectionLabel(topic)}
-                  <button type="button" onClick={() => { setEditingTopicIndex(index); setDescriptionDraft(topic.description) }} aria-label={`编辑 ${englishDirectionLabel(topic)}`} title="编辑描述"><Pencil size={12} /></button>
-                  <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishDirectionLabel(topic)}`} title="删除标签"><X size={13} /></button>
+                  {englishInterestLabel(topic)}
+                  <button type="button" onClick={() => { setEditingTopicIndex(index); setDescriptionDraft(topic.description) }} aria-label={`编辑 ${englishInterestLabel(topic)}`} title="编辑描述"><Pencil size={12} /></button>
+                  <button type="button" onClick={() => removeTopic(index)} aria-label={`删除 ${englishInterestLabel(topic)}`} title="删除标签"><X size={13} /></button>
                 </span>)}
                 <button className="interest-add-tag" type="button" onClick={() => { setPickerKind('topic'); setPickerOpen(true) }} aria-label="添加关注标签" title="添加关注标签"><Plus size={16} /></button>
               </div>
@@ -260,22 +258,22 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
           </FormSection>
         </div>
       </div>
-      {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setCatalogQuery(''); setDescriptionDraft('') }}>
+      {pickerOpen && <Modal title={pickerKind === 'topic' ? '添加关注标签' : pickerKind === 'author' ? '添加关注作者' : '添加关注机构'} onClose={() => { setPickerOpen(false); setPickerQuery(''); setDescriptionDraft('') }}>
         <div className="interest-picker">
-          <label className="search-box"><Search size={15} /><input autoFocus value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (pickerKind !== 'topic') addNamedWatch() } }} placeholder={pickerKind === 'topic' ? 'Search presets or type a new interest' : pickerKind === 'author' ? 'Type an author name' : 'Type an organization name'} />{catalogQuery && <button type="button" onClick={() => setCatalogQuery('')} title="清空搜索"><X size={14} /></button>}</label>
-          {pickerKind === 'topic' && catalogQuery.trim() && !catalog?.items.some((item) => [item.name, ...item.aliases].some((label) => directionIdentity(label) === directionIdentity(catalogQuery))) && <label className="field interest-description-field"><span>Tag description (English)</span><textarea value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>The LLM reads this text during title prefiltering and abstract scoring. Be specific enough to exclude adjacent fields.</small></label>}
-          {catalogQuery.trim() && <button className={`interest-custom-option ${pickerKind === 'topic' && !isEnglishDirectionLabel(catalogQuery) ? 'invalid' : ''}`} type="button" onClick={pickerKind === 'topic' ? addCustomTopic : addNamedWatch}>
+          <label className="search-box"><Search size={15} /><input autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (pickerKind !== 'topic') addNamedWatch() } }} placeholder={pickerKind === 'topic' ? 'Search presets or type a new interest' : pickerKind === 'author' ? 'Type an author name' : 'Type an organization name'} />{pickerQuery && <button type="button" onClick={() => setPickerQuery('')} title="清空搜索"><X size={14} /></button>}</label>
+          {pickerKind === 'topic' && pickerQuery.trim() && !presets?.items.some((item) => [item.name, ...item.aliases].some((label) => interestIdentity(label) === interestIdentity(pickerQuery))) && <label className="field interest-description-field"><span>Tag description (English)</span><textarea value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>The LLM reads this text during title prefiltering and abstract scoring. Be specific enough to exclude adjacent fields.</small></label>}
+          {pickerQuery.trim() && <button className={`interest-custom-option ${pickerKind === 'topic' && !isEnglishInterestLabel(pickerQuery) ? 'invalid' : ''}`} type="button" onClick={pickerKind === 'topic' ? addCustomTopic : addNamedWatch}>
             <Plus size={15} />
-            <span><strong>Add “{catalogQuery.trim()}”</strong><small>{pickerKind === 'topic' ? isEnglishDirectionLabel(catalogQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语' : pickerKind === 'author' ? '使用论文中的完整作者姓名进行精确匹配' : '使用完整机构词组进行匹配'}</small></span>
+            <span><strong>Add “{pickerQuery.trim()}”</strong><small>{pickerKind === 'topic' ? isEnglishInterestLabel(pickerQuery) ? '匹配预设时保留完整规则，否则新建自定义标签' : '自定义标签需要使用英文短语' : pickerKind === 'author' ? '使用论文中的完整作者姓名进行精确匹配' : '使用完整机构词组进行匹配'}</small></span>
           </button>}
-          {pickerKind === 'topic' && <><div className="interest-picker-head"><strong>Preset interests</strong><span>{visibleCatalogItems.length} tags</span></div>
+          {pickerKind === 'topic' && <><div className="interest-picker-head"><strong>Preset interests</strong><span>{visiblePresets.length} tags</span></div>
           <div className="interest-options">
-            {visibleCatalogItems.map((item) => { const exists = catalogItemExists(item); return <button className={exists ? 'selected' : ''} type="button" disabled={exists} onClick={() => addCatalogTopic(item)} title={`${item.name}：${item.description}`} key={item.slug}>{exists ? <Check size={13} /> : <Plus size={13} />}<span>{englishDirectionLabel(item)}</span></button> })}
-            {!visibleCatalogItems.length && <p className="interest-empty">没有匹配的预设标签，可以使用上方输入创建自定义标签。</p>}
+            {visiblePresets.map((item) => { const exists = presetExists(item); return <button className={exists ? 'selected' : ''} type="button" disabled={exists} onClick={() => addPresetTopic(item)} title={`${item.name}：${item.description}`} key={item.slug}>{exists ? <Check size={13} /> : <Plus size={13} />}<span>{englishInterestLabel(item)}</span></button> })}
+            {!visiblePresets.length && <p className="interest-empty">没有匹配的预设标签，可以使用上方输入创建自定义标签。</p>}
           </div></>}
         </div>
       </Modal>}
-      {editingTopicIndex !== null && <Modal title={`编辑 ${englishDirectionLabel(interests.topics[editingTopicIndex])}`} onClose={() => { setEditingTopicIndex(null); setDescriptionDraft('') }}>
+      {editingTopicIndex !== null && <Modal title={`编辑 ${englishInterestLabel(interests.topics[editingTopicIndex])}`} onClose={() => { setEditingTopicIndex(null); setDescriptionDraft('') }}>
         <div className="interest-picker">
           <label className="field interest-description-field"><span>Tag description (English)</span><textarea autoFocus value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} placeholder="Describe the research problems, methods, systems, and application boundary covered by this tag." maxLength={2000} /><small>标题预筛和摘要粗排都会读取这段描述。</small></label>
           <button className="button primary" type="button" onClick={saveTopicDescription}>保存描述</button>
@@ -285,7 +283,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
   )
 }
 
-function directionIdentity(value: string) {
+function interestIdentity(value: string) {
   return value.normalize('NFKC').trim().replace(/[\s_-]+/g, '').toLocaleLowerCase()
 }
 
@@ -293,22 +291,17 @@ function interestsFingerprint(interests: Interests) {
   return JSON.stringify(interests)
 }
 
-function englishDirectionLabel(topic: Pick<BackendTopic, 'name' | 'aliases' | 'keywords'>) {
-  const candidates = [...(topic.aliases ?? []), ...(topic.keywords ?? []), topic.name]
+function englishInterestLabel(topic: Pick<BackendTopic, 'name' | 'aliases'>) {
+  const candidates = [...(topic.aliases ?? []), topic.name]
   const english = candidates.filter((value) => /[A-Za-z]/.test(value) && !/[\u3400-\u9fff]/.test(value))
   return english.find((value) => !/^[A-Z0-9-]{2,10}$/.test(value)) ?? english[0] ?? topic.name
 }
 
-function isEnglishDirectionLabel(value: string) {
+function isEnglishInterestLabel(value: string) {
   const normalized = value.normalize('NFKC').trim()
   return normalized.length >= 3 && /[A-Za-z]/.test(normalized) && !/[\u3400-\u9fff]/.test(normalized)
 }
 
 function isEnglishDescription(value: string) {
   return value.trim().length >= 12 && /[A-Za-z]/.test(value) && !/[\u3400-\u9fff]/.test(value)
-}
-
-function catalogDescription(item: DirectionCatalogItem) {
-  const terms = Array.from(new Set([...item.keywords, ...item.context_keywords])).slice(0, 12)
-  return `Research on ${englishDirectionLabel(item)}${terms.length ? `, including ${terms.join(', ')}` : ''}.`
 }

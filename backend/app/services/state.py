@@ -1,8 +1,6 @@
-"""Shared access to the single-user data scope and normalized string lists."""
+"""Shared access to the single-user data scope."""
 
 from __future__ import annotations
-
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -19,19 +17,3 @@ def active_profile(db: Session) -> Profile:
     if profile is None:
         raise RuntimeError("关注设置尚未初始化")
     return profile
-
-
-def clean_string_list(value: Any, *, limit: int = 200) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    result: list[str] = []
-    seen: set[str] = set()
-    for item in value[:limit]:
-        if not isinstance(item, str):
-            continue
-        cleaned = item.strip()
-        key = cleaned.casefold()
-        if cleaned and key not in seen:
-            seen.add(key)
-            result.append(cleaned)
-    return result
