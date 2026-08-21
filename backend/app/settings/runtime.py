@@ -14,6 +14,7 @@ from pydantic_settings import (
 
 from ..integrations.codex.catalog import CodexModel, CodexReasoningEffort
 from ..services.methods.types import CustomMethod
+from ..services.prompt_catalog import DEFAULT_PROMPT_TEMPLATE_ID, PROMPT_TEMPLATE_IDS
 from .process import (
     ProcessSettings,
     ProviderSettings,
@@ -104,7 +105,7 @@ class RuntimeSettings(BaseSettings):
     daily_synthesis_enabled: bool = False
 
     # Analysis prompt selection and overrides.
-    prompt_template_id: str = "balanced-review"
+    prompt_template_id: str = DEFAULT_PROMPT_TEMPLATE_ID
     deep_analysis_prompt: str | None = None
 
     # Method catalog customization.
@@ -151,11 +152,12 @@ class RuntimeSettings(BaseSettings):
     def validate_schedule_timezone(cls, value: str) -> str:
         return validate_timezone_name(value)
 
-    def prompt_values(self) -> dict[str, Any]:
-        return {
-            "prompt_template_id": self.prompt_template_id,
-            "deep_analysis_prompt": self.deep_analysis_prompt,
-        }
+    @field_validator("prompt_template_id")
+    @classmethod
+    def validate_prompt_template(cls, value: str) -> str:
+        if value not in PROMPT_TEMPLATE_IDS:
+            raise ValueError("未知的论文分析提示词模板")
+        return value
 
 
 def _effective_provider(

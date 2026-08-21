@@ -93,6 +93,16 @@ def test_unknown_database_settings_are_rejected() -> None:
             load_runtime_settings(session)
 
 
+def test_invalid_prompt_templates_are_rejected_from_the_database() -> None:
+    engine = make_engine("sqlite:///:memory:")
+    init_db(engine)
+    with Session(engine) as session:
+        set_setting(session, "prompt_template_id", "removed-template")
+        session.commit()
+        with pytest.raises(ValidationError, match="prompt_template_id"):
+            load_runtime_settings(session)
+
+
 def test_runtime_secrets_are_hidden_from_repr_and_serialization() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
 from app.models import Topic
-from app.services.analyzer import ANALYSIS_BUDGETS
+from app.services.analyzer import ANALYSIS_BUDGETS, analysis_budget
 from app.services.directions.catalog import (
     CATALOG_VERSION,
     DIRECTION_CATALOG,
@@ -97,6 +98,8 @@ def test_analysis_budget_modes_and_method_candidate_discovery() -> None:
     assert ANALYSIS_BUDGETS["economy"].max_fulltext_chars == 16_000
     assert ANALYSIS_BUDGETS["balanced"].max_pdf_pages == 25
     assert ANALYSIS_BUDGETS["deep"].deep_output_tokens == 5_000
+    with pytest.raises(KeyError):
+        analysis_budget("unknown")  # type: ignore[arg-type]
     assert len(METHOD_CATALOG) >= 90
     assert method_catalog_payload()["count"] == len(METHOD_CATALOG)
 

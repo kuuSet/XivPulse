@@ -144,7 +144,8 @@ async def test_provider_failure_stops_the_pipeline(
                 "prefilter_batch_size": 30,
                 "schedule_timezone": "UTC",
                 "analysis_budget": "economy",
-                "prompt_values": lambda self: {},
+                "prompt_template_id": "balanced-review",
+                "deep_analysis_prompt": None,
             },
         )(),
     )

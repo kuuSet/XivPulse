@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..analyzer import analysis_budget
+from ..analyzer import AnalysisBudgetMode, analysis_budget
 from ..provider import (
     GenerationResult,
     ProviderProtocolError,
@@ -120,7 +120,7 @@ async def generate_daily_report_synthesis(
     adapter: StructuredModelAdapter,
     report: Mapping[str, Any],
     *,
-    budget_mode: str,
+    budget_mode: AnalysisBudgetMode,
 ) -> GenerationResult[DailyReportSynthesis]:
     budget = analysis_budget(budget_mode)
     source = synthesis_source(report)

@@ -15,7 +15,6 @@ from ..jobs.service import update_job_progress
 from ..models import Analysis, Paper, PaperMatch, utcnow
 from ..settings import load_runtime_settings
 from .analyzer import PaperAnalyzer
-from .prompt_catalog import resolve_prompt_settings
 from .provider import TokenUsage
 from .provider_factory import create_model_adapter
 from .state import active_profile
@@ -45,14 +44,13 @@ async def analyze_papers(
     deep_limit = settings.deep_analysis_limit if limit is None else int(limit)
     batch_size = settings.prefilter_batch_size
     budget_mode = settings.analysis_budget
-    prompt_settings = resolve_prompt_settings(settings.prompt_values())
     analyzer = PaperAnalyzer(
         create_model_adapter(settings.providers.prefilter),
         create_model_adapter(settings.providers.screening),
         create_model_adapter(settings.providers.deep),
         budget_mode=budget_mode,
-        prompt_template_id=prompt_settings["prompt_template_id"],
-        deep_analysis_prompt=prompt_settings["deep_analysis_prompt"],
+        prompt_template_id=settings.prompt_template_id,
+        deep_analysis_prompt=settings.deep_analysis_prompt,
     )
     date_condition = _date_condition(report_date)
 

@@ -24,7 +24,10 @@ def _settings_wire(db: Session) -> dict[str, Any]:
         path = Path(str(bind.url.database)).resolve()
         database_path = str(path)
         database_size_bytes = path.stat().st_size if path.exists() else 0
-    prompt_settings = resolve_prompt_settings(settings.prompt_values())
+    prompt_settings = resolve_prompt_settings(
+        settings.prompt_template_id,
+        settings.deep_analysis_prompt,
+    )
     return {
         "providers": {
             stage: settings.providers.for_stage(stage).public_dict()

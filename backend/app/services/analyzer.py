@@ -20,10 +20,12 @@ from .prompt_catalog import (
 )
 from .provider import GenerationResult, StructuredModelAdapter
 
+AnalysisBudgetMode = Literal["economy", "balanced", "deep"]
+
 
 @dataclass(frozen=True, slots=True)
 class AnalysisBudget:
-    mode: Literal["economy", "balanced", "deep"]
+    mode: AnalysisBudgetMode
     label: str
     max_fulltext_chars: int
     max_pdf_pages: int
@@ -31,15 +33,15 @@ class AnalysisBudget:
     deep_output_tokens: int
 
 
-ANALYSIS_BUDGETS: dict[str, AnalysisBudget] = {
+ANALYSIS_BUDGETS: dict[AnalysisBudgetMode, AnalysisBudget] = {
     "economy": AnalysisBudget("economy", "经济", 16_000, 12, 900, 2_000),
     "balanced": AnalysisBudget("balanced", "平衡", 30_000, 25, 1_200, 3_500),
     "deep": AnalysisBudget("deep", "深度", 45_000, 40, 1_600, 5_000),
 }
 
 
-def analysis_budget(mode: str | None) -> AnalysisBudget:
-    return ANALYSIS_BUDGETS.get(str(mode or "balanced"), ANALYSIS_BUDGETS["balanced"])
+def analysis_budget(mode: AnalysisBudgetMode) -> AnalysisBudget:
+    return ANALYSIS_BUDGETS[mode]
 
 
 def _topic_context(topics: Sequence[Topic]) -> str:
@@ -65,7 +67,7 @@ class PaperAnalyzer:
         deep_adapter: StructuredModelAdapter,
         *,
         fulltext_fetcher: FullTextFetcher | None = None,
-        budget_mode: str = "balanced",
+        budget_mode: AnalysisBudgetMode = "balanced",
         prompt_template_id: str = DEFAULT_PROMPT_TEMPLATE_ID,
         deep_analysis_prompt: str | None = None,
     ) -> None:
@@ -75,7 +77,7 @@ class PaperAnalyzer:
         self.budget = analysis_budget(budget_mode)
         selected_prompt = prompt_template(prompt_template_id)
         self.prompt_template_id = selected_prompt.id
-        self.deep_analysis_prompt = str(
+        self.deep_analysis_prompt = (
             deep_analysis_prompt or selected_prompt.deep_analysis_prompt
         ).strip()
         self.fulltext_fetcher = fulltext_fetcher or FullTextFetcher(
@@ -179,6 +181,7 @@ class PaperAnalyzer:
 __all__ = [
     "ANALYSIS_BUDGETS",
     "AnalysisBudget",
+    "AnalysisBudgetMode",
     "analysis_budget",
     "PaperAnalyzer",
 ]

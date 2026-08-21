@@ -103,19 +103,19 @@ PROMPT_TEMPLATES: tuple[PromptTemplate, ...] = (
 )
 
 PROMPT_TEMPLATE_IDS = frozenset(item.id for item in PROMPT_TEMPLATES)
+_PROMPT_TEMPLATES_BY_ID = {item.id: item for item in PROMPT_TEMPLATES}
 
 
-def prompt_template(template_id: str | None) -> PromptTemplate:
-    requested = str(template_id or DEFAULT_PROMPT_TEMPLATE_ID)
-    return next(
-        (item for item in PROMPT_TEMPLATES if item.id == requested),
-        PROMPT_TEMPLATES[0],
-    )
+def prompt_template(template_id: str = DEFAULT_PROMPT_TEMPLATE_ID) -> PromptTemplate:
+    return _PROMPT_TEMPLATES_BY_ID[template_id]
 
 
-def resolve_prompt_settings(settings: dict[str, Any]) -> dict[str, Any]:
-    selected = prompt_template(settings.get("prompt_template_id"))
-    deep = str(settings.get("deep_analysis_prompt") or selected.deep_analysis_prompt).strip()
+def resolve_prompt_settings(
+    template_id: str,
+    deep_analysis_prompt: str | None,
+) -> dict[str, Any]:
+    selected = prompt_template(template_id)
+    deep = (deep_analysis_prompt or selected.deep_analysis_prompt).strip()
     return {
         "prompt_template_id": selected.id,
         "deep_analysis_prompt": deep,
