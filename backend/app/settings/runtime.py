@@ -12,6 +12,7 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from ..services.methods.types import CustomMethod
 from .process import ProcessSettings, ProviderSettings, get_process_settings
 from .store import load_setting_values
 
@@ -80,7 +81,7 @@ class RuntimeSettings(BaseSettings):
     deep_analysis_prompt: str | None = None
 
     # Method catalog customization.
-    custom_methods: tuple[Any, ...] = ()
+    custom_methods: tuple[CustomMethod, ...] = Field(default=(), max_length=100)
     dismissed_method_candidates: tuple[str, ...] = ()
 
     # Watched authors and organizations.

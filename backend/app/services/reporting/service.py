@@ -20,7 +20,6 @@ from ...models import (
 )
 from ...settings import load_runtime_settings
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
-from ..methods.catalog import clean_custom_methods
 from ..provider_factory import create_model_adapter
 from ..state import active_profile
 from .builder import build_daily_research_report
@@ -78,7 +77,7 @@ def persist_daily_report(
         timezone_name=timezone_name,
         highlight_limit=min(max_papers, 10),
         reading_queue_limit=max_papers,
-        custom_method_terms=clean_custom_methods(list(load_runtime_settings(db).custom_methods)),
+        custom_method_terms=load_runtime_settings(db).custom_methods,
     )
     encoded = report
     previous_synthesis = snapshot.payload.get("ai_synthesis") if snapshot is not None else None

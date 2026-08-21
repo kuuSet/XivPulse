@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from collections.abc import Iterable, Sequence
 
 from ..methods.catalog import match_method_labels
+from ..methods.types import CustomMethod
 from .records import (
     _EVIDENCE_TERMS,
     _clean_phrase,
@@ -29,7 +29,7 @@ def _controlled_terms(text: str, vocabulary: Sequence[tuple[str, Sequence[str]]]
 
 def _method_labels(
     record: _PaperSignal,
-    custom_terms: Sequence[Mapping[str, Any]] | None = None,
+    custom_terms: Sequence[CustomMethod] | None = None,
 ) -> list[str]:
     """Return stable, controlled labels for cross-paper aggregation."""
 

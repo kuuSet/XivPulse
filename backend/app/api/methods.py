@@ -15,11 +15,11 @@ from ..models import Analysis, Paper, utcnow
 from ..services.methods.catalog import (
     METHOD_CANDIDATE_MIN_PAPERS,
     METHOD_CANDIDATE_WINDOW_DAYS,
-    clean_custom_methods,
     discover_method_candidates,
     method_catalog_payload,
     normalize_method_key,
 )
+from ..services.methods.types import CustomMethod
 from ..services.state import clean_string_list
 from ..settings import load_runtime_settings, set_setting
 
@@ -32,13 +32,8 @@ class MethodCandidateDecisionPayload(BaseModel):
     aliases: list[str] = Field(default_factory=list, max_length=20)
 
 
-class CustomMethodPayload(BaseModel):
-    name: str = Field(min_length=1, max_length=80)
-    aliases: list[str] = Field(default_factory=list, max_length=20)
-
-
 class CustomMethodsPayload(BaseModel):
-    items: list[CustomMethodPayload] = Field(default_factory=list, max_length=100)
+    items: list[CustomMethod] = Field(default_factory=list, max_length=100)
 
 
 def _method_candidate_records(db: Session, window_days: int) -> list[dict[str, Any]]:
@@ -75,7 +70,7 @@ def _method_candidate_records(db: Session, window_days: int) -> list[dict[str, A
 @router.get("/api/methods/catalog")
 def methods_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    return method_catalog_payload(clean_custom_methods(list(settings.custom_methods)))
+    return method_catalog_payload(settings.custom_methods)
 
 
 @router.get("/api/methods/candidates")
@@ -83,7 +78,7 @@ def method_candidates(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
     window_days = METHOD_CANDIDATE_WINDOW_DAYS
     min_papers = METHOD_CANDIDATE_MIN_PAPERS
-    custom = clean_custom_methods(list(settings.custom_methods))
+    custom = list(settings.custom_methods)
     dismissed = list(settings.dismissed_method_candidates)
     candidates = discover_method_candidates(
         _method_candidate_records(db, window_days),
@@ -115,15 +110,15 @@ def accept_method_candidate(
     if candidate is None:
         raise HTTPException(status_code=404, detail="该候选已不存在或不再满足重复门槛")
     name = str(payload.name or candidate["name"]).strip()
-    custom = clean_custom_methods(list(settings.custom_methods))
-    if normalize_method_key(name) in {normalize_method_key(item["name"]) for item in custom}:
+    custom = list(settings.custom_methods)
+    if normalize_method_key(name) in {normalize_method_key(item.name) for item in custom}:
         raise HTTPException(status_code=409, detail="自定义方法中已经存在同名标签")
     aliases = clean_string_list(
         [candidate["name"], *payload.aliases] if name != candidate["name"] else payload.aliases,
         limit=20,
     )
-    custom.append({"name": name, "aliases": aliases})
-    set_setting(db, "custom_methods", custom)
+    custom.append(CustomMethod(name=name, aliases=aliases))
+    set_setting(db, "custom_methods", [item.model_dump(mode="json") for item in custom])
     db.commit()
     return method_catalog_payload(custom)
 
@@ -148,7 +143,7 @@ def replace_custom_methods(
     payload: CustomMethodsPayload,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    custom = clean_custom_methods([item.model_dump() for item in payload.items])
-    set_setting(db, "custom_methods", custom)
+    custom = payload.items
+    set_setting(db, "custom_methods", [item.model_dump(mode="json") for item in custom])
     db.commit()
     return method_catalog_payload(custom)

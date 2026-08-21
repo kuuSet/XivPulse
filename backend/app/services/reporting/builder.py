@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
+from ..methods.types import CustomMethod
 from ..organizations import paper_organizations
 from .records import (
     ARXIV_BATCH_DATE_BASIS,
@@ -541,7 +542,7 @@ def build_daily_research_report(
     timezone_name: str = DEFAULT_TIMEZONE,
     highlight_limit: int = 6,
     reading_queue_limit: int = 10,
-    custom_method_terms: Sequence[Mapping[str, Any]] | None = None,
+    custom_method_terms: Sequence[CustomMethod] | None = None,
 ) -> dict[str, Any]:
     """Generate a complete, evidence-aware daily report without remote calls."""
 

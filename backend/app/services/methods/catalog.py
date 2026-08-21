@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from ..state import clean_string_list
+from .types import CustomMethod
 
 
 @dataclass(frozen=True)
@@ -55,28 +55,6 @@ def normalize_method_key(value: object) -> str:
     return re.sub(r"[\s_\-‐‑‒–—]+", "", text)
 
 
-def clean_custom_methods(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in value[:100]:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or "").strip()
-        key = normalize_method_key(name)
-        if not name or not key or key in seen:
-            continue
-        result.append(
-            {
-                "name": name,
-                "aliases": clean_string_list(item.get("aliases", []), limit=20),
-            }
-        )
-        seen.add(key)
-    return result
-
-
 def _has_term(text: str, term: str) -> bool:
     phrase = term.strip()
     if not phrase:
@@ -92,15 +70,14 @@ def _has_term(text: str, term: str) -> bool:
     )
 
 
-def custom_method_terms(values: Iterable[Mapping[str, Any]] | None) -> tuple[MethodTerm, ...]:
+def custom_method_terms(values: Iterable[CustomMethod] | None) -> tuple[MethodTerm, ...]:
     result: list[MethodTerm] = []
     occupied = {normalize_method_key(alias) for item in METHOD_CATALOG for alias in item.aliases}
     for index, value in enumerate(values or []):
-        name = str(value.get("name") or "").strip()
+        name = value.name
         if not name or normalize_method_key(name) in occupied:
             continue
-        aliases = [str(item).strip() for item in value.get("aliases", []) if str(item).strip()]
-        unique_aliases = tuple(dict.fromkeys((name, *aliases)))
+        unique_aliases = tuple(dict.fromkeys((name, *value.aliases)))
         keys = {normalize_method_key(alias) for alias in unique_aliases}
         if not keys or keys & occupied:
             continue
@@ -119,14 +96,14 @@ def custom_method_terms(values: Iterable[Mapping[str, Any]] | None) -> tuple[Met
 
 
 def catalog_with_custom(
-    values: Iterable[Mapping[str, Any]] | None = None,
+    values: Iterable[CustomMethod] | None = None,
 ) -> tuple[MethodTerm, ...]:
     return (*METHOD_CATALOG, *custom_method_terms(values))
 
 
 def match_method_labels(
     text: str,
-    custom_values: Iterable[Mapping[str, Any]] | None = None,
+    custom_values: Iterable[CustomMethod] | None = None,
 ) -> list[str]:
     labels: list[str] = []
     for item in catalog_with_custom(custom_values):
@@ -159,7 +136,7 @@ def _candidate_phrase(value: object) -> str | None:
 def discover_method_candidates(
     records: Iterable[Mapping[str, Any]],
     *,
-    custom_values: Iterable[Mapping[str, Any]] | None = None,
+    custom_values: Iterable[CustomMethod] | None = None,
     dismissed: Iterable[str] = (),
     min_papers: int = METHOD_CANDIDATE_MIN_PAPERS,
 ) -> list[dict[str, Any]]:
@@ -216,7 +193,7 @@ def discover_method_candidates(
 
 
 def method_catalog_payload(
-    custom_values: Iterable[Mapping[str, Any]] | None = None,
+    custom_values: Iterable[CustomMethod] | None = None,
 ) -> dict[str, Any]:
     items = catalog_with_custom(custom_values)
     groups = list(dict.fromkeys(item.group for item in items))
