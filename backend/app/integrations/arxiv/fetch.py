@@ -9,8 +9,8 @@ from datetime import date
 
 import arxiv
 
-from ..domain.paper import Paper
 from .results import to_papers
+from .types import Paper
 
 _PAGE_SIZE = 200
 _CATEGORY_RE = re.compile(r"^[a-zA-Z][a-zA-Z.\-]+$")

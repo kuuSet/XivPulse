@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ...domain.paper import Paper, as_utc, deduplicate_papers
+from ...integrations.arxiv.types import Paper, as_utc, deduplicate_papers
 from ...models import Paper as StoredPaper
 from ...models import PaperVersion, utcnow
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from app.arxiv.download import limited_bytes
+from app.integrations.arxiv.download import limited_bytes
 from app.models import Paper
 
 

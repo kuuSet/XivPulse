@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 
 import arxiv
 
-from ..domain.paper import Paper, as_utc, deduplicate_papers
+from .types import Paper, as_utc, deduplicate_papers
 
 _ARXIV_ID_RE = re.compile(
     r"(?P<id>(?:[a-z][a-z.\-]+(?:\.[A-Z]{2})?/\d{7}|\d{4}\.\d{4,5}))"

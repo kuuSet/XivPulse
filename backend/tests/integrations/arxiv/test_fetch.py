@@ -6,8 +6,8 @@ from datetime import UTC, date, datetime
 
 import arxiv
 import pytest
-from app.arxiv.fetch import ArxivFetchError, fetch_daily
-from app.domain.paper import Paper as PaperDocument
+from app.integrations.arxiv.fetch import ArxivFetchError, fetch_daily
+from app.integrations.arxiv.types import Paper as PaperDocument
 
 
 class _FakeArxivMetadataClient:

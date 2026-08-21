@@ -9,8 +9,8 @@ from typing import Any
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, joinedload, sessionmaker
 
-from ...arxiv.affiliations import fetch_affiliations
 from ...database import SessionLocal, session_scope
+from ...integrations.arxiv.affiliations import fetch_affiliations
 from ...models import Analysis, Paper, PaperMatch, utcnow
 from ...profile import active_profile
 from ...services.provider import TokenUsage

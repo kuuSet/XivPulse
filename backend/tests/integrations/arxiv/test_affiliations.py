@@ -4,7 +4,7 @@ import json
 
 import httpx
 import pytest
-from app.arxiv.affiliations import fetch_affiliations
+from app.integrations.arxiv.affiliations import fetch_affiliations
 
 
 @pytest.mark.asyncio
@@ -34,7 +34,7 @@ async def test_affiliation_fetch_falls_back_to_arxiv_author_header() -> None:
 async def test_affiliation_html_has_an_independent_streaming_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.arxiv import affiliations as affiliations_module
+    from app.integrations.arxiv import affiliations as affiliations_module
 
     monkeypatch.setattr(affiliations_module, "_MAX_AFFILIATION_HTML_BYTES", 8)
 
