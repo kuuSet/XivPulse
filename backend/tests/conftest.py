@@ -2,10 +2,10 @@ from collections.abc import Callable, Iterator
 from unittest.mock import Mock
 
 import pytest
-from app import create_app
 from app.bootstrap import bootstrap_application
 from app.database import make_session_factory
 from app.jobs.service import PipelineCoordinator
+from app.main import create_app
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
