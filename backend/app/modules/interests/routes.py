@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...models import Topic
-from ...services.state import active_profile
+from ...profile import active_profile
 from ...settings import load_runtime_settings, set_setting
 from .presets import interest_presets_payload
 from .schemas import InterestsUpdate

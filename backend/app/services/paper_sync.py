@@ -15,8 +15,8 @@ from ..arxiv.repository import PaperRepository
 from ..database import SessionLocal, session_scope
 from ..domain.paper import Paper
 from ..models import PaperMatch, Topic
+from ..profile import active_profile
 from ..settings import load_runtime_settings
-from .state import active_profile
 
 
 @dataclass(frozen=True, slots=True)

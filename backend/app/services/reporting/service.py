@@ -19,9 +19,9 @@ from ...models import (
     ReportSynthesisRun,
     utcnow,
 )
+from ...profile import active_profile
 from ...settings import load_runtime_settings
 from ..provider_factory import create_model_adapter
-from ..state import active_profile
 from .builder import build_daily_research_report
 from .records import current_date_in_timezone
 from .synthesis import (

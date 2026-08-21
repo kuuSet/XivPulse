@@ -21,7 +21,7 @@ from ..models import (
     utcnow,
 )
 from ..modules.interests.views import interests_view
-from ..services.state import active_profile
+from ..profile import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.jobs import _job_wire

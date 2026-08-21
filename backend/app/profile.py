@@ -1,11 +1,11 @@
-"""Shared access to the single-user data scope."""
+"""Access the single-user profile shared by business modules."""
 
 from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import Profile
+from .models import Profile
 
 
 def active_profile(db: Session) -> Profile:

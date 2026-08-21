@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..jobs.service import RUNNING_STATUSES, JobConflict, PipelineCoordinator, PipelineKind
 from ..models import Analysis, Job, Paper, PaperMatch
+from ..profile import active_profile
 from ..services.paper_sync import latest_complete_submission_date
-from ..services.state import active_profile
 from .presenters.jobs import _job_wire
 from .system_views import _provider_public_status
 

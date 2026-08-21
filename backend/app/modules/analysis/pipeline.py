@@ -13,9 +13,9 @@ from ...arxiv.affiliations import fetch_affiliations
 from ...arxiv.repository import PaperRepository
 from ...database import SessionLocal, session_scope
 from ...models import Analysis, Paper, PaperMatch, utcnow
+from ...profile import active_profile
 from ...services.provider import TokenUsage
 from ...services.provider_factory import create_model_adapter
-from ...services.state import active_profile
 from ...settings import load_runtime_settings
 from .analyzer import PaperAnalyzer
 

@@ -12,13 +12,13 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import DailyResearchReport
+from ..profile import active_profile
 from ..services.reporting.service import (
     persist_daily_report,
     report_snapshot,
     send_daily_report_email,
     synthesize_daily_report,
 )
-from ..services.state import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 
