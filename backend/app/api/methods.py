@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Analysis, Paper, utcnow
+from ..services.methods.candidates import discover_saved_method_candidates
 from ..services.methods.catalog import (
     METHOD_CANDIDATE_MIN_PAPERS,
     METHOD_CANDIDATE_WINDOW_DAYS,
-    discover_method_candidates,
     method_catalog_payload,
     normalize_method_key,
 )
@@ -36,37 +33,6 @@ class CustomMethodsPayload(BaseModel):
     items: list[CustomMethod] = Field(default_factory=list, max_length=100)
 
 
-def _method_candidate_records(db: Session, window_days: int) -> list[dict[str, Any]]:
-    cutoff = utcnow() - timedelta(days=max(1, min(window_days, 365)))
-    rows = db.execute(
-        select(Analysis, Paper)
-        .join(Paper, Paper.id == Analysis.paper_id)
-        .where(
-            Analysis.status == "completed",
-            Analysis.created_at >= cutoff,
-        )
-        .order_by(desc(Analysis.created_at))
-    ).all()
-    # Prefer the newest method-bearing analysis for a paper. Screening usually
-    # has no methods, while deep analysis provides the structured source.
-    result: list[dict[str, Any]] = []
-    seen: set[int] = set()
-    for analysis, paper in rows:
-        methods = analysis.payload.get("methods", [])
-        if paper.id in seen or not isinstance(methods, list) or not methods:
-            continue
-        seen.add(paper.id)
-        result.append(
-            {
-                "paper_id": paper.id,
-                "arxiv_id": paper.arxiv_id,
-                "title": paper.title,
-                "methods": methods,
-            }
-        )
-    return result
-
-
 @router.get("/api/methods/catalog")
 def methods_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
     settings = load_runtime_settings(db)
@@ -80,11 +46,10 @@ def method_candidates(db: Session = Depends(get_db)) -> dict[str, Any]:
     min_papers = METHOD_CANDIDATE_MIN_PAPERS
     custom = list(settings.custom_methods)
     dismissed = list(settings.dismissed_method_candidates)
-    candidates = discover_method_candidates(
-        _method_candidate_records(db, window_days),
+    candidates = discover_saved_method_candidates(
+        db,
         custom_values=custom,
         dismissed=dismissed,
-        min_papers=min_papers,
     )
     return {
         "window_days": window_days,
@@ -102,7 +67,11 @@ def accept_method_candidate(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     settings = load_runtime_settings(db)
-    candidates = method_candidates(db)["items"]
+    candidates = discover_saved_method_candidates(
+        db,
+        custom_values=settings.custom_methods,
+        dismissed=settings.dismissed_method_candidates,
+    )
     candidate = next(
         (item for item in candidates if item["key"] == normalize_method_key(payload.key)),
         None,
