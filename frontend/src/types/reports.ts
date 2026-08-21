@@ -33,11 +33,7 @@ export interface DailyAggregateItem {
 }
 
 export interface DailyResearchGap {
-  text?: string
-  name?: string
-  item?: string
-  limitation?: string
-  gap?: string
+  text: string
   count?: number
   basis?: string
   paper_ids?: Array<Paper['id']>
@@ -173,14 +169,10 @@ export interface DailyReport {
   }
   topic_insights: DailyTopicInsight[]
   highlight_papers: DailyNotablePaper[]
-  notable_papers?: DailyNotablePaper[]
   common_methods: DailyAggregateItem[]
   common_evidence: DailyAggregateItem[]
-  shared_methods_evidence?: DailyAggregateItem[]
   limitations_and_research_gaps: Array<string | DailyResearchGap>
-  limitations_research_gaps?: Array<string | DailyResearchGap>
   suggested_reading_queue: DailyReadingQueueItem[]
-  recommended_reading_queue?: DailyReadingQueueItem[]
   methodology_note?: string
 }
 

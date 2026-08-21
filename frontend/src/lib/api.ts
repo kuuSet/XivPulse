@@ -10,7 +10,7 @@ import type {
   ProjectMembership,
   ResearchProject,
 } from '../types/projects'
-import type { DailyReport, DailyReportArchiveItem, DailyResearchGap } from '../types/reports'
+import type { DailyReport, DailyReportArchiveItem } from '../types/reports'
 import type { AnalysisPromptCatalog, ModelStage, Settings } from '../types/settings'
 import type { AppStatus, AuthSession, JobCalendarData, JobInfo } from '../types/system'
 import type { ResearchRoadmap, TopicTrends } from '../types/trends'
@@ -138,50 +138,40 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),
-  projects: async () => unwrapList<ResearchProject>(await request<unknown>('/projects')),
-  project: async (projectId: ProjectId) => unwrapEntity<ResearchProject>(await request<unknown>(`/projects/${encodeId(projectId)}`), 'project'),
-  createProject: async (payload: ProjectDraft) =>
-    unwrapEntity<ResearchProject>(await request<unknown>('/projects', { method: 'POST', body: JSON.stringify(payload) }), 'project'),
-  updateProject: async (projectId: ProjectId, payload: Partial<ProjectDraft>) =>
-    unwrapEntity<ResearchProject>(await request<unknown>(`/projects/${encodeId(projectId)}`, {
+  projects: async () => (await request<{ items: ResearchProject[]; count: number }>('/projects')).items,
+  project: (projectId: ProjectId) => request<ResearchProject>(`/projects/${encodeId(projectId)}`),
+  createProject: (payload: ProjectDraft) =>
+    request<ResearchProject>('/projects', { method: 'POST', body: JSON.stringify(payload) }),
+  updateProject: (projectId: ProjectId, payload: Partial<ProjectDraft>) =>
+    request<ResearchProject>(`/projects/${encodeId(projectId)}`, {
       method: 'PATCH', body: JSON.stringify(payload),
-    }), 'project'),
+    }),
   deleteProject: (projectId: ProjectId) => request<void>(`/projects/${encodeId(projectId)}`, { method: 'DELETE' }),
   addProjectPaper: async (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload = {}) => {
     const body = withMembershipDefaults(payload)
-    const result = await request<unknown>(
+    return request<ProjectMembership>(
       `/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`,
       { method: 'POST', body: JSON.stringify(body) },
     )
-    return unwrapEntity<ProjectMembership>(result, 'membership')
   },
-  updateProjectPaper: async (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload) => {
-    const result = await request<unknown>(
+  updateProjectPaper: (projectId: ProjectId, paperId: PaperId, payload: MembershipPayload) =>
+    request<ProjectMembership>(
       `/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`,
       { method: 'PATCH', body: JSON.stringify(payload) },
-    )
-    return unwrapEntity<ProjectMembership>(result, 'membership')
-  },
+    ),
   removeProjectPaper: (projectId: ProjectId, paperId: PaperId) =>
     request<void>(`/projects/${encodeId(projectId)}/papers/${encodeId(paperId)}`, { method: 'DELETE' }),
-  topicTrends: async (date?: string) =>
-    unwrapEntity<TopicTrends>(
-      await request<unknown>(`/trends/topics${date ? `?date=${encodeURIComponent(date)}` : ''}`),
-      'trends',
-    ),
-  roadmap: async () => unwrapEntity<ResearchRoadmap>(await request<unknown>('/trends/roadmap'), 'roadmap'),
-  dailyReport: async (date: string) => normalizeDailyReport(
-    unwrapEntity<DailyReport>(await request<unknown>(`/reports/daily?date=${encodeURIComponent(date)}`), 'report'),
-  ),
-  dailyReportHistory: async (limit = 90) => unwrapList<DailyReportArchiveItem>(
-    await request<unknown>(`/reports/daily/history?limit=${encodeURIComponent(String(limit))}`),
-  ),
-  regenerateDailyReport: async (date: string) => normalizeDailyReport(
-    unwrapEntity<DailyReport>(await request<unknown>(`/reports/daily/regenerate?date=${encodeURIComponent(date)}`, { method: 'POST' }), 'report'),
-  ),
-  synthesizeDailyReport: async (date: string, force = true) => normalizeDailyReport(
-    unwrapEntity<DailyReport>(await request<unknown>(`/reports/daily/synthesize?date=${encodeURIComponent(date)}&force=${force ? 'true' : 'false'}`, { method: 'POST' }), 'report'),
-  ),
+  topicTrends: (date?: string) =>
+    request<TopicTrends>(`/trends/topics${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  roadmap: () => request<ResearchRoadmap>('/trends/roadmap'),
+  dailyReport: (date: string) => request<DailyReport>(`/reports/daily?date=${encodeURIComponent(date)}`),
+  dailyReportHistory: async (limit = 90) => (
+    await request<{ items: DailyReportArchiveItem[]; count: number }>(`/reports/daily/history?limit=${encodeURIComponent(String(limit))}`)
+  ).items,
+  regenerateDailyReport: (date: string) =>
+    request<DailyReport>(`/reports/daily/regenerate?date=${encodeURIComponent(date)}`, { method: 'POST' }),
+  synthesizeDailyReport: (date: string, force = true) =>
+    request<DailyReport>(`/reports/daily/synthesize?date=${encodeURIComponent(date)}&force=${force ? 'true' : 'false'}`, { method: 'POST' }),
   sendDailyReport: (date: string) => request<{ ok: boolean; email_sent: number; email_failed: number; email_status: string }>(`/reports/daily/send?date=${encodeURIComponent(date)}`, { method: 'POST' }),
 }
 
@@ -192,23 +182,6 @@ function encodeId(id: PaperId | ProjectId) {
   return encodeURIComponent(String(id))
 }
 
-function unwrapList<T>(value: unknown): T[] {
-  if (Array.isArray(value)) return value as T[]
-  if (!value || typeof value !== 'object') return []
-  const record = value as Record<string, unknown>
-  for (const key of ['items', 'projects', 'data', 'results']) {
-    if (Array.isArray(record[key])) return record[key] as T[]
-  }
-  return []
-}
-
-function unwrapEntity<T>(value: unknown, key: string): T {
-  if (!value || typeof value !== 'object') return value as T
-  const record = value as Record<string, unknown>
-  const nested = record[key] ?? record.data ?? record.result
-  return (nested && typeof nested === 'object' && !Array.isArray(nested) ? nested : value) as T
-}
-
 function withMembershipDefaults(payload: MembershipPayload) {
   return {
     reading_state: payload.reading_state ?? 'queued',
@@ -216,28 +189,6 @@ function withMembershipDefaults(payload: MembershipPayload) {
     notes: payload.notes ?? '',
     tags: payload.tags ?? [],
   }
-}
-
-function normalizeDailyReport(report: DailyReport): DailyReport {
-  const highlightPapers = report.highlight_papers ?? report.notable_papers ?? []
-  const limitations = (report.limitations_and_research_gaps ?? report.limitations_research_gaps ?? []).map(normalizeGap)
-  const queue = report.suggested_reading_queue ?? report.recommended_reading_queue ?? []
-  return {
-    ...report,
-    highlight_papers: highlightPapers,
-    notable_papers: highlightPapers,
-    common_methods: report.common_methods ?? report.shared_methods_evidence ?? [],
-    common_evidence: report.common_evidence ?? [],
-    limitations_and_research_gaps: limitations,
-    limitations_research_gaps: limitations,
-    suggested_reading_queue: queue,
-    recommended_reading_queue: queue,
-  }
-}
-
-function normalizeGap(value: string | DailyResearchGap) {
-  if (typeof value === 'string') return value
-  return value.text ?? value.gap ?? value.limitation ?? value.name ?? value.item ?? '待核查的研究缺口'
 }
 
 function interestsUpdatePayload(interests: Interests) {
