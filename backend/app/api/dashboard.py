@@ -150,11 +150,9 @@ def dashboard(
     latest_daily_job = daily_jobs[0] if daily_jobs and target_date is None else None
     if target_date is not None:
         for job in daily_jobs:
-            job_date = job.result.get("fetch_date") or job.result.get("report_date")
-            if job_date == day.isoformat():
+            if job.result.get("fetch_date") == day.isoformat():
                 latest_daily_job = job
                 break
-    latest_result = latest_daily_job.result if latest_daily_job is not None else {}
     pending_prefilter = (
         db.scalar(
             select(func.count(PaperMatch.id))
@@ -219,7 +217,7 @@ def dashboard(
             "latest_update_at": (
                 _as_utc(latest_daily_job.completed_at) if latest_daily_job is not None else None
             ),
-            "latest_fetched_count": int(latest_result.get("fetched", 0) or 0),
+            "latest_fetched_count": fetched_today,
             "latest_screened_count": screened_today,
             "latest_deep_analyzed_count": deep_analyzed_today,
             "pending_prefilter_count": pending_prefilter,

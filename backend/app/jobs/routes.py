@@ -151,24 +151,21 @@ def job_calendar(
 
     latest_by_date: dict[str, Job] = {}
     for job in jobs:
-        coverage_date = job.result.get("fetch_date") or job.result.get("report_date")
+        coverage_date = job.result.get("fetch_date")
         if isinstance(coverage_date, str) and coverage_date.startswith(f"{month}-"):
             latest_by_date.setdefault(coverage_date, job)
 
     days = []
     for day, job in sorted(latest_by_date.items()):
         result = job.result
-        current = current_by_date.get(day)
-        screened = (
-            current["screened"] if current is not None else int(result.get("screened", 0) or 0)
+        current = current_by_date.get(
+            day,
+            {"fetched": 0, "prefiltered": 0, "kept": 0, "screened": 0},
         )
-        fetched = current["fetched"] if current is not None else int(result.get("fetched", 0) or 0)
-        prefiltered = (
-            current["prefiltered"]
-            if current is not None
-            else int(result.get("prefiltered", 0) or 0)
-        )
-        kept = current["kept"] if current is not None else int(result.get("prefilter_kept", 0) or 0)
+        screened = current["screened"]
+        fetched = current["fetched"]
+        prefiltered = current["prefiltered"]
+        kept = current["kept"]
         pending_prefilter = max(0, fetched - prefiltered)
         pending_screening = max(0, kept - screened)
         job_complete = (

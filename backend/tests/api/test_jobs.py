@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 
-def test_job_calendar_reports_title_and_abstract_progress(
+def test_job_calendar_uses_fetch_date_and_database_progress(
     client: TestClient,
     session_factory: sessionmaker[Session],
     insert_paper: Callable[..., int],
@@ -28,19 +28,53 @@ def test_job_calendar_reports_title_and_abstract_progress(
         prefilter_decision="uncertain",
     )
     with session_factory() as session:
-        session.add(
-            Job(
-                kind="daily",
-                status="completed",
-                progress=100,
-                result_json={"fetch_date": "2026-08-18", "fetched": 2},
-                completed_at=datetime.now(UTC),
-            )
+        session.add_all(
+            [
+                Job(
+                    kind="daily",
+                    status="completed",
+                    progress=100,
+                    result_json={
+                        "fetch_date": "2026-08-18",
+                        "fetched": 999,
+                        "prefiltered": 999,
+                        "prefilter_kept": 999,
+                        "screened": 999,
+                    },
+                    completed_at=datetime.now(UTC),
+                ),
+                Job(
+                    kind="daily",
+                    status="completed",
+                    progress=100,
+                    result_json={},
+                    completed_at=datetime.now(UTC),
+                ),
+                Job(
+                    kind="daily",
+                    status="completed",
+                    progress=100,
+                    result_json={"fetch_date": "2026-08-20", "fetched": 999},
+                    completed_at=datetime.now(UTC),
+                ),
+                Job(
+                    kind="daily",
+                    status="completed",
+                    progress=100,
+                    result_json={"fetch_date": "2026-08-21", "email_failed": 1},
+                    completed_at=datetime.now(UTC),
+                ),
+            ]
         )
         session.commit()
 
     payload = client.get("/api/job-calendar?month=2026-08").json()
-    day = payload["days"][0]
+    assert [day["date"] for day in payload["days"]] == [
+        "2026-08-18",
+        "2026-08-20",
+        "2026-08-21",
+    ]
+    day, empty_day, email_failed_day = payload["days"]
     assert day["date"] == "2026-08-18"
     assert day["fetched"] == 2
     assert day["prefiltered"] == 2
@@ -49,3 +83,9 @@ def test_job_calendar_reports_title_and_abstract_progress(
     assert day["pending_prefilter"] == 0
     assert day["pending_screening"] == 1
     assert day["status"] == "partial"
+    assert empty_day["fetched"] == 0
+    assert empty_day["prefiltered"] == 0
+    assert empty_day["prefilter_kept"] == 0
+    assert empty_day["screened"] == 0
+    assert empty_day["status"] == "completed"
+    assert email_failed_day["status"] == "partial"

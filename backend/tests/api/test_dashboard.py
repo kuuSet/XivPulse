@@ -3,11 +3,14 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from app.models import Job
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def test_dashboard_reports_each_llm_stage_for_requested_date(
     client: TestClient,
+    session_factory: sessionmaker[Session],
     insert_paper: Callable[..., int],
 ) -> None:
     selected = datetime(2026, 8, 18, 8, tzinfo=UTC)
@@ -36,6 +39,20 @@ def test_dashboard_reports_each_llm_stage_for_requested_date(
         prefilter_decision="relevant",
         score=99,
     )
+    with session_factory() as session:
+        session.add(
+            Job(
+                kind="daily",
+                status="completed",
+                progress=100,
+                result_json={
+                    "fetch_date": "2026-08-17",
+                    "fetched": 999,
+                },
+                completed_at=datetime(2026, 8, 18, 12, tzinfo=UTC),
+            )
+        )
+        session.commit()
 
     response = client.get("/api/dashboard?date=2026-08-18")
     assert response.status_code == 200
@@ -47,3 +64,5 @@ def test_dashboard_reports_each_llm_stage_for_requested_date(
     assert [paper["title"] for paper in payload["items"]] == ["Scored paper"]
     assert payload["processing_summary"]["pending_prefilter_count"] == 1
     assert payload["processing_summary"]["pending_screening_count"] == 0
+    assert payload["processing_summary"]["latest_fetched_count"] == 3
+    assert payload["processing_summary"]["latest_update_at"] is None
