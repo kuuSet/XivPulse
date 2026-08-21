@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Any
 
 import app.jobs.workflow as workflow
+import app.runtime as runtime_module
 import pytest
 from app import create_app
 from app.database import Base, make_engine, make_session_factory
 from app.database_defaults import seed_defaults
 from app.models import Job, Profile
+from app.runtime import initialize_application
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -55,6 +57,7 @@ async def test_default_pipelines_use_their_application_database(
         Base.metadata.create_all(engine)
         with factory() as session:
             seed_defaults(session)
+            session.commit()
 
     used_factories: list[sessionmaker[Session]] = []
 
@@ -103,3 +106,25 @@ async def test_default_pipelines_use_their_application_database(
 
     for engine in engines:
         engine.dispose()
+
+
+def test_application_initialization_rolls_back_failed_seed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    engine = make_engine(f"sqlite:///{(tmp_path / 'rollback.db').as_posix()}")
+    factory = make_session_factory(engine)
+
+    def fail_after_writing(session: Session) -> None:
+        session.add(Profile())
+        session.flush()
+        raise RuntimeError("seed failed")
+
+    monkeypatch.setattr(runtime_module, "seed_defaults", fail_after_writing)
+
+    with pytest.raises(RuntimeError, match="seed failed"):
+        initialize_application(factory)
+
+    with factory() as session:
+        assert session.scalars(select(Profile)).all() == []
+    engine.dispose()

@@ -29,6 +29,7 @@ def app_factory() -> Iterator[Callable[[], FastAPI]]:
         Base.metadata.create_all(engine)
         with session_factory() as session:
             seed_defaults(session)
+            session.commit()
         return create_app(
             session_factory=session_factory,
             pipeline=Mock(spec=PipelineCoordinator),

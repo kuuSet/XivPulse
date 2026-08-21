@@ -6,7 +6,8 @@ import json
 
 import app.settings.process as settings_module
 import pytest
-from app.database import init_db, make_engine
+from app.database import init_db, make_engine, make_session_factory, session_scope
+from app.database_defaults import seed_defaults
 from app.models import Profile
 from app.settings import ProviderSettings, load_runtime_settings, set_setting
 from pydantic import ValidationError
@@ -29,7 +30,11 @@ def _provider_settings(**overrides: object) -> ProviderSettings:
 def test_seed_is_idempotent_and_provider_public_dict_never_exposes_secret() -> None:
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
-    init_db(engine)
+    factory = make_session_factory(engine)
+    with session_scope(factory) as session:
+        seed_defaults(session)
+    with session_scope(factory) as session:
+        seed_defaults(session)
     with Session(engine) as session:
         profiles = list(session.scalars(select(Profile)).all())
         assert len(profiles) == 1

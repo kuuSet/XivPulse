@@ -24,6 +24,7 @@ async def test_sync_creates_unfiltered_matches_for_every_fetched_paper() -> None
     with factory() as session:
         seed_defaults(session)
         profile_id = session.query(Profile).one().id
+        session.commit()
 
     async def fetcher(*_args: object, **_kwargs: object) -> list[PaperDocument]:
         return [

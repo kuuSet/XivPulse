@@ -75,4 +75,3 @@ def seed_defaults(session: Session) -> None:
                 color=FAVORITES_LIBRARY_COLOR,
             )
         )
-    session.commit()

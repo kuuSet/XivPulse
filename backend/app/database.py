@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import Request
 from sqlalchemy import Engine, create_engine, event
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .settings import get_process_settings
@@ -47,17 +47,11 @@ engine = make_engine()
 SessionLocal = make_session_factory(engine)
 
 
-def init_db(bind: Engine | None = None, *, seed: bool = True) -> Engine:
+def init_db(bind: Engine | Connection | None = None) -> None:
     from . import models  # noqa: F401
-    from .database_defaults import seed_defaults
 
     target = bind or engine
     Base.metadata.create_all(target)
-    if seed:
-        factory = make_session_factory(target)
-        with factory() as session:
-            seed_defaults(session)
-    return target
 
 
 def get_db(request: Request) -> Generator[Session, None, None]:

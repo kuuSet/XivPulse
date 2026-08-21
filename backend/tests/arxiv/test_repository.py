@@ -32,7 +32,7 @@ def test_parse_dedupe_and_version_upsert() -> None:
     ]
 
     engine = make_engine("sqlite:///:memory:")
-    init_db(engine, seed=False)
+    init_db(engine)
     with Session(engine) as session:
         first = PaperDocument(
             arxiv_id="2608.01234",

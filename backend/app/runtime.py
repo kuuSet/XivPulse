@@ -14,7 +14,8 @@ def initialize_application(
     session_factory: sessionmaker[Session] = SessionLocal,
 ) -> None:
     auth_settings()
-    init_db(session_factory.kw["bind"], seed=False)
+    with session_factory() as db:
+        init_db(db.get_bind())
     with session_scope(session_factory) as db:
         seed_defaults(db)
         recover_stale_jobs(db)
