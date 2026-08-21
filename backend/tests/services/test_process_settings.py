@@ -35,7 +35,7 @@ def test_process_settings_derive_storage_from_one_data_directory(
     assert settings.database_url == f"sqlite:///{data_dir.resolve().as_posix()}/xivpulse.db"
 
 
-def test_environment_key_fallback_and_secrets_are_hidden(
+def test_standard_openai_key_and_secrets_are_handled_safely(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("XIVPULSE_API_KEY", raising=False)
