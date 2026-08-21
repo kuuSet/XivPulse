@@ -8,6 +8,7 @@ from ..models import Feedback, PaperReadingState, ProjectPaper, ResearchProject
 FAVORITES_LIBRARY_KIND = "favorites"
 FAVORITES_LIBRARY_NAME = "收藏库"
 FAVORITES_LIBRARY_COLOR = "#b54747"
+FAVORITES_LIBRARY_DESCRIPTION = "收藏的论文会自动归入这里。"
 
 
 def set_saved_feedback(
@@ -32,56 +33,6 @@ def set_saved_feedback(
     return feedback
 
 
-def ensure_favorites_library(db: Session, profile_id: int) -> ResearchProject:
-    library = db.scalar(
-        select(ResearchProject).where(
-            ResearchProject.profile_id == profile_id,
-            ResearchProject.kind == FAVORITES_LIBRARY_KIND,
-        )
-    )
-    if library is not None:
-        return library
-    library = db.scalar(
-        select(ResearchProject).where(
-            ResearchProject.profile_id == profile_id,
-            ResearchProject.name == FAVORITES_LIBRARY_NAME,
-        )
-    )
-    if library is None:
-        library = ResearchProject(
-            profile_id=profile_id,
-            name=FAVORITES_LIBRARY_NAME,
-            description="收藏的论文会自动归入这里。",
-            kind=FAVORITES_LIBRARY_KIND,
-            status="active",
-            color=FAVORITES_LIBRARY_COLOR,
-        )
-        db.add(library)
-    else:
-        library.kind = FAVORITES_LIBRARY_KIND
-    db.flush()
-    existing_paper_ids = {link.paper_id for link in library.paper_links}
-    saved_paper_ids = set(
-        db.scalars(
-            select(Feedback.paper_id).where(
-                Feedback.profile_id == profile_id,
-                Feedback.action == "save",
-            )
-        ).all()
-    )
-    for paper_id in saved_paper_ids - existing_paper_ids:
-        db.add(
-            ProjectPaper(
-                project_id=library.id,
-                paper_id=paper_id,
-                reading_state="queued",
-            )
-        )
-    for paper_id in existing_paper_ids - saved_paper_ids:
-        set_saved_feedback(db, profile_id, paper_id, True)
-    return library
-
-
 def sync_favorites_membership(
     db: Session,
     profile_id: int,
@@ -89,7 +40,12 @@ def sync_favorites_membership(
     *,
     saved: bool,
 ) -> ProjectPaper | None:
-    library = ensure_favorites_library(db, profile_id)
+    library = db.scalars(
+        select(ResearchProject).where(
+            ResearchProject.profile_id == profile_id,
+            ResearchProject.kind == FAVORITES_LIBRARY_KIND,
+        )
+    ).one()
     membership = db.scalar(
         select(ProjectPaper).where(
             ProjectPaper.project_id == library.id,

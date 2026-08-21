@@ -14,7 +14,6 @@ from ..database import get_db
 from ..models import Paper, ProjectPaper, ResearchProject
 from ..services.library import (
     FAVORITES_LIBRARY_KIND,
-    ensure_favorites_library,
     set_saved_feedback,
 )
 from ..services.state import active_profile
@@ -72,8 +71,6 @@ def list_projects(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     profile = active_profile(db)
-    ensure_favorites_library(db, profile.id)
-    db.commit()
     statement = (
         select(ResearchProject)
         .options(selectinload(ResearchProject.paper_links))

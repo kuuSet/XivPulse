@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from .services.directions.catalog import DIRECTION_CATALOG
 
-
 _DEFAULT_DESCRIPTIONS = {
     "embodied-generalist": (
         "Embodied AI systems that integrate perception, reasoning, learning, planning, "
@@ -51,7 +50,13 @@ DEFAULT_TOPICS = tuple(_default_topic(slug) for slug in _DEFAULT_DESCRIPTIONS)
 
 
 def seed_defaults(session: Session) -> None:
-    from .models import Profile, Topic
+    from .models import Profile, ResearchProject, Topic
+    from .services.library import (
+        FAVORITES_LIBRARY_COLOR,
+        FAVORITES_LIBRARY_DESCRIPTION,
+        FAVORITES_LIBRARY_KIND,
+        FAVORITES_LIBRARY_NAME,
+    )
 
     profile = session.scalar(select(Profile).order_by(Profile.id))
     if profile is None:
@@ -60,4 +65,14 @@ def seed_defaults(session: Session) -> None:
         session.flush()
         for values in DEFAULT_TOPICS:
             session.add(Topic(profile_id=profile.id, enabled=True, **values))
+        session.add(
+            ResearchProject(
+                profile_id=profile.id,
+                name=FAVORITES_LIBRARY_NAME,
+                description=FAVORITES_LIBRARY_DESCRIPTION,
+                kind=FAVORITES_LIBRARY_KIND,
+                status="active",
+                color=FAVORITES_LIBRARY_COLOR,
+            )
+        )
     session.commit()

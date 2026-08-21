@@ -6,6 +6,31 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 
 
+def test_saved_feedback_controls_the_seeded_favorites_library(
+    client: TestClient,
+    insert_paper: Callable[..., int],
+) -> None:
+    paper_id = insert_paper(
+        arxiv_id="2608.23000",
+        title="Favorite paper",
+        published_at=datetime(2026, 8, 18, 8, tzinfo=UTC),
+        prefilter_decision="relevant",
+        score=75,
+    )
+    projects = client.get("/api/projects").json()["items"]
+    favorites = next(project for project in projects if project["kind"] == "favorites")
+    assert favorites["paper_count"] == 0
+
+    response = client.post(f"/api/papers/{paper_id}/feedback", json={"action": "save"})
+    assert response.status_code == 200
+    saved = client.get(f"/api/projects/{favorites['id']}").json()
+    assert [item["paper_id"] for item in saved["papers"]] == [paper_id]
+
+    response = client.post(f"/api/papers/{paper_id}/feedback", json={"action": "neutral"})
+    assert response.status_code == 200
+    assert client.get(f"/api/projects/{favorites['id']}").json()["papers"] == []
+
+
 def test_project_membership_round_trip_uses_canonical_paper_field(
     client: TestClient,
     insert_paper: Callable[..., int],

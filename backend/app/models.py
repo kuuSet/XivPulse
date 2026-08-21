@@ -335,7 +335,7 @@ class Feedback(TimestampMixin, Base):
 
 
 class FeedbackReason(Base):
-    """Structured feedback stored separately to keep old SQLite databases additive-only."""
+    """One normalized reason attached to paper feedback."""
 
     __tablename__ = "feedback_reasons"
     __table_args__ = (UniqueConstraint("feedback_id", "code", name="uq_feedback_reason_code"),)
