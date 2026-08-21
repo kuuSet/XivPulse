@@ -7,8 +7,7 @@ import { ProjectsView } from './features/projects/ProjectsView'
 import { SettingsView } from './features/settings/SettingsView'
 import { TrendsView } from './features/trends/TrendsView'
 import { api } from './lib/api'
-import { BRAND_LOGO, isDemo } from './lib/runtime'
-import { sampleDashboard, sampleProjects } from './sample'
+import { BRAND_LOGO } from './lib/runtime'
 import { applyReading, getReading } from './shared/format'
 import type { DashboardData } from './types/dashboard'
 import type { Feedback, FeedbackAction, Paper, ReadingData } from './types/papers'
@@ -42,7 +41,7 @@ function locationDate() {
 
 function App() {
   const [view, setView] = useState<View>(initialView)
-  const [authSession, setAuthSession] = useState<AuthSession | null>(isDemo ? { enabled: false, authenticated: true } : null)
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null)
   const [authError, setAuthError] = useState('')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
@@ -69,7 +68,7 @@ function App() {
     setDashboardState('loading')
     setDashboardError('')
     try {
-      const data = isDemo ? sampleDashboard : await api.dashboard(targetDate)
+      const data = await api.dashboard(targetDate)
       setDashboard(data)
       setUiFontSizePt(data.settings?.ui_font_size_pt ?? 12)
       const url = new URL(window.location.href)
@@ -107,10 +106,6 @@ function App() {
 
   const loadProjects = useCallback(async () => {
     try {
-      if (isDemo) {
-        syncProjects(sampleProjects)
-        return
-      }
       const listed = await api.projects()
       const detailed = await Promise.all(listed.map(async (project) => {
         try { return await api.project(project.id) } catch { return project }
@@ -122,7 +117,6 @@ function App() {
   }, [syncProjects])
 
   useEffect(() => {
-    if (isDemo) return
     void api.authSession()
       .then((session) => { setAuthSession(session); setAuthError('') })
       .catch((error) => { setAuthError(error instanceof Error ? error.message : '无法连接服务'); setAuthSession({ enabled: false, authenticated: false }) })
@@ -149,7 +143,7 @@ function App() {
   }, [dashboard?.date, loadDashboard])
 
   useEffect(() => {
-    if (isDemo || !authSession?.authenticated) return
+    if (!authSession?.authenticated) return
     let cancelled = false
     let timer: number | undefined
     let lastCompletedId = ''
@@ -185,10 +179,6 @@ function App() {
   const handleReading = useCallback(async (paper: Paper, reading: ReadingData) => {
     const previous = getReading(paper)
     updatePaper(paper.id, (item) => applyReading(item, reading))
-    if (isDemo) {
-      pushToast('success', '阅读进度已保存')
-      return true
-    }
     try {
       const saved = await api.saveReading(paper.id, reading)
       updatePaper(paper.id, (item) => applyReading(item, { ...reading, ...saved }))
@@ -204,10 +194,6 @@ function App() {
   const handleDetailedFeedback = useCallback(async (paper: Paper, feedback: Feedback) => {
     const previous = paper.feedback ?? null
     updatePaper(paper.id, (item) => ({ ...item, feedback, feedback_reasons: feedback.reasons ?? [] }))
-    if (isDemo) {
-      pushToast('success', '推荐反馈已保存')
-      return true
-    }
     try {
       const action = feedback.action === 'skip' || feedback.action === 'dismiss' ? 'dismiss' : feedback.action ?? 'neutral'
       await api.feedback(paper.id, { action, rating: feedback.rating, note: feedback.note ?? '', reasons: feedback.reasons ?? [] })
@@ -226,10 +212,6 @@ function App() {
       const previous = paper.feedback?.action === 'skip' ? 'dismiss' : (paper.feedback?.action ?? null)
       const next = previous === action ? null : action
       updatePaper(paper.id, (item) => ({ ...item, feedback: { ...item.feedback, action: next } }))
-      if (isDemo) {
-        pushToast('success', next === 'save' ? '已收藏论文' : next === 'dismiss' ? '已减少此类推荐' : '反馈已记录')
-        return true
-      }
       try {
         await api.feedback(paper.id, next ?? 'neutral')
         if (next === 'save' || previous === 'save') await loadProjects()
@@ -247,19 +229,12 @@ function App() {
   const handleRefresh = async (targetDate?: string) => {
     setRefreshing(true)
     try {
-      if (!isDemo) {
-        const result = targetDate ? await api.runDaily(targetDate) : await api.refresh()
-        setJob({ id: result.job_id, job_id: result.job_id, kind: 'daily', status: result.status, progress: 0, total: 0, message: result.message, created_at: new Date().toISOString() })
-        setRefreshing(true)
-        pushToast('success', targetDate ? `${targetDate} 补跑任务已启动` : (result.message || '抓取任务已启动'))
-      } else {
-        await new Promise((resolve) => window.setTimeout(resolve, 650))
-        pushToast('success', '演示数据已刷新')
-      }
+      const result = targetDate ? await api.runDaily(targetDate) : await api.refresh()
+      setJob({ id: result.job_id, job_id: result.job_id, kind: 'daily', status: result.status, progress: 0, total: 0, message: result.message, created_at: new Date().toISOString() })
+      setRefreshing(true)
+      pushToast('success', targetDate ? `${targetDate} 补跑任务已启动` : (result.message || '抓取任务已启动'))
     } catch (error) {
       pushToast('error', error instanceof Error ? error.message : '刷新失败')
-    } finally {
-      if (isDemo) setRefreshing(false)
     }
   }
 
@@ -400,7 +375,7 @@ function Sidebar({ current, open, authEnabled, onNavigate, onClose, onLogout }: 
         </nav>
         <div className="sidebar-foot">
           <div className="service-line"><span className="status-dot" /> 本地服务运行中</div>
-          <span>{isDemo ? '演示数据模式' : '数据仅保存在本机'}</span>
+          <span>数据仅保存在本机</span>
           {authEnabled && <button className="sidebar-logout" onClick={onLogout}><LogOut size={14} />退出登录</button>}
         </div>
       </aside>

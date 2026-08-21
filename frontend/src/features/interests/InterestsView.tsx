@@ -1,8 +1,6 @@
 import { Building2, Check, CheckCircle2, CircleAlert, LoaderCircle, Pencil, Plus, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
-import { isDemo } from '../../lib/runtime'
-import { sampleInterests } from '../../sample'
 import type { BackendTopic, DirectionCatalog, DirectionCatalogItem, Interests } from '../../types/interests'
 import type { LoadState, Toast } from '../../app/types'
 import { Modal, FormSection, WorkspaceSkeleton, PageError } from '../../shared/ui'
@@ -29,9 +27,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
   const load = useCallback(async () => {
     setState('loading')
     try {
-      const [nextInterests, nextCatalog] = isDemo
-        ? [sampleInterests, demoDirectionCatalog(sampleInterests)]
-        : await Promise.all([api.interests(), api.directionCatalog()])
+      const [nextInterests, nextCatalog] = await Promise.all([api.interests(), api.directionCatalog()])
       savedInterestsRef.current = interestsFingerprint(nextInterests)
       setInterests(nextInterests)
       setCatalog(nextCatalog)
@@ -62,7 +58,7 @@ export function InterestsView({ onToast }: { onToast: (kind: Toast['kind'], mess
       pendingSavesRef.current += 1
       saveQueueRef.current = saveQueueRef.current.then(async () => {
         try {
-          const saved = isDemo ? queuedInterests : await api.saveInterests(queuedInterests)
+          const saved = await api.saveInterests(queuedInterests)
           savedInterestsRef.current = interestsFingerprint(saved)
           if (version !== saveVersionRef.current) return
           setInterests(saved)
@@ -312,16 +308,4 @@ function isEnglishDescription(value: string) {
 function catalogDescription(item: DirectionCatalogItem) {
   const terms = Array.from(new Set([...item.keywords, ...item.context_keywords])).slice(0, 12)
   return `Research on ${englishDirectionLabel(item)}${terms.length ? `, including ${terms.join(', ')}` : ''}.`
-}
-
-function demoDirectionCatalog(interests: Interests): DirectionCatalog {
-  const groups = ['示例方向']
-  const items: DirectionCatalogItem[] = interests.topics.map((topic, index) => ({
-    ...topic,
-    slug: `demo-${index}`,
-    group: groups[0],
-    level: 'main',
-    description: topic.description,
-  }))
-  return { version: 'demo', updated_at: '', groups, count: items.length, items, sources: [], scope_note: '演示模式仅展示当前关注标签。' }
 }

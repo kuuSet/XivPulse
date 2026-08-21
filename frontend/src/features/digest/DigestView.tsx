@@ -1,8 +1,7 @@
 import { CalendarDays, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, ExternalLink, Library, LoaderCircle, Mail, Network, Radar, RefreshCw, Save, Sparkles, TrendingUp } from 'lucide-react'
 import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
-import { BRAND_LOGO, isDemo } from '../../lib/runtime'
-import { sampleDailyReport } from '../../sample'
+import { BRAND_LOGO } from '../../lib/runtime'
 import type { DashboardData } from '../../types/dashboard'
 import type { Paper } from '../../types/papers'
 import type { DailyAggregateItem, DailyReport, DailyReportArchiveItem } from '../../types/reports'
@@ -32,7 +31,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
     if (!reportDate) return
     setReportState('loading'); setReportError('')
     try {
-      setReport(isDemo ? { ...sampleDailyReport, report_date: reportDate, persisted: true } : await api.dailyReport(reportDate))
+      setReport(await api.dailyReport(reportDate))
       setReportState('ready')
     } catch (loadError) {
       setReport(null); setReportState('error')
@@ -46,10 +45,6 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
 
   }, [latestCompleteDate, selectedReportDate])
   useEffect(() => {
-    if (isDemo) {
-      setReportHistory([{ id: 1, report_date: sampleDailyReport.report_date, title: sampleDailyReport.title ?? '当日研究总结', generated_at: new Date().toISOString(), coverage: sampleDailyReport.coverage }])
-      return
-    }
     api.dailyReportHistory().then(setReportHistory).catch(() => setReportHistory([]))
   }, [report?.snapshot_id])
 
@@ -58,9 +53,9 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
     if (!reportDate) return
     setRegenerating(true)
     try {
-      const next = isDemo ? { ...sampleDailyReport, report_date: reportDate, persisted: true, updated_at: new Date().toISOString() } : await api.regenerateDailyReport(reportDate)
+      const next = await api.regenerateDailyReport(reportDate)
       setReport(next)
-      if (!isDemo) setReportHistory(await api.dailyReportHistory())
+      setReportHistory(await api.dailyReportHistory())
       onToast('success', `${reportDate} 的研究日报已重新生成并保存`)
     } catch (regenerateError) {
       onToast('error', regenerateError instanceof Error ? regenerateError.message : '日报重新生成失败')
@@ -80,7 +75,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
   }
 
   const synthesizeReport = async () => {
-    if (!activeReportDate || isDemo) return
+    if (!activeReportDate) return
     setSynthesizing(true)
     try {
       const next = await api.synthesizeDailyReport(activeReportDate, true)
@@ -109,7 +104,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
   }
 
   const sendReport = async () => {
-    if (!activeReportDate || isDemo) return
+    if (!activeReportDate) return
     setSendingEmail(true)
     try {
       const result = await api.sendDailyReport(activeReportDate)
@@ -132,7 +127,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
           <p>每天独立保存一份研究快照，可按日期回看研究方向、证据、缺口和阅读队列。</p>
         </div>
         <div className="heading-actions">
-          <button className="button secondary" onClick={() => void sendReport()} disabled={!activeReport || sendingEmail || isDemo}><Mail size={16} /> {sendingEmail ? '发送中' : '发送邮件'}</button>
+          <button className="button secondary" onClick={() => void sendReport()} disabled={!activeReport || sendingEmail}><Mail size={16} /> {sendingEmail ? '发送中' : '发送邮件'}</button>
           <button className="button secondary" onClick={copyDigest} disabled={!activeReport}><Copy size={16} /> 复制</button>
           <button className="button primary" onClick={downloadDigest} disabled={!activeReport}><Download size={16} /> 下载 .md</button>
         </div>
@@ -173,7 +168,7 @@ export function DigestView({ data, state, error, onRetry, onToast }: { data: Das
                 <ChevronDown size={12} />
               </label>
               {activeReport?.generated_at && <small>保存于 {formatDateTime(activeReport.generated_at)}</small>}
-              <button className="button secondary compact" onClick={() => void synthesizeReport()} disabled={!activeReport || synthesizing || isDemo} title="调用当前 Provider，跨论文生成并单独保存长篇综合研判"><Sparkles className={synthesizing ? 'spin' : ''} size={13} /> {synthesizing ? '研判中' : activeReport?.ai_synthesis?.overall_assessment ? '重做 AI 研判' : '生成 AI 研判'}</button>
+              <button className="button secondary compact" onClick={() => void synthesizeReport()} disabled={!activeReport || synthesizing} title="调用当前 Provider，跨论文生成并单独保存长篇综合研判"><Sparkles className={synthesizing ? 'spin' : ''} size={13} /> {synthesizing ? '研判中' : activeReport?.ai_synthesis?.overall_assessment ? '重做 AI 研判' : '生成 AI 研判'}</button>
               <button className="button subtle compact" onClick={() => void regenerateReport()} disabled={regenerating}><RefreshCw className={regenerating ? 'spin' : ''} size={13} /> {regenerating ? '生成中' : '重新生成'}</button>
             </div>
           </div>

@@ -1,8 +1,6 @@
 import { Clock3, Copy, Map, Network, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
-import { isDemo } from '../../lib/runtime'
-import { sampleRoadmap, sampleTrends } from '../../sample'
 import type { ResearchRoadmap, TopicTrendItem, TopicTrends } from '../../types/trends'
 import type { LoadState, Toast } from '../../app/types'
 import { WorkspaceSkeleton, PageError } from '../../shared/ui'
@@ -20,7 +18,7 @@ export function TrendsView({ onToast }: { onToast: (kind: Toast['kind'], message
     setState('loading'); setError('')
 
     try {
-      const [trendData, roadmapData] = isDemo ? [sampleTrends, sampleRoadmap] : await Promise.all([api.topicTrends(), api.roadmap()])
+      const [trendData, roadmapData] = await Promise.all([api.topicTrends(), api.roadmap()])
       setTrends(trendData); setRoadmap(roadmapData); setSelectedNode(roadmapData.nodes[0]?.id ?? ''); setState('ready')
     } catch (loadError) { setState('error'); setError(loadError instanceof Error ? loadError.message : '研究方向数据加载失败') }
   }, [])

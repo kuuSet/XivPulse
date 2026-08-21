@@ -1,8 +1,6 @@
 import { Check, CheckCircle2, ChevronDown, CircleAlert, Database, KeyRound, Mail, RotateCcw, Settings as SettingsIcon, ShieldAlert, Sparkles, Wifi, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
-import { isDemo } from '../../lib/runtime'
-import { samplePromptCatalog, sampleSettings } from '../../sample'
 import type { MethodCandidate, MethodCatalog } from '../../types/methods'
 import type { AnalysisPromptCatalog, ModelStage, Settings, StageProviderSettings } from '../../types/settings'
 import type { LoadState, Toast } from '../../app/types'
@@ -97,23 +95,16 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const load = useCallback(async () => {
     setState('loading')
     try {
-      if (isDemo) {
-        savedSettings.current = JSON.stringify(sampleSettings)
-        setSettings(sampleSettings)
-        onFontSizeChange(sampleSettings.ui_font_size_pt)
-        setPromptCatalog(samplePromptCatalog)
-      } else {
-        const [loadedSettings, catalog, candidates, prompts] = await Promise.all([
-          api.settings(), api.methodCatalog(), api.methodCandidates(), api.promptCatalog(),
-        ])
-        savedSettings.current = JSON.stringify(loadedSettings)
-        setSettings(loadedSettings)
-        onFontSizeChange(loadedSettings.ui_font_size_pt)
-        setMethodCatalog(catalog)
-        setPromptCatalog(prompts)
-        setMethodCandidates(candidates.items)
-        setCandidateNames(Object.fromEntries(candidates.items.map((item) => [item.key, item.name])))
-      }
+      const [loadedSettings, catalog, candidates, prompts] = await Promise.all([
+        api.settings(), api.methodCatalog(), api.methodCandidates(), api.promptCatalog(),
+      ])
+      savedSettings.current = JSON.stringify(loadedSettings)
+      setSettings(loadedSettings)
+      onFontSizeChange(loadedSettings.ui_font_size_pt)
+      setMethodCatalog(catalog)
+      setPromptCatalog(prompts)
+      setMethodCandidates(candidates.items)
+      setCandidateNames(Object.fromEntries(candidates.items.map((item) => [item.key, item.name])))
       setState('ready')
       setError('')
     } catch (loadError) {
@@ -128,9 +119,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     window.clearTimeout(autoSaveTimer.current)
     setSaveState('saving')
     try {
-      const saved = isDemo
-        ? { ...next, providers: Object.fromEntries(Object.entries(next.providers).map(([stage, provider]) => [stage, { ...provider, api_key_configured: Boolean(secrets.api_keys?.[stage as ModelStage]) || provider.api_key_configured }])) as Settings['providers'], smtp_password_configured: Boolean(secrets.smtp_password) || next.smtp_password_configured }
-        : await api.saveSettings({ ...next, ...secrets })
+      const saved = await api.saveSettings({ ...next, ...secrets })
       savedSettings.current = JSON.stringify(saved)
       setSettings(saved)
       setSaveState('saved')
@@ -182,7 +171,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     }
     setApiKeys((current) => ({ ...current, [stage]: '' }))
     try {
-      const result = isDemo ? { ok: true, message: '连接成功，模型响应正常（演示）' } : await api.testConnection(stage)
+      const result = await api.testConnection(stage)
       setTestResults((current) => ({ ...current, [stage]: result }))
     } catch (testError) {
       setTestResults((current) => ({ ...current, [stage]: { ok: false, message: testError instanceof Error ? testError.message : '连接测试失败' } }))
@@ -194,11 +183,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
   const testEmail = async () => {
     if (!settings) return
     setEmailTesting(true)
-    if (isDemo) {
-      onToast('success', '演示模式不发送真实邮件')
-      setEmailTesting(false)
-      return
-    }
     const saved = await persistSettings(settings, smtpPassword ? { smtp_password: smtpPassword } : {})
     if (!saved) {
       setEmailTesting(false)
@@ -234,7 +218,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     })
   }
   const acceptCandidate = async (candidate: MethodCandidate) => {
-    if (isDemo) return
     setMethodBusy(true)
     try {
       const catalog = await api.acceptMethodCandidate(candidate.key, candidateNames[candidate.key]?.trim() || candidate.name)
@@ -246,7 +229,6 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     } finally { setMethodBusy(false) }
   }
   const dismissCandidate = async (candidate: MethodCandidate) => {
-    if (isDemo) return
     setMethodBusy(true)
     try {
       await api.dismissMethodCandidate(candidate.key)
@@ -256,7 +238,7 @@ export function SettingsView({ onToast, onFontSizeChange }: { onToast: (kind: To
     } finally { setMethodBusy(false) }
   }
   const removeCustomMethod = async (name: string) => {
-    if (!methodCatalog || isDemo) return
+    if (!methodCatalog) return
     setMethodBusy(true)
     try {
       const retained = methodCatalog.items.filter((item) => item.source === 'custom' && item.name !== name).map((item) => ({ name: item.name, aliases: item.aliases.filter((alias) => alias !== item.name) }))

@@ -1,8 +1,6 @@
 import { AlertTriangle, ArrowDownUp, Bookmark, BookmarkCheck, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, ExternalLink, FileText, Library, ListFilter, LoaderCircle, NotebookTabs, RefreshCw, RotateCcw, Save, Search, Sparkles, Star, ThumbsDown, X } from 'lucide-react'
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
-import { isDemo } from '../../lib/runtime'
-import { sampleDashboard } from '../../sample'
 import type { DashboardData } from '../../types/dashboard'
 import type { Feedback, FeedbackAction, Paper, PaperAnalysis, PaperPage, ReadingData, ReadingState } from '../../types/papers'
 import type { ProjectMembership, ResearchProject } from '../../types/projects'
@@ -61,7 +59,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   }, [mode, query, category, priority, sort])
 
   useEffect(() => {
-    if (mode !== 'library' || isDemo) return
+    if (mode !== 'library') return
     let active = true
     const timer = window.setTimeout(() => {
       setLibraryState('loading')
@@ -90,15 +88,15 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
 
   const categories = useMemo(
     () => mode === 'library'
-      ? (isDemo ? Array.from(new Set(sampleDashboard.items.flatMap((paper) => paper.categories))).sort() : libraryPage?.categories ?? [])
+      ? libraryPage?.categories ?? []
       : Array.from(new Set(data?.items.flatMap((paper) => paper.categories) ?? [])).sort(),
     [data, libraryPage, mode],
   )
 
   const papers = useMemo(() => {
-    if (mode === 'library' && !isDemo) return [...(libraryPage?.items ?? [])]
+    if (mode === 'library') return [...(libraryPage?.items ?? [])]
     const normalized = query.trim().toLowerCase()
-    const source = mode === 'library' && isDemo ? sampleDashboard.items : data?.items ?? []
+    const source = data?.items ?? []
     const watchedAuthors = new Set((data?.interests?.watched_authors ?? []).map(authorIdentity))
     const watchedOrganizations = (data?.interests?.watched_organizations ?? []).map(organizationIdentity)
     return [...source]
@@ -162,10 +160,6 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
   useEffect(() => {
     if (mode !== 'library' || !selectedId || papersWithMemberships.some((paper) => String(paper.id) === String(selectedId))) return
     let active = true
-    if (isDemo) {
-      setLinkedPaper(sampleDashboard.items.find((paper) => String(paper.id) === String(selectedId)) ?? null)
-      return
-    }
     void api.paper(selectedId).then((paper) => { if (active) setLinkedPaper(paper) }).catch((loadError) => {
       if (active) onToast('error', loadError instanceof Error ? loadError.message : '论文不存在或无法加载')
     })
@@ -263,7 +257,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
           </div>
 
           <div className="result-summary">
-            <span>{mode === 'library' && !isDemo ? `共 ${libraryPage?.total ?? 0} 篇已初筛论文` : `${papersWithMemberships.length} 篇论文`}</span>
+            <span>{mode === 'library' ? `共 ${libraryPage?.total ?? 0} 篇已初筛论文` : `${papersWithMemberships.length} 篇论文`}</span>
             {(query || category !== 'all' || priority !== 'all') && (
               <button onClick={() => { setQuery(''); setCategory('all'); setPriority('all') }}>
                 <RotateCcw size={13} /> 重置
@@ -283,7 +277,7 @@ export function PaperWorkspace(props: PaperWorkspaceProps) {
               />
             )) : <EmptyPapers filtered={Boolean(query || category !== 'all' || priority !== 'all')} />}
           </div>
-          {mode === 'library' && !isDemo && libraryPage && libraryPage.pages > 1 && <nav className="paper-pagination" aria-label="论文库分页">
+          {mode === 'library' && libraryPage && libraryPage.pages > 1 && <nav className="paper-pagination" aria-label="论文库分页">
             <button className="icon-button" disabled={!libraryPage.has_previous || libraryState === 'loading'} onClick={() => setPage((value) => Math.max(1, value - 1))} title="上一页"><ChevronLeft size={16} /></button>
             <span>第 {libraryPage.page} / {libraryPage.pages} 页</span>
             <button className="icon-button" disabled={!libraryPage.has_next || libraryState === 'loading'} onClick={() => setPage((value) => value + 1)} title="下一页"><ChevronRight size={16} /></button>
@@ -347,12 +341,6 @@ function CoverageCalendar({ activeDate, busy, refreshToken, onRun, onSelectDate 
   useEffect(() => {
     let active = true
     setError('')
-    if (isDemo) {
-      const latest = new Date(now)
-      latest.setDate(latest.getDate() - 1)
-      setData({ month, latest_available_date: `${latest.getFullYear()}-${String(latest.getMonth() + 1).padStart(2, '0')}-${String(latest.getDate()).padStart(2, '0')}`, days: [] })
-      return () => { active = false }
-    }
     void api.jobCalendar(month)
       .then((result) => { if (active) setData(result) })
       .catch((loadError) => {
@@ -535,10 +523,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
   const addToProject = async (project: ResearchProject) => {
     setClassificationBusy(String(project.id))
     try {
-      const membership = isDemo
-        ? { id: Date.now(), project_id: project.id, paper_id: paper.id, reading_state: 'queued' as ReadingState, priority: reading.priority, notes: '', tags: reading.tags, paper: projectPaperSummary(paper) }
-
-        : await api.addProjectPaper(project.id, paper.id, { reading_state: 'queued', priority: reading.priority, tags: reading.tags })
+      const membership = await api.addProjectPaper(project.id, paper.id, { reading_state: 'queued', priority: reading.priority, tags: reading.tags })
       onProjectsChange(projects.map((item) => String(item.id) === String(project.id)
         ? { ...item, paper_count: (item.papers?.length ?? item.paper_count) + 1, papers: [...(item.papers ?? []), { ...membership, project_id: item.id, paper_id: paper.id, paper: membership.paper ?? projectPaperSummary(paper) }] }
         : item))
@@ -553,7 +538,7 @@ function PaperDetail({ paper, projects, onProjectsChange, onToast, onClose, onFe
     if (!project) return
     setClassificationBusy(String(project.id))
     try {
-      if (!isDemo) await api.removeProjectPaper(project.id, paper.id)
+      await api.removeProjectPaper(project.id, paper.id)
       onProjectsChange(projects.map((item) => String(item.id) === String(project.id)
         ? { ...item, paper_count: Math.max(0, item.paper_count - 1), papers: (item.papers ?? []).filter((link) => String(link.paper_id) !== String(paper.id)) }
         : item))

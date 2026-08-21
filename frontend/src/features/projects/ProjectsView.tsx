@@ -1,8 +1,6 @@
 import { Check, ChevronRight, FileText, NotebookTabs, Plus, Save, Search, Settings as SettingsIcon, Trash2, X } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
-import { isDemo } from '../../lib/runtime'
-import { sampleDashboard } from '../../sample'
 import type { Paper, ReadingState } from '../../types/papers'
 import type { ProjectDraft, ProjectMembership, ResearchProject } from '../../types/projects'
 import type { LoadState, Toast } from '../../app/types'
@@ -28,7 +26,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
   const [paperResults, setPaperResults] = useState<Paper[]>([])
   const [addPaperId, setAddPaperId] = useState('')
   const [membershipEdit, setMembershipEdit] = useState<ProjectMembership | null>(null)
-  const [loadState, setLoadState] = useState<LoadState>(projects.length || isDemo ? 'ready' : 'loading')
+  const [loadState, setLoadState] = useState<LoadState>(projects.length ? 'ready' : 'loading')
   const [error, setError] = useState('')
 
   const selected = projects.find((project) => String(project.id) === selectedId) ?? projects[0] ?? null
@@ -39,7 +37,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
   }, [projects, selectedId])
 
   useEffect(() => {
-    if (projects.length || isDemo) { setLoadState('ready'); return }
+    if (projects.length) { setLoadState('ready'); return }
     let active = true
     void api.projects().then(async (listed) => {
       const detailed = await Promise.all(listed.map(async (project) => {
@@ -53,7 +51,6 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
   useEffect(() => {
     let active = true
     const timer = window.setTimeout(() => {
-      if (isDemo) { setPaperResults(sampleDashboard.items.slice(0, 30)); return }
       void api.papers({ q: paperQuery.trim() || undefined, limit: 30 })
         .then((result) => { if (active) setPaperResults(result.items) })
         .catch(() => { if (active) setPaperResults([]) })
@@ -73,11 +70,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
     if (!draft.name.trim()) return
     setSaving(true)
     try {
-      const saved = isDemo
-        ? editing && selected
-          ? { ...selected, ...draft, name: draft.name.trim(), updated_at: new Date().toISOString() }
-          : { ...draft, kind: 'custom', is_system: false, id: Date.now(), name: draft.name.trim(), paper_count: 0, papers: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as ResearchProject
-        : editing && selected ? await api.updateProject(selected.id, draft) : await api.createProject(draft)
+      const saved = editing && selected ? await api.updateProject(selected.id, draft) : await api.createProject(draft)
       const next = editing && selected ? projects.map((item) => String(item.id) === String(selected.id) ? saved : item) : [...projects, saved]
       onProjectsChange(next)
       setSelectedId(String(saved.id))
@@ -91,7 +84,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
   const deleteProject = async () => {
     if (!selected || selected.is_system || !window.confirm(`删除分类库“${selected.name}”？论文不会从论文库删除。`)) return
     try {
-      if (!isDemo) await api.deleteProject(selected.id)
+      await api.deleteProject(selected.id)
       onProjectsChange(projects.filter((item) => String(item.id) !== String(selected.id)))
       onToast('success', '分类库已删除，论文仍保留在论文库')
     } catch (deleteError) { onToast('error', deleteError instanceof Error ? deleteError.message : '分类库删除失败') }
@@ -104,9 +97,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
     const paper = paperResults.find((item) => String(item.id) === addPaperId)
     if (!paper) return
     try {
-      const membership = isDemo
-        ? { id: Date.now(), project_id: selected.id, paper_id: paper.id, reading_state: 'queued' as ReadingState, priority: getReading(paper).priority, notes: '', tags: getReading(paper).tags, paper: projectPaperSummary(paper) }
-        : await api.addProjectPaper(selected.id, paper.id, { reading_state: 'queued', priority: getReading(paper).priority, tags: getReading(paper).tags })
+      const membership = await api.addProjectPaper(selected.id, paper.id, { reading_state: 'queued', priority: getReading(paper).priority, tags: getReading(paper).tags })
       onProjectsChange(projects.map((project) => String(project.id) === String(selected.id) ? { ...project, paper_count: project.paper_count + 1, papers: [...(project.papers ?? []), { ...membership, paper: membership.paper ?? projectPaperSummary(paper) }] } : project))
       setAddPaperId(''); setPaperQuery('')
       if (selected.kind === 'favorites') onPapersReload()
@@ -117,7 +108,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
   const removePaper = async (membership: ProjectMembership) => {
     if (!selected) return
     try {
-      if (!isDemo) await api.removeProjectPaper(selected.id, membership.paper_id)
+      await api.removeProjectPaper(selected.id, membership.paper_id)
       onProjectsChange(projects.map((project) => String(project.id) === String(selected.id) ? { ...project, paper_count: Math.max(0, project.paper_count - 1), papers: (project.papers ?? []).filter((item) => String(item.paper_id) !== String(membership.paper_id)) } : project))
       if (selected.kind === 'favorites') onPapersReload()
       onToast('success', '论文已从分类库移除')
@@ -128,7 +119,7 @@ export function ProjectsView({ projects, onProjectsChange, onPapersReload, onOpe
     if (!selected || !membershipEdit) return
     try {
       const payload = { reading_state: membershipEdit.reading_state, priority: membershipEdit.priority, notes: membershipEdit.notes, tags: membershipEdit.tags }
-      const saved = isDemo ? membershipEdit : await api.updateProjectPaper(selected.id, membershipEdit.paper_id, payload)
+      const saved = await api.updateProjectPaper(selected.id, membershipEdit.paper_id, payload)
       onProjectsChange(projects.map((project) => String(project.id) === String(selected.id) ? { ...project, papers: (project.papers ?? []).map((item) => String(item.paper_id) === String(saved.paper_id) ? { ...item, ...saved, paper: item.paper ?? saved.paper } : item) } : project))
       setMembershipEdit(null)
       onToast('success', '分类库内阅读信息已保存')
