@@ -40,6 +40,10 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
         session.commit()
 
     screened_titles: list[str] = []
+    progress_updates: list[dict[str, object]] = []
+
+    def record_progress(_job_id: str | None, **values: object) -> None:
+        progress_updates.append(values)
 
     class FakeAnalyzer:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
@@ -72,13 +76,19 @@ async def test_pipeline_screens_only_relevant_and_uncertain_titles(
 
     monkeypatch.setattr(paper_analysis, "PaperAnalyzer", FakeAnalyzer)
 
-    result = await paper_analysis.analyze_papers(limit=0, session_factory=factory)
+    result = await paper_analysis.analyze_papers(
+        limit=0,
+        job_id="job-1",
+        session_factory=factory,
+        progress_callback=record_progress,
+    )
 
     assert result["prefiltered"] == 3
     assert result["prefilter_kept"] == 2
     assert result["prefilter_rejected"] == 1
     assert result["screened"] == 2
     assert screened_titles == ["Paper 0", "Paper 1"]
+    assert [update["progress"] for update in progress_updates] == [35, 70, 70]
     with factory() as session:
         matches = session.query(PaperMatch).order_by(PaperMatch.paper_id).all()
         assert [match.prefilter_decision for match in matches] == [

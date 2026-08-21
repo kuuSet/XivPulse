@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -11,7 +12,6 @@ from sqlalchemy.orm import Session, joinedload, sessionmaker
 from ...arxiv.affiliations import fetch_affiliations
 from ...arxiv.repository import PaperRepository
 from ...database import SessionLocal, session_scope
-from ...jobs.service import update_job_progress
 from ...models import Analysis, Paper, PaperMatch, utcnow
 from ...services.provider import TokenUsage
 from ...services.provider_factory import create_model_adapter
@@ -34,6 +34,7 @@ async def analyze_papers(
     job_id: str | None = None,
     report_date: date | None = None,
     session_factory: sessionmaker[Session] = SessionLocal,
+    progress_callback: Callable[..., None] | None = None,
 ) -> dict[str, Any]:
     with session_factory() as db:
         profile = active_profile(db)
@@ -94,17 +95,17 @@ async def analyze_papers(
         prefilter_rejected += len(batch) - kept
         prefilter_batches += 1
         prefilter_usage = prefilter_usage.plus(generated.usage)
-        update_job_progress(
-            job_id,
-            progress=35,
-            message=f"标题预筛 {prefiltered}/{len(pending_prefilter)}",
-            details={
-                "prefiltered": prefiltered,
-                "prefilter_kept": prefilter_kept,
-                "prefilter_rejected": prefilter_rejected,
-            },
-            session_factory=session_factory,
-        )
+        if progress_callback is not None:
+            progress_callback(
+                job_id,
+                progress=35,
+                message=f"标题预筛 {prefiltered}/{len(pending_prefilter)}",
+                details={
+                    "prefiltered": prefiltered,
+                    "prefilter_kept": prefilter_kept,
+                    "prefilter_rejected": prefilter_rejected,
+                },
+            )
 
     affiliations_enriched = 0
     if settings.watched_organizations:
@@ -172,13 +173,13 @@ async def analyze_papers(
             )
         screened += 1
         screening_usage = screening_usage.plus(generated.usage)
-        update_job_progress(
-            job_id,
-            progress=70,
-            message=f"摘要粗排 {screened}/{len(pending_screening)}",
-            details={"screened": screened, "screening_total": len(pending_screening)},
-            session_factory=session_factory,
-        )
+        if progress_callback is not None:
+            progress_callback(
+                job_id,
+                progress=70,
+                message=f"摘要粗排 {screened}/{len(pending_screening)}",
+                details={"screened": screened, "screening_total": len(pending_screening)},
+            )
 
     with session_factory() as db:
         deep_matches = (
