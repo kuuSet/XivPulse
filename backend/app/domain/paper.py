@@ -27,7 +27,6 @@ class Paper:
     pdf_url: str = ""
     published_at: datetime | None = None
     updated_at: datetime | None = None
-    source: str = "atom"
 
     @property
     def versioned_id(self) -> str:

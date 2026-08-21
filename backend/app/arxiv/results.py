@@ -67,7 +67,6 @@ def to_paper(result: arxiv.Result) -> Paper:
         pdf_url=result.pdf_url or "",
         published_at=as_utc(result.published),
         updated_at=as_utc(result.updated),
-        source="atom",
     )
     paper.canonicalize_urls()
     return paper

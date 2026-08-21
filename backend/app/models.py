@@ -128,7 +128,6 @@ class Paper(TimestampMixin, Base):
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
-    ingestion_source: Mapped[str] = mapped_column(String(30), default="atom")
     withdrawn: Mapped[bool] = mapped_column(Boolean, default=False)
 
     versions: Mapped[list[PaperVersion]] = relationship(

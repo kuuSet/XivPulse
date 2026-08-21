@@ -155,7 +155,6 @@ async def test_daily_fetch_uses_arxiv_library_query_and_maps_results() -> None:
     assert records[0].journal_ref == "Journal of Robots 1 (2026)"
     assert records[0].doi == "10.1000/robot.1"
     assert records[0].published_at == datetime(2026, 8, 13, 1, tzinfo=UTC)
-    assert records[0].source == "atom"
 
 
 @pytest.mark.asyncio

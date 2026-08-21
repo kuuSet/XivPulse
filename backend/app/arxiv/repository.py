@@ -31,7 +31,6 @@ def _paper_values(paper: Paper) -> dict[str, object]:
         "pdf_url": paper.pdf_url,
         "published_at": paper.published_at,
         "arxiv_updated_at": paper.updated_at,
-        "ingestion_source": paper.source,
     }
 
 
