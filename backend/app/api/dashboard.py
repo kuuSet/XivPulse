@@ -11,6 +11,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..jobs.presenter import _job_wire
+from ..jobs.service import RUNNING_STATUSES
 from ..models import (
     Analysis,
     Digest,
@@ -21,12 +23,10 @@ from ..models import (
     Profile,
     utcnow,
 )
-from ..services.jobs import RUNNING_STATUSES
 from ..services.state import active_profile
 from ..settings import load_runtime_settings
 from .presenters.common import _as_utc
 from .presenters.interests import _interests_wire
-from .presenters.jobs import _job_wire
 from .presenters.papers import _paper_wire, _query_papers
 from .presenters.reports import _digest_wire
 from .system_views import _provider_public_status, _settings_wire

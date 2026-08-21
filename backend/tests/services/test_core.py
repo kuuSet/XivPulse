@@ -15,7 +15,7 @@ from app.arxiv.download import limited_bytes
 from app.arxiv.fetch import ArxivFetchError, fetch_daily
 from app.arxiv.repository import PaperRepository
 from app.arxiv.results import parse_arxiv_id
-from app.database import init_db, make_engine
+from app.database import init_db, make_engine, make_session_factory
 from app.domain.paper import Paper as PaperDocument
 from app.domain.paper import as_utc
 from app.models import Paper, PaperVersion, Profile
@@ -893,27 +893,26 @@ def test_analysis_budget_modes_and_method_candidate_discovery() -> None:
     assert discover_method_candidates(records, dismissed=[candidates[0]["key"]]) == []
 
 
-def test_docker_scheduler_runs_at_most_once_per_local_day(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app import docker_scheduler
+def test_docker_scheduler_runs_at_most_once_per_local_day() -> None:
+    from app.jobs import scheduler
     from app.models import Job
 
     engine = make_engine("sqlite:///:memory:")
     init_db(engine)
-    factory = docker_scheduler.SessionLocal.__class__(
-        bind=engine, autoflush=False, expire_on_commit=False, future=True
-    )
-    monkeypatch.setattr(docker_scheduler, "SessionLocal", factory)
+    factory = make_session_factory(engine)
 
     before = datetime(2026, 8, 14, 5, 29, tzinfo=UTC)  # 13:29 Asia/Shanghai
     after = datetime(2026, 8, 14, 5, 31, tzinfo=UTC)
-    assert docker_scheduler.should_run_now(before) is False
-    assert docker_scheduler.should_run_now(after) is True
+    assert scheduler.should_run_now(before, session_factory=factory) is False
+    assert scheduler.should_run_now(after, session_factory=factory) is True
 
     with factory() as session:
         session.add(Job(kind="daily", status="completed", created_at=after))
         session.commit()
-    assert docker_scheduler.should_run_now(after) is False
-    assert docker_scheduler.should_run_now(datetime(2026, 8, 15, 5, 31, tzinfo=UTC)) is True
+    assert scheduler.should_run_now(after, session_factory=factory) is False
+    assert scheduler.should_run_now(
+        datetime(2026, 8, 15, 5, 31, tzinfo=UTC), session_factory=factory
+    ) is True
     engine.dispose()
 
 

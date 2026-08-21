@@ -5,7 +5,7 @@ import pytest
 from app import create_app
 from app.database import Base, make_session_factory
 from app.database_defaults import seed_defaults
-from app.pipeline import PipelineCoordinator
+from app.jobs.service import PipelineCoordinator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import sys
 
-from ..workflow import daily_pipeline
+from .service import PipelineCoordinator
+from .workflow import daily_pipeline
 
 
-async def main() -> int:
-    result = await daily_pipeline.run_daily(trigger="scheduled-task")
+async def main(pipeline: PipelineCoordinator = daily_pipeline) -> int:
+    result = await pipeline.run_daily(trigger="scheduled-task")
     if not result.get("accepted", False):
         print("A daily job is already running.", file=sys.stderr)
         return 2

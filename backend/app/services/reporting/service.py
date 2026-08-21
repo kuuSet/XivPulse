@@ -12,6 +12,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from ...database import SessionLocal, session_scope
+from ...jobs.service import update_job_progress
 from ...models import (
     DailyResearchReport,
     Digest,
@@ -22,7 +23,6 @@ from ...models import (
     utcnow,
 )
 from ...settings import load_runtime_settings
-from ..jobs import update_job_progress
 from ..mailer import build_daily_message, deliver_message, email_enabled, smtp_settings
 from ..methods.catalog import clean_custom_methods
 from ..provider import create_model_adapter

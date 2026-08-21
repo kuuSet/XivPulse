@@ -1,47 +1,30 @@
-"""One-per-day scheduler for Docker deployments without a host cron service."""
+"""One-per-day scheduler for Docker deployments without host cron."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import UTC, datetime, time
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, select
+from sqlalchemy.orm import Session, sessionmaker
 
-from .database import SessionLocal
-from .models import Job
-from .runtime import initialize_application
-from .services.paper_sync import latest_complete_submission_date
-from .settings import load_runtime_settings
+from ..database import SessionLocal
+from ..models import Job
+from ..runtime import initialize_application
+from ..services.paper_sync import latest_complete_submission_date
+from ..settings import load_runtime_settings
+from .service import PipelineCoordinator
 from .workflow import daily_pipeline
 
 LOG = logging.getLogger("xivpulse.scheduler")
 
 
-def _settings() -> tuple[str, str]:
-    with SessionLocal() as session:
+def _settings(session_factory: sessionmaker[Session]) -> tuple[str, str]:
+    with session_factory() as session:
         settings = load_runtime_settings(session)
     return settings.schedule_time, settings.schedule_timezone
-
-
-def _timezone(value: str) -> ZoneInfo | timezone:
-    if value.casefold() in {"utc", "etc/utc", "z"}:
-        return UTC
-    try:
-        return ZoneInfo(value)
-    except (ValueError, ZoneInfoNotFoundError):
-        if value.casefold() in {"asia/shanghai", "prc"}:
-            return timezone(timedelta(hours=8), name="Asia/Shanghai")
-        return UTC
-
-
-def _scheduled_time(value: str) -> time:
-    try:
-        hour, minute = value.split(":", 1)
-        return time(hour=int(hour), minute=int(minute))
-    except (AttributeError, TypeError, ValueError):
-        return time(hour=13, minute=30)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -50,13 +33,18 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def should_run_now(now: datetime | None = None) -> bool:
-    schedule_value, timezone_name = _settings()
-    timezone = _timezone(timezone_name)
+def should_run_now(
+    now: datetime | None = None,
+    *,
+    session_factory: sessionmaker[Session] = SessionLocal,
+) -> bool:
+    schedule_value, timezone_name = _settings(session_factory)
+    timezone = ZoneInfo(timezone_name)
     local_now = (now or datetime.now(UTC)).astimezone(timezone)
-    if local_now.time().replace(tzinfo=None) < _scheduled_time(schedule_value):
+    hour, minute = (int(value) for value in schedule_value.split(":", 1))
+    if local_now.time().replace(tzinfo=None) < time(hour=hour, minute=minute):
         return False
-    with SessionLocal() as session:
+    with session_factory() as session:
         latest = session.scalar(
             select(Job).where(Job.kind == "daily").order_by(desc(Job.created_at))
         )
@@ -66,7 +54,11 @@ def should_run_now(now: datetime | None = None) -> bool:
     return created_at is None or created_at.astimezone(timezone).date() < local_now.date()
 
 
-async def main() -> None:
+async def main(
+    *,
+    pipeline: PipelineCoordinator = daily_pipeline,
+    session_factory: sessionmaker[Session] = SessionLocal,
+) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -75,8 +67,8 @@ async def main() -> None:
     LOG.info("Docker daily scheduler started")
     while True:
         try:
-            if should_run_now():
-                result = await daily_pipeline.run_daily(
+            if should_run_now(session_factory=session_factory):
+                result = await pipeline.run_daily(
                     trigger="docker-scheduler",
                     target_date=latest_complete_submission_date(),
                 )

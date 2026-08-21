@@ -1,1 +1,1 @@
-"""Job command entrypoints."""
+"""Background job orchestration."""

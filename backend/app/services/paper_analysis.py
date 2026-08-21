@@ -11,10 +11,10 @@ from sqlalchemy.orm import joinedload
 from ..arxiv.affiliations import fetch_affiliations
 from ..arxiv.repository import PaperRepository
 from ..database import SessionLocal, session_scope
+from ..jobs.service import update_job_progress
 from ..models import Analysis, Paper, PaperMatch, utcnow
 from ..settings import load_runtime_settings
 from .analyzer import PaperAnalyzer
-from .jobs import update_job_progress
 from .prompt_catalog import resolve_prompt_settings
 from .provider import TokenUsage, create_model_adapter
 from .state import active_profile

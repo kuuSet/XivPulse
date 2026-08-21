@@ -11,11 +11,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .api import router as api_router
 from .api.auth import require_server_auth
 from .database import SessionLocal
-from .pipeline import PipelineCoordinator
+from .jobs.service import PipelineCoordinator
+from .jobs.workflow import daily_pipeline
 from .runtime import initialize_application
 from .settings import get_process_settings
 from .web import register_frontend
-from .workflow import daily_pipeline
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
